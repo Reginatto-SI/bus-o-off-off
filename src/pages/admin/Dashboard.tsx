@@ -26,6 +26,9 @@ import {
   Sparkles,
   QrCode,
   Clock3,
+  Check,
+  ChevronRight,
+  Search,
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -65,6 +68,8 @@ import { formatCurrencyBRL } from '@/lib/currency';
 import { normalizePublicSlug } from '@/lib/publicSlug';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Input } from '@/components/ui/input';
 
 /* ═══════════════════════════════════════════════════
    Tipos auxiliares
@@ -278,8 +283,40 @@ function MobileDashboardHome({
   todaySummaryError: boolean;
   recentSalesError: boolean;
 }) {
+  const { activeCompany, userCompanies, switchCompany, canSwitchCompany } = useAuth();
   const [mobileMoreMenuOpen, setMobileMoreMenuOpen] = useState(false);
+  const [companySelectorOpen, setCompanySelectorOpen] = useState(false);
+  const [companySearch, setCompanySearch] = useState('');
+  const [switchingCompanyId, setSwitchingCompanyId] = useState<string | null>(null);
+  const [failedLogoUrls, setFailedLogoUrls] = useState<Set<string>>(() => new Set());
   const openAdminMobileMenu = () => setMobileMoreMenuOpen(true);
+
+  const filteredCompanies = useMemo(() => {
+    const search = companySearch.trim().toLocaleLowerCase('pt-BR');
+    if (!search) return userCompanies;
+    return userCompanies.filter((company) =>
+      [company.name, company.trade_name, company.legal_name]
+        .some((name) => name?.toLocaleLowerCase('pt-BR').includes(search))
+    );
+  }, [companySearch, userCompanies]);
+
+  const handleSelectCompany = async (companyId: string, companyName: string) => {
+    if (companyId === activeCompany?.id) {
+      setCompanySelectorOpen(false);
+      return;
+    }
+
+    setSwitchingCompanyId(companyId);
+    const switched = await switchCompany(companyId);
+    setSwitchingCompanyId(null);
+    if (!switched) {
+      toast.error('Não foi possível alterar a empresa. A empresa anterior foi mantida.');
+      return;
+    }
+
+    setCompanySelectorOpen(false);
+    toast.success(`Empresa alterada para ${companyName}.`);
+  };
 
   const summaryItems = [
     { title: 'Vendas pagas', value: String(todaySummary?.paidSales ?? 0), icon: CheckCircle2 },
@@ -306,8 +343,11 @@ function MobileDashboardHome({
             <h1 className="whitespace-nowrap text-[1.65rem] font-bold leading-tight tracking-tight text-slate-950">Olá, gestor! <span aria-hidden="true">👋</span></h1>
             <p className="text-[0.95rem] leading-snug text-slate-600">Acompanhe tudo o que importa em tempo real.</p>
           </div>
-          <div
-            className="flex w-full items-center gap-2.5 rounded-2xl border border-slate-200/70 bg-white px-3 py-2.5 text-left text-slate-900 shadow-[0_6px_18px_rgba(15,23,42,0.06)] min-[390px]:w-[10.75rem] min-[390px]:shrink-0 min-[430px]:w-48"
+          <button
+            type="button"
+            disabled={!canSwitchCompany}
+            onClick={() => canSwitchCompany && setCompanySelectorOpen(true)}
+            className={cn("flex w-full items-center gap-2.5 rounded-2xl border border-slate-200/70 bg-white px-3 py-2.5 text-left text-slate-900 shadow-[0_6px_18px_rgba(15,23,42,0.06)] min-[390px]:w-[10.75rem] min-[390px]:shrink-0 min-[430px]:w-48", canSwitchCompany && "transition active:scale-[0.98]")}
             aria-label={`Empresa ativa: ${companyName}`}
           >
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-[hsl(var(--primary))]">
@@ -317,8 +357,46 @@ function MobileDashboardHome({
               <span className="block text-[0.62rem] font-semibold uppercase tracking-wide text-slate-500">Empresa ativa</span>
               <span className="block truncate text-[0.82rem] font-semibold leading-tight text-slate-950">{companyName}</span>
             </span>
-          </div>
+            {canSwitchCompany && <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />}
+          </button>
         </section>
+
+        <Sheet open={companySelectorOpen} onOpenChange={(open) => { setCompanySelectorOpen(open); if (!open) setCompanySearch(''); }}>
+          <SheetContent side="bottom" className="flex max-h-[min(82vh,calc(100dvh-1rem))] flex-col overflow-hidden rounded-t-3xl px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4 lg:hidden">
+            <SheetHeader className="mx-auto w-full max-w-md text-left">
+              <SheetTitle>Trocar empresa ativa</SheetTitle>
+              <SheetDescription>Selecione a empresa que deseja acessar.</SheetDescription>
+            </SheetHeader>
+
+            {userCompanies.length > 5 && (
+              <div className="relative mx-auto mt-4 w-full max-w-md">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+                <Input value={companySearch} onChange={(event) => setCompanySearch(event.target.value)} placeholder="Pesquisar empresa" className="h-11 pl-9" />
+              </div>
+            )}
+
+            <div className="mx-auto mt-4 w-full max-w-md flex-1 space-y-2 overflow-y-auto overscroll-contain pb-2">
+              {userCompanies.length === 0 ? (
+                <p className="rounded-2xl border p-4 text-center text-sm text-muted-foreground">Nenhuma empresa disponível.</p>
+              ) : filteredCompanies.length === 0 ? (
+                <p className="rounded-2xl border p-4 text-center text-sm text-muted-foreground">Nenhuma empresa encontrada.</p>
+              ) : filteredCompanies.map((company) => {
+                const isCurrent = company.id === activeCompany?.id;
+                const logoUrl = company.logo_url?.trim();
+                const showLogo = Boolean(logoUrl && !failedLogoUrls.has(logoUrl));
+                return (
+                  <button key={company.id} type="button" disabled={Boolean(switchingCompanyId)} onClick={() => void handleSelectCompany(company.id, company.trade_name || company.name)} className={cn("flex min-h-14 w-full items-center gap-3 rounded-2xl border bg-white p-3 text-left transition active:scale-[0.99]", isCurrent ? "border-[hsl(var(--primary))] bg-orange-50/50" : "border-slate-200")}>
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-[hsl(var(--primary))]">
+                      {showLogo ? <img src={logoUrl!} alt="" className="h-full w-full object-contain" onError={() => setFailedLogoUrls((current) => new Set(current).add(logoUrl!))} /> : <Building2 className="h-5 w-5" aria-hidden="true" />}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-950">{company.trade_name || company.name}</span>
+                    {switchingCompanyId === company.id ? <span className="text-xs text-muted-foreground">Alterando...</span> : isCurrent ? <Check className="h-5 w-5 text-[hsl(var(--primary))]" aria-label="Empresa atual" /> : <ChevronRight className="h-4 w-4 text-slate-400" aria-hidden="true" />}
+                  </button>
+                );
+              })}
+            </div>
+          </SheetContent>
+        </Sheet>
 
         <section className="grid grid-cols-2 gap-3 min-[390px]:gap-3.5" aria-label="Acessos rápidos do gestor">
           {cards.map((item) => (

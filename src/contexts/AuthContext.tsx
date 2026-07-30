@@ -3,6 +3,8 @@ import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { UserRole, Profile, Company, Representative } from '@/types/database';
 import { canAccessTemplatesLayoutByUserId } from '@/lib/templatesLayoutAccess';
+import { useQueryClient } from '@tanstack/react-query';
+import { canSwitchActiveCompany, isCompanyScopedQuery, resolveSwitchedCompanyRole } from '@/lib/companySwitchPolicy';
 
 interface AuthContextType {
   user: User | null;
@@ -16,7 +18,8 @@ interface AuthContextType {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
-  switchCompany: (companyId: string) => void;
+  switchCompany: (companyId: string) => Promise<boolean>;
+  canSwitchCompany: boolean;
   updateActiveCompany: (company: Company) => void;
   isGerente: boolean;
   isOperador: boolean;
@@ -31,6 +34,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   // Usuário multiempresa com permissão especial: deve permanecer developer em qualquer empresa ativa.
   const FORCED_DEVELOPER_USER_ID = '27add21e-ade9-436a-9ec2-185a3d7819cc';
   const [user, setUser] = useState<User | null>(null);
@@ -41,6 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [activeCompanyId, setActiveCompanyId] = useState<string | null>(null);
   const [activeCompany, setActiveCompany] = useState<Company | null>(null);
   const [userCompanies, setUserCompanies] = useState<Company[]>([]);
+  const [hasDeveloperAccess, setHasDeveloperAccess] = useState(false);
   const [loading, setLoading] = useState(true);
   const loadingRef = useRef(loading);
   loadingRef.current = loading;
@@ -122,6 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setRepresentativeProfile((representativeData as Representative | null) ?? null);
         // Sem vínculos — limpa estado e finaliza
         setUserCompanies([]);
+        setHasDeveloperAccess(false);
         setActiveCompanyId(null);
         setActiveCompany(null);
         setUserRole(null);
@@ -142,6 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setSellerId(firstRole.seller_id);
         }
         setUserCompanies([]);
+        setHasDeveloperAccess(false);
         setActiveCompanyId(null);
         setActiveCompany(null);
         return;
@@ -149,6 +156,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Developer cross-company: buscar TODAS as empresas ativas
       const isDev = rolesData.some((r: any) => r.role === 'developer');
+      // A capacidade developer é global entre empresas e não depende do vínculo da empresa atualmente selecionada.
+      setHasDeveloperAccess(isDev || userId === FORCED_DEVELOPER_USER_ID);
 
       const companiesQuery = isDev
         ? supabase.from('companies').select('*').eq('is_active', true)
@@ -213,7 +222,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const roleForCompany = rolesData.find((r: any) => r.company_id === validCompanyId);
         if (roleForCompany) {
-          setUserRole(resolveEffectiveRole(userId, roleForCompany.role as UserRole));
+          setUserRole(resolveEffectiveRole(userId, isDev ? 'developer' : roleForCompany.role as UserRole));
           setSellerId(roleForCompany.seller_id);
         } else if (isDev) {
           // Bug fix: developer cross-company pode não ter user_roles para a empresa selecionada.
@@ -241,6 +250,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('[AuthContext] Erro inesperado ao resolver dados do usuário:', error);
       setUserCompanies([]);
+      setHasDeveloperAccess(false);
       setActiveCompanyId(null);
       setActiveCompany(null);
       setUserRole(null);
@@ -276,6 +286,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setActiveCompanyId(null);
           setActiveCompany(null);
           setUserCompanies([]);
+          setHasDeveloperAccess(false);
           setRepresentativeProfile(null);
           setLoading(false);
         }
@@ -304,31 +315,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   };
 
-  const switchCompany = (companyId: string) => {
+  const switchCompany = async (companyId: string): Promise<boolean> => {
     const company = userCompanies.find((c) => c.id === companyId);
-    if (company && user) {
-      setActiveCompanyId(companyId);
-      setActiveCompany(company);
-      localStorage.setItem(`activeCompany_${user.id}`, companyId);
+    // A ação central também aplica a autorização; esconder os seletores não é uma barreira de segurança suficiente.
+    if (!company || !user || !canSwitchActiveCompany(hasDeveloperAccess, userCompanies.length)) return false;
+    if (companyId === activeCompanyId) return true;
 
-      // Update role for the new company
-      supabase
+    // A troca só é confirmada depois de resolver o papel da empresa de destino,
+    // evitando deixar nome, company_id e permissões em estados parciais em caso de falha.
+    const { data, error } = await supabase
         .from('user_roles')
         .select('*')
         .eq('user_id', user.id)
         .eq('company_id', companyId)
-        .single()
-        .then(({ data }) => {
-          if (data) {
-            setUserRole(resolveEffectiveRole(user.id, data.role as UserRole));
-            setSellerId(data.seller_id);
-          } else if (userRole === 'developer' || user.id === FORCED_DEVELOPER_USER_ID) {
-            // Developer sem vínculo específico para esta empresa — manter role developer
-            setUserRole('developer');
-            setSellerId(null);
-          }
-        });
+        .maybeSingle();
+
+    const keepsDeveloperRole = hasDeveloperAccess || user.id === FORCED_DEVELOPER_USER_ID;
+    if (error || (!data && !keepsDeveloperRole)) {
+      console.error('[AuthContext] Erro ao trocar empresa (user_roles.select)', error);
+      return false;
     }
+
+    // A auditoria das query keys encontrou company_id em todas as consultas React Query por tenant.
+    // Cancelamos e removemos apenas a empresa anterior, preservando consultas realmente globais.
+    const previousCompanyQuery = {
+      predicate: (query: { queryKey: readonly unknown[] }) =>
+        Boolean(activeCompanyId && isCompanyScopedQuery(query.queryKey, activeCompanyId)),
+    };
+    await queryClient.cancelQueries(previousCompanyQuery);
+    queryClient.removeQueries(previousCompanyQuery);
+
+    setUserRole(resolveSwitchedCompanyRole(keepsDeveloperRole, (data?.role as UserRole | undefined) ?? null));
+    setSellerId(data?.seller_id ?? null);
+    setActiveCompanyId(companyId);
+    setActiveCompany(company);
+    localStorage.setItem(`activeCompany_${user.id}`, companyId);
+    return true;
   };
 
   const updateActiveCompany = (company: Company) => {
@@ -341,7 +363,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // Developer herda acesso de gerente automaticamente
-  const isDeveloper = userRole === 'developer';
+  const isDeveloper = hasDeveloperAccess;
+  // Desktop e mobile consomem a mesma autorização baseada na capacidade developer global.
+  const canSwitchCompany = canSwitchActiveCompany(isDeveloper, userCompanies.length);
   // Exceção pontual sem trocar role técnica: mantém escopo limitado à rota /admin/templates-layout.
   const canAccessTemplatesLayout = isDeveloper || canAccessTemplatesLayoutByUserId(user?.id);
   const isGerente = userRole === 'gerente' || isDeveloper;
@@ -365,6 +389,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signIn,
         signOut,
         switchCompany,
+        canSwitchCompany,
         updateActiveCompany,
         isGerente,
         isOperador,
