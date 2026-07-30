@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   classifyCameraDevice,
+  acquireWithImmediateSnapshot,
   isUsableCameraState,
   runSerialCameraStrategies,
+  runRawCameraAcquisition,
   shouldStartScanner,
   waitForUsableCameraState,
+  stopAllMediaStreamTracks,
 } from './DriverValidate';
 
 describe('isUsableCameraState', () => {
@@ -83,6 +86,20 @@ describe('orquestração serial', () => {
     await running;
     expect(acquire).toHaveBeenCalledTimes(2);
   });
+
+  it('captura o snapshot imediato e valida antes de executar afterResolved', async () => {
+    const order: string[] = [];
+    await runSerialCameraStrategies([strategies[0]], {
+      acquire: () => acquireWithImmediateSnapshot(
+        async () => { order.push('resolve'); return { usable: true }; },
+        () => order.push('immediate_snapshot'),
+      ),
+      validate: async () => { order.push('initial_validation'); return { usable: true, detail: 'ok' }; },
+      afterResolved: () => { order.push('afterResolved:enumerateDevices'); },
+      discard: vi.fn(),
+    });
+    expect(order).toEqual(['resolve', 'immediate_snapshot', 'initial_validation', 'afterResolved:enumerateDevices']);
+  });
 });
 
 describe('janela de primeiro quadro', () => {
@@ -114,5 +131,31 @@ describe('diagnóstico auxiliar', () => {
   it('não inicia scanner no teste mínimo', () => {
     expect(shouldStartScanner(true, true)).toBe(false);
     expect(shouldStartScanner(false, true)).toBe(true);
+    expect(shouldStartScanner(false, true, true)).toBe(false);
+  });
+});
+
+describe('modo bruto', () => {
+  it.each([
+    ['generic', { video: true, audio: false }],
+    ['ideal', { video: { facingMode: { ideal: 'environment' } }, audio: false }],
+    ['exact', { video: { facingMode: { exact: 'environment' } }, audio: false }],
+  ] as const)('%s executa exatamente uma chamada com sua única constraint', async (mode, expected) => {
+    const getUserMedia = vi.fn(async () => ({ id: mode }));
+    await runRawCameraAcquisition(mode, getUserMedia, vi.fn());
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+    expect(getUserMedia).toHaveBeenCalledWith(expected);
+  });
+
+  it('uma rejeição encerra sem fallback ou segunda chamada', async () => {
+    const getUserMedia = vi.fn(async () => { throw new DOMException('negado', 'NotAllowedError'); });
+    await expect(runRawCameraAcquisition('generic', getUserMedia, vi.fn())).rejects.toMatchObject({ name: 'NotAllowedError' });
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+  });
+
+  it('libera todas as tracks do stream ao sair', () => {
+    const tracks = [{ stop: vi.fn() }, { stop: vi.fn() }];
+    stopAllMediaStreamTracks({ getTracks: () => tracks as unknown as MediaStreamTrack[] });
+    tracks.forEach(track => expect(track.stop).toHaveBeenCalledOnce());
   });
 });

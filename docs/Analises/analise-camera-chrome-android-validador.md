@@ -188,7 +188,7 @@ Adiar/remover cleanup sem evidência pode manter LED/hardware ativos, vazar stre
 
 ## 15. Conclusão: comprovado versus pendente
 
-**Comprovado pelo código e log:** uma única chamada registrada resolveu; a track já estava `ended` na primeira inspeção; o SmartBus só chamou o stop de falha depois; scanner e metadata não causaram o encerramento; refresh normal de Auth com user não substitui a tela; não existe autoabertura ao voltar do prompt.
+**Comprovado pelo log anterior:** uma única chamada registrada resolveu; o snapshot posterior à enumeração encontrou a track `ended`; nenhum `stop()` JavaScript foi interceptado durante a chamada. Como havia `enumerateDevices()` entre a resolução e aquele snapshot, o estado verdadeiramente inicial ainda depende dos novos ensaios brutos.
 
 **Ainda hipótese:** por que o subsistema do Chrome/Android terminou a track e se houve chamada dinâmica a `stop()` durante a Promise; modelo/driver/ocupação/permissão específica; evento lifecycle/Auth exato no aparelho.
 
@@ -196,7 +196,7 @@ Adiar/remover cleanup sem evidência pode manter LED/hardware ativos, vazar stre
 
 ## 16. Refinamento funcional após a auditoria
 
-A recuperação mínima passou a considerar `getUserMedia()` resolvido apenas como **aquisição**, não como sucesso. Cada aquisição é validada por `stream.active`, track `live`, permanência do vídeo no DOM e quadro de pelo menos 16×16; portanto 2×2 é explicitamente inutilizável. O fluxo serial tenta traseira `exact`, traseira `ideal`, cada traseira identificada após a autorização e `video:true` por último. Um stream inutilizável recebe a classificação `stream_inutilizavel`, é parado com motivo, desvinculado do vídeo e aguarda brevemente a liberação do hardware antes da próxima Promise.
+A recuperação mínima passou a considerar `getUserMedia()` resolvido apenas como **aquisição**, não como sucesso. Cada aquisição é validada por `stream.active`, track `live`, permanência do vídeo no DOM e quadro de pelo menos 16×16; portanto 2×2 é explicitamente inutilizável. A etapa inicial implementou uma fila ampla; após o novo log, o fluxo normal temporário foi reduzido a traseira `ideal` e `video:true`, deixando `exact` isolado no ensaio bruto. Um stream inutilizável recebe a classificação `stream_inutilizavel`, é parado com motivo, desvinculado do vídeo e aguarda brevemente a liberação do hardware antes da próxima Promise.
 
 O watchdog deixou de liberar a trava enquanto uma chamada está pendente. Isso fecha a janela de concorrência identificada na auditoria. O diagnóstico não depende mais do tipo de build: fica totalmente desligado normalmente e é ativado explicitamente em `/validador/validar?cameraDebug=1`. O painel permite alternar para o teste mínimo, no qual scanner e processamento de QR não são inicializados, e copiar tanto o resumo quanto os eventos detalhados. A interceptação global de `stop()` somente existe nesse modo e é restaurada na saída.
 
@@ -206,6 +206,12 @@ A atribuição a Chrome/Android permanece condicionada à matriz de controle: au
 
 A preparação do vídeo agora segue track `live` → `srcObject` → espera limitada por `loadedmetadata`/`canplay` → `play()` →, em rejeição transitória, espera por estado reproduzível e uma única repetição → janela limitada do primeiro quadro. Rejeição nas duas chamadas de `play()` invalida a tentativa. O diagnóstico registra cada etapa e o estado contemporâneo da track.
 
-A descoberta classifica labels multilíngues como traseira, frontal ou não classificada. Depois das duas estratégias `facingMode`, entram primeiro os `deviceId` traseiros e depois os não classificados; frontais explícitos ficam fora da fila e só podem ser escolhidos pelo `video:true` final. IDs já enfileirados não se repetem. O intervalo de liberação foi elevado de 350 para 600 ms, abaixo do histórico conservador de 800 ms.
+A descoberta classifica labels multilíngues como traseira, frontal ou não classificada. A classificação multilíngue permanece no diagnóstico, mas a seleção por `deviceId` foi retirada da abertura normal até a conclusão dos ensaios brutos; `video:true` continua como controle flexível final. O intervalo de liberação foi elevado de 350 para 600 ms, abaixo do histórico conservador de 800 ms.
 
 A orquestração serial foi isolada somente o suficiente para teste de contrato: aquisição pendente bloqueia a próxima, descarte antecede a próxima aquisição, stream válido encerra a fila e o fallback final é alcançável. O watchdog continua informativo e não libera a trava; o botão de retry permanece desabilitado e mostra a estratégia atual.
+
+## 18. Snapshot atômico e ensaios brutos
+
+O evento `getUserMedia:immediate_snapshot` agora é produzido na instrução síncrona imediatamente posterior ao `await getUserMedia`, antes de WeakMap, estado React, `streamRef`, `srcObject`, callback assíncrono ou enumeração. A validação completa de track/vídeo/quadro ocorre antes de `afterResolved`; `enumerateDevices` só é chamado depois que uma tentativa já foi considerada funcional.
+
+Até os três controles brutos serem executados, o fluxo normal deixa de iniciar por `exact`: tenta traseira `ideal` e depois `video:true`. O modo bruto não usa essa fila. Cada URL (`cameraRaw=generic`, `ideal` ou `exact`) permite um clique e uma chamada, sem permissions query, enumeração, scanner, deviceId, fallback, watchdog ou retry. Para trocar de ensaio é necessário carregar outro link, o que também libera o stream pelo cleanup existente.
