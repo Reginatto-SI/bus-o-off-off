@@ -28,6 +28,7 @@ import {
   Star,
   MessageCircleMore,
   Gift,
+  BadgePercent,
   Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -322,22 +323,22 @@ const PASSENGER_STEPS = [
     desc: "A equipe confere presença com mais agilidade e reduz filas no embarque.",
   },
 ];
-// Comunicação fiel ao cadastro explícito: o sistema não infere frequência nem histórico de compras.
+// Sequência didática do desconto por CPF: cadastro, configuração da validade e aplicação automática na compra.
 const CUSTOMER_CPF_BENEFITS = [
   {
     icon: Users,
-    title: "Controle total",
-    desc: "Cadastre passageiros elegíveis por CPF e controle quando cada benefício estará ativo.",
+    title: "Cadastre o cliente",
+    desc: "Adicione o CPF das pessoas que poderão receber o desconto.",
   },
   {
-    icon: Gift,
-    title: "Aplicação no checkout",
-    desc: "O benefício cadastrado é aplicado ao passageiro elegível durante a compra.",
+    icon: BadgePercent,
+    title: "Configure o desconto",
+    desc: "Defina um valor em reais ou uma porcentagem e escolha quando o desconto será válido.",
   },
   {
-    icon: TrendingUp,
-    title: "Condições especiais",
-    desc: "Ofereça condições especiais para passageiros selecionados pela sua empresa.",
+    icon: CheckCircle2,
+    title: "Aplicação automática",
+    desc: "Durante a compra, o sistema verifica o CPF e aplica o desconto quando as regras configuradas forem atendidas.",
   },
 ];
 // Feature flag local preserva a seção histórica sem renderizá-la e evita expressão JSX constante.
@@ -1467,10 +1468,10 @@ export default function LandingPage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-10 text-center">
             <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-              Crie Programas de Benefício por CPF
+              Ofereça descontos para clientes frequentes
             </h2>
             <p className="mx-auto mt-3 max-w-3xl text-muted-foreground sm:text-lg">
-              Cadastre passageiros elegíveis e defina condições especiais com vigência e eventos aplicáveis.
+              Cadastre o CPF do cliente, escolha o desconto e defina em quais eventos e períodos ele será válido.
             </p>
           </div>
           <div className="grid gap-5 lg:grid-cols-3">
@@ -1489,7 +1490,8 @@ export default function LandingPage() {
           </div>
           <div className="mt-8 rounded-2xl border border-primary/20 bg-primary/5 px-5 py-3 text-sm text-foreground shadow-sm">
             <span className="font-semibold text-primary">Exemplo:</span>{" "}
-            Um passageiro com CPF previamente cadastrado recebe o benefício configurado quando estiver elegível para o evento.
+            João compra regularmente com sua empresa. Você cadastra o CPF dele e oferece 10% de desconto nas passagens
+            dos eventos selecionados, durante o período definido.
           </div>
           <div className="mt-8 flex justify-center">
             <Button
@@ -1502,7 +1504,7 @@ export default function LandingPage() {
                 })
               }
             >
-              Quero criar benefícios
+              Criar desconto por CPF
               <ArrowRight className="h-4 w-4" />
             </Button>
           </div>
