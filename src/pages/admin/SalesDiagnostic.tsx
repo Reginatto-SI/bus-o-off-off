@@ -409,6 +409,7 @@ function getSplitPercentFromRecipient(recipient: Record<string, unknown>): numbe
 
 function getSplitAmountFromRecipient(recipient: Record<string, unknown>): number | null {
   return toOptionalNumber(recipient.fixedValue)
+    ?? toOptionalNumber(recipient.totalFixedValue)
     ?? toOptionalNumber(recipient.value)
     ?? toOptionalNumber(recipient.amount);
 }

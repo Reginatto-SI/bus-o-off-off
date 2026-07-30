@@ -1,11 +1,13 @@
 import { logPaymentTrace } from "./payment-observability.ts";
 import {
   type FinancialSocioValidationResult,
-  resolveSocioWalletByEnvironment,
   validateFinancialSocioForSplit,
 } from "./payment-context-resolver.ts";
 import type { PaymentEnvironment } from "./runtime-env.ts";
 
+// The Edge Functions deliberately accept the untyped service-role client used by
+// this repository; authorization remains enforced by the resolver's explicit
+// company predicates rather than generated client types.
 // deno-lint-ignore no-explicit-any
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SupabaseAdminClient = any;
@@ -17,22 +19,7 @@ type ResolveSplitRecipientsParams = {
   companyId: string;
   paymentEnvironment: PaymentEnvironment;
   splitEnabled: boolean;
-  platformFeePercent: number;
-  socioSplitPercent: number;
   representativeId?: string | null;
-  includePlatformRecipient: boolean;
-  platformWalletId?: string | null;
-  distributionPercentages?: {
-    platform: number;
-    socio: number;
-    representative: number;
-  } | null;
-};
-
-export type SplitRecipient = {
-  kind: "platform" | "socio" | "representative";
-  walletId: string;
-  percentualValue: number;
 };
 
 type RepresentativeResolution = {
@@ -41,23 +28,20 @@ type RepresentativeResolution = {
     | "not_configured"
     | "missing_sale_representative"
     | "representative_not_found"
-    | "representative_status_invalid"
     | "representative_wallet_missing"
-    | "representative_percent_invalid"
+    | "representative_company_mismatch"
     | "representative_lookup_failed"
     | "included";
   representativeId: string | null;
   walletId: string | null;
-  percent: number;
 };
 
 export type ResolveSplitRecipientsResult = {
-  recipients: SplitRecipient[];
   socioValidation: FinancialSocioValidationResult | null;
   socio: {
     included: boolean;
-    reason: "included" | "missing_or_invalid" | "wallet_missing";
-    percent: number;
+    reason: "included" | "missing_or_invalid" | "wallet_missing" | "query_failed" | "ambiguous";
+    walletId: string | null;
   };
   representative: RepresentativeResolution;
 };
@@ -73,401 +57,140 @@ type SocioRow = {
 
 type RepresentativeRow = {
   id: string;
-  status: string;
   asaas_wallet_id_production?: string | null;
   asaas_wallet_id_sandbox?: string | null;
 };
 
-function roundPercent(value: number): number {
-  return Math.round(value * 100) / 100;
-}
-
-function resolveRepresentativeWalletByEnvironment(
-  representative: {
-    asaas_wallet_id_production?: string | null;
-    asaas_wallet_id_sandbox?: string | null;
-  },
-  environment: PaymentEnvironment,
-): string | null {
+function representativeWallet(row: RepresentativeRow, environment: PaymentEnvironment): string | null {
   return environment === "production"
-    ? representative.asaas_wallet_id_production ?? null
-    : representative.asaas_wallet_id_sandbox ?? null;
+    ? row.asaas_wallet_id_production ?? null
+    : row.asaas_wallet_id_sandbox ?? null;
 }
 
 /**
- * Resolvedor central de recebedores do split Asaas.
+ * Resolve somente identidade, vínculo multiempresa e wallet no ambiente.
+ * A taxa comercial já foi calculada em valores absolutos antes desta função;
+ * os quatro cenários são distribuídos exclusivamente por `distributePlatformFee`
+ * e convertidos para `fixedValue`/`totalFixedValue` por `buildAsaasSplitPayload`.
  *
- * Objetivo da Fase 2:
- * - manter uma única interpretação para plataforma/sócio/representante;
- * - permitir reuso em create/verify/webhook/reconcile sem lógica paralela;
- * - tratar representante como elegível opcional (wallet ausente nunca derruba checkout).
+ * O sócio é global e não recebe filtro por `company_id` nem por status legado.
+ * O representante precisa do vínculo explícito com a empresa da venda e da
+ * wallet do ambiente. Ausência, consulta indisponível ou vínculo inconsistente
+ * degradam o recebedor sem bloquear a cobrança e ficam distinguíveis nos logs.
  */
 export async function resolveAsaasSplitRecipients(
   params: ResolveSplitRecipientsParams,
 ): Promise<ResolveSplitRecipientsResult> {
-  const recipients: SplitRecipient[] = [];
-
+  const emptyRepresentative = (reason: RepresentativeResolution["reason"]): RepresentativeResolution => ({
+    eligible: false,
+    reason,
+    representativeId: params.representativeId ?? null,
+    walletId: null,
+  });
   if (!params.splitEnabled) {
     return {
-      recipients,
       socioValidation: null,
-      socio: {
-        included: false,
-        reason: "missing_or_invalid",
-        percent: 0,
-      },
-      representative: {
-        eligible: false,
-        reason: "not_configured",
-        representativeId: params.representativeId ?? null,
-        walletId: null,
-        percent: 0,
-      },
+      socio: { included: false, reason: "missing_or_invalid", walletId: null },
+      representative: emptyRepresentative("not_configured"),
     };
   }
 
   let socioValidation: FinancialSocioValidationResult | null = null;
-
-  if (!params.distributionPercentages) {
-    throw new Error("missing_distribution_percentages");
-  }
-
-  const effectivePlatformPercent = roundPercent(
-    params.distributionPercentages.platform,
-  );
-  const requestedSocioPercent = roundPercent(
-    params.distributionPercentages.socio,
-  );
-  const requestedRepresentativePercent = roundPercent(
-    params.distributionPercentages.representative,
-  );
-
-  let platformPercent = effectivePlatformPercent;
-  let socioPercent = requestedSocioPercent;
-  let representativePercent = requestedRepresentativePercent;
-  let socioIncluded = false;
-  let socioReason: "included" | "missing_or_invalid" | "wallet_missing" = "missing_or_invalid";
-
-  const syncRecipients = () => {
-    if (params.includePlatformRecipient) {
-      const platformRecipient = recipients.find((item) => item.kind === "platform");
-      if (platformRecipient) {
-        platformRecipient.percentualValue = roundPercent(platformPercent);
-      }
-    }
-
-    const existingSocio = recipients.findIndex((item) => item.kind === "socio");
-    if (existingSocio >= 0) recipients.splice(existingSocio, 1);
-
-    if (socioIncluded && socioPercent > 0 && socioValidation?.ok && socioValidation.walletId) {
-      recipients.push({
-        kind: "socio",
-        walletId: socioValidation.walletId,
-        percentualValue: roundPercent(socioPercent),
-      });
-    }
+  let socio: ResolveSplitRecipientsResult["socio"] = {
+    included: false,
+    reason: "missing_or_invalid",
+    walletId: null,
   };
-
-  const redistributeRepresentativeWhenUnavailable = () => {
-    if (representativePercent <= 0) return;
-    if (socioIncluded && socioPercent > 0) {
-      const halfRepresentative = roundPercent(representativePercent / 2);
-      socioPercent = roundPercent(socioPercent + halfRepresentative);
-      platformPercent = roundPercent(platformPercent + (representativePercent - halfRepresentative));
-    } else {
-      platformPercent = roundPercent(platformPercent + representativePercent);
-    }
-    representativePercent = 0;
-  };
-
-  if (params.includePlatformRecipient && effectivePlatformPercent > 0) {
-    if (!params.platformWalletId) {
-      throw new Error("missing_platform_wallet");
-    }
-
-    recipients.push({
-      kind: "platform",
-      walletId: params.platformWalletId,
-      percentualValue: effectivePlatformPercent,
+  const { data: socioRows, error: socioError } = await params.supabaseAdmin
+    .from("socios_split")
+    .select("id, name, status, asaas_wallet_id, asaas_wallet_id_production, asaas_wallet_id_sandbox");
+  if (socioError) {
+    socio = { included: false, reason: "query_failed", walletId: null };
+    logPaymentTrace("error", params.source, "split_socio_query_failed_degraded", {
+      sale_id: params.saleId,
+      company_id: params.companyId,
+      payment_environment: params.paymentEnvironment,
+      error_message: socioError.message,
+      fallback: "socio_unconfirmed",
+      reconciliation_pending: true,
     });
-  }
-
-  if (requestedSocioPercent > 0) {
-    // Sócio é uma configuração GLOBAL da plataforma: não filtra por company_id.
-    // O limite 2 mantém a defesa contra mais de um ativo (o banco também impede via índice único).
-    const { data: socioRows, error: socioError } = await params.supabaseAdmin
-      .from("socios_split")
-      .select("id, name, status, asaas_wallet_id, asaas_wallet_id_production, asaas_wallet_id_sandbox")
-      .eq("status", "ativo")
-      .limit(2);
-
-
-    if (socioError) {
-      throw new Error(`split_socio_query_failed:${socioError.message}`);
-    }
-
+  } else {
     socioValidation = validateFinancialSocioForSplit({
       socios: (socioRows ?? []) as SocioRow[],
       provider: "asaas",
       environment: params.paymentEnvironment,
     });
-
-    if (!socioValidation.ok) {
-      platformPercent = roundPercent(platformPercent + requestedSocioPercent);
-      socioPercent = 0;
-      socioReason = socioValidation.code === "split_socio_wallet_missing"
-        ? "wallet_missing"
-        : "missing_or_invalid";
-    } else if (socioValidation.walletId) {
-      socioIncluded = true;
-      socioReason = "included";
+    if (socioValidation.ok) {
+      socio = { included: true, reason: "included", walletId: socioValidation.walletId };
+    } else {
+      socio = {
+        included: false,
+        reason: socioValidation.code === "split_socio_wallet_missing"
+          ? "wallet_missing"
+          : socioValidation.code === "split_socio_multiple_active"
+          ? "ambiguous"
+          : "missing_or_invalid",
+        walletId: null,
+      };
     }
   }
 
   if (!params.representativeId) {
-    redistributeRepresentativeWhenUnavailable();
-    syncRecipients();
-    return {
-      recipients,
-      socioValidation,
-      socio: {
-        included: socioIncluded,
-        reason: socioReason,
-        percent: socioPercent,
-      },
-      representative: {
-        eligible: false,
-        reason: "missing_sale_representative",
-        representativeId: null,
-        walletId: null,
-        percent: 0,
-      },
-    };
+    return { socioValidation, socio, representative: emptyRepresentative("missing_sale_representative") };
   }
 
   try {
-    const { data: representativeRaw, error: representativeError } = await params.supabaseAdmin
+    // A associação é confirmada pela mesma tabela que alimenta os links de
+    // representante. O predicado duplo impede vazamento entre empresas.
+    const { data: link, error: linkError } = await params.supabaseAdmin
+      .from("representative_company_links")
+      .select("representative_id, company_id")
+      .eq("representative_id", params.representativeId)
+      .eq("company_id", params.companyId)
+      .maybeSingle();
+    if (linkError) {
+      logPaymentTrace("error", params.source, "split_representative_company_lookup_failed", {
+        sale_id: params.saleId,
+        company_id: params.companyId,
+        representative_id: params.representativeId,
+        error_message: linkError.message,
+      });
+      return { socioValidation, socio, representative: emptyRepresentative("representative_lookup_failed") };
+    }
+    if (!link) {
+      logPaymentTrace("warn", params.source, "split_representative_company_mismatch_degraded", {
+        sale_id: params.saleId,
+        company_id: params.companyId,
+        representative_id: params.representativeId,
+        reconciliation_pending: true,
+      });
+      return { socioValidation, socio, representative: emptyRepresentative("representative_company_mismatch") };
+    }
+
+    const { data: raw, error } = await params.supabaseAdmin
       .from("representatives")
-      .select("id, status, asaas_wallet_id_production, asaas_wallet_id_sandbox")
+      .select("id, asaas_wallet_id_production, asaas_wallet_id_sandbox")
       .eq("id", params.representativeId)
       .maybeSingle();
-
-    if (representativeError) {
-      redistributeRepresentativeWhenUnavailable();
-      syncRecipients();
-      return {
-        recipients,
-        socioValidation,
-        socio: {
-          included: socioIncluded,
-          reason: socioReason,
-          percent: socioPercent,
-        },
-        representative: {
-          eligible: false,
-          reason: "representative_lookup_failed",
-          representativeId: params.representativeId,
-          walletId: null,
-          percent: 0,
-        },
-      };
+    if (error) return { socioValidation, socio, representative: emptyRepresentative("representative_lookup_failed") };
+    if (!raw) return { socioValidation, socio, representative: emptyRepresentative("representative_not_found") };
+    const row = raw as RepresentativeRow;
+    const walletId = representativeWallet(row, params.paymentEnvironment);
+    if (!walletId) {
+      return { socioValidation, socio, representative: emptyRepresentative("representative_wallet_missing") };
     }
-
-    if (!representativeRaw) {
-      redistributeRepresentativeWhenUnavailable();
-      syncRecipients();
-      return {
-        recipients,
-        socioValidation,
-        socio: {
-          included: socioIncluded,
-          reason: socioReason,
-          percent: socioPercent,
-        },
-        representative: {
-          eligible: false,
-          reason: "representative_not_found",
-          representativeId: params.representativeId,
-          walletId: null,
-          percent: 0,
-        },
-      };
-    }
-
-    const representative = representativeRaw as RepresentativeRow;
-
-    if (representative.status !== "ativo") {
-      redistributeRepresentativeWhenUnavailable();
-      syncRecipients();
-      return {
-        recipients,
-        socioValidation,
-        socio: {
-          included: socioIncluded,
-          reason: socioReason,
-          percent: socioPercent,
-        },
-        representative: {
-          eligible: false,
-          reason: "representative_status_invalid",
-          representativeId: representative.id,
-          walletId: null,
-          percent: 0,
-        },
-      };
-    }
-
-    /**
-     * Regra nova: não usamos mais `representatives.commission_percent` como
-     * fonte operacional do split. O percentual do representante deriva
-     * exclusivamente da taxa da plataforma da própria venda/contexto.
-     */
-    representativePercent = roundPercent(
-      Number(params.distributionPercentages.representative ?? 0),
-    );
-    if (!Number.isFinite(representativePercent) || representativePercent <= 0) {
-      redistributeRepresentativeWhenUnavailable();
-      syncRecipients();
-      return {
-        recipients,
-        socioValidation,
-        socio: {
-          included: socioIncluded,
-          reason: socioReason,
-          percent: socioPercent,
-        },
-        representative: {
-          eligible: false,
-          reason: "representative_percent_invalid",
-          representativeId: representative.id,
-          walletId: null,
-          percent: representativePercent,
-        },
-      };
-    }
-
-    const representativeWalletId = resolveRepresentativeWalletByEnvironment(
-      representative,
-      params.paymentEnvironment,
-    );
-
-    if (!representativeWalletId) {
-      redistributeRepresentativeWhenUnavailable();
-      syncRecipients();
-
-      return {
-        recipients,
-        socioValidation,
-        socio: {
-          included: socioIncluded,
-          reason: socioReason,
-          percent: socioPercent,
-        },
-        representative: {
-          eligible: false,
-          reason: "representative_wallet_missing",
-          representativeId: representative.id,
-          walletId: null,
-          percent: representativePercent,
-        },
-      };
-    }
-
-    syncRecipients();
-
-    if (representativePercent > 0) {
-      recipients.push({
-        kind: "representative",
-        walletId: representativeWalletId,
-        percentualValue: representativePercent,
-      });
-    }
-
     return {
-      recipients,
       socioValidation,
-      socio: {
-        included: socioIncluded,
-        reason: socioReason,
-        percent: socioPercent,
-      },
-      representative: {
-        eligible: true,
-        reason: "included",
-        representativeId: representative.id,
-        walletId: representativeWalletId,
-        percent: representativePercent,
-      },
+      socio,
+      representative: { eligible: true, reason: "included", representativeId: row.id, walletId },
     };
   } catch (error) {
     logPaymentTrace("error", params.source, "split_representative_resolution_exception", {
       sale_id: params.saleId,
       company_id: params.companyId,
-      payment_environment: params.paymentEnvironment,
       representative_id: params.representativeId,
       error_message: error instanceof Error ? error.message : String(error),
     });
-
-    redistributeRepresentativeWhenUnavailable();
-    syncRecipients();
-
-    return {
-      recipients,
-      socioValidation,
-      socio: {
-        included: socioIncluded,
-        reason: socioReason,
-        percent: socioPercent,
-      },
-      representative: {
-        eligible: false,
-        reason: "representative_lookup_failed",
-        representativeId: params.representativeId,
-        walletId: null,
-        percent: 0,
-      },
-    };
+    return { socioValidation, socio, representative: emptyRepresentative("representative_lookup_failed") };
   }
-}
-
-export function computeSocioFinancialSnapshot(params: {
-  grossAmount: number;
-  platformFeePercent: number;
-  socioSplitPercent: number;
-  socioValidation: FinancialSocioValidationResult | null;
-  paymentEnvironment: PaymentEnvironment;
-}) {
-  const grossAmountCents = Math.round(params.grossAmount * 100);
-  const platformFeeCents = Math.round(
-    grossAmountCents * (params.platformFeePercent / 100),
-  );
-  const platformFeeTotal = platformFeeCents / 100;
-
-  const socio = params.socioValidation?.ok ? params.socioValidation.socio : null;
-  const socioWalletId = params.socioValidation?.ok
-    ? resolveSocioWalletByEnvironment(socio, params.paymentEnvironment)
-    : null;
-
-  let socioFeeAmount = 0;
-  let platformNetAmount = platformFeeTotal;
-
-  if (
-    socioWalletId &&
-    socio?.status === "ativo" &&
-    params.socioSplitPercent > 0
-  ) {
-    const socioFeeCents = Math.round(
-      platformFeeCents * (params.socioSplitPercent / 100),
-    );
-    socioFeeAmount = socioFeeCents / 100;
-    platformNetAmount = (platformFeeCents - socioFeeCents) / 100;
-  }
-
-  return {
-    platformFeeTotal,
-    socioFeeAmount,
-    platformNetAmount,
-    socio,
-    socioWalletId,
-  };
 }

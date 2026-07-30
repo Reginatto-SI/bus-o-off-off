@@ -24,7 +24,7 @@ export type PlatformFeeDistribution = {
   platformAmount: number;
   socioAmount: number;
   representativeAmount: number;
-  mode: "one_third" | "half_half";
+  mode: "all_present" | "socio_only" | "representative_only" | "platform_only";
 };
 
 const TIERS: PassengerFeeTier[] = [
@@ -55,10 +55,15 @@ export function resolveTierPercent(unitPrice: number): number {
 }
 
 /**
- * Motor financeiro oficial do PRD 07:
- * - cálculo por passageiro;
- * - percentual por faixa de preço unitário;
- * - teto de R$ 25 por passageiro.
+ * Motor financeiro oficial do PRD 01.
+ * `unitPrices` é a lista de preços individuais: cada elemento representa uma
+ * passagem ou item. A faixa e o teto de R$ 25 são resolvidos dentro do cálculo
+ * de cada elemento; somente depois as taxas individuais são somadas e o mínimo
+ * operacional é aplicado ao total. O valor bruto da venda não participa da
+ * escolha da faixa nem do teto. Este motor termina em valores absolutos e não
+ * conhece o payload Asaas; o adaptador posterior usa `fixedValue` ou
+ * `totalFixedValue`. `amountToGrossPercent` permanece apenas para auditoria e
+ * campos legados, nunca para montar o novo split monetário.
  */
 export function computeProgressiveFeeForPassengers(
   unitPrices: number[],
@@ -100,12 +105,13 @@ export function computeProgressiveFeeForPassengers(
 }
 
 /**
- * Distribuição oficial do PRD 07:
- * - com representante elegível: 1/3 para cada parte;
- * - sem representante elegível: 50/50 plataforma/sócio.
+ * Distribuição oficial, aplicada somente depois de calcular a taxa total:
+ * sócio+representante = 1/3 cada; sócio = 1/2 cada; representante = 2/3
+ * plataforma + 1/3 representante; nenhum = 100% plataforma.
  */
 export function distributePlatformFee(params: {
   totalFee: number;
+  socioEligible: boolean;
   representativeEligible: boolean;
 }): PlatformFeeDistribution {
   const totalFeeCents = toCents(params.totalFee);
@@ -114,11 +120,13 @@ export function distributePlatformFee(params: {
       platformAmount: 0,
       socioAmount: 0,
       representativeAmount: 0,
-      mode: params.representativeEligible ? "one_third" : "half_half",
+      mode: params.socioEligible
+        ? (params.representativeEligible ? "all_present" : "socio_only")
+        : (params.representativeEligible ? "representative_only" : "platform_only"),
     };
   }
 
-  if (params.representativeEligible) {
+  if (params.socioEligible && params.representativeEligible) {
     const baseThirdCents = Math.floor(totalFeeCents / 3);
     const representativeAmountCents = baseThirdCents;
     const socioAmountCents = baseThirdCents;
@@ -127,18 +135,35 @@ export function distributePlatformFee(params: {
       platformAmount: roundCurrency(platformAmountCents / 100),
       socioAmount: roundCurrency(socioAmountCents / 100),
       representativeAmount: roundCurrency(representativeAmountCents / 100),
-      mode: "one_third",
+      mode: "all_present",
     };
   }
 
-  const socioAmountCents = Math.floor(totalFeeCents / 2);
-  const platformAmountCents = totalFeeCents - socioAmountCents;
+  if (params.socioEligible) {
+    const socioAmountCents = Math.floor(totalFeeCents / 2);
+    return {
+      platformAmount: roundCurrency((totalFeeCents - socioAmountCents) / 100),
+      socioAmount: roundCurrency(socioAmountCents / 100),
+      representativeAmount: 0,
+      mode: "socio_only",
+    };
+  }
+
+  if (params.representativeEligible) {
+    const representativeAmountCents = Math.floor(totalFeeCents / 3);
+    return {
+      platformAmount: roundCurrency((totalFeeCents - representativeAmountCents) / 100),
+      socioAmount: 0,
+      representativeAmount: roundCurrency(representativeAmountCents / 100),
+      mode: "representative_only",
+    };
+  }
 
   return {
-    platformAmount: roundCurrency(platformAmountCents / 100),
-    socioAmount: roundCurrency(socioAmountCents / 100),
+    platformAmount: roundCurrency(totalFeeCents / 100),
+    socioAmount: 0,
     representativeAmount: 0,
-    mode: "half_half",
+    mode: "platform_only",
   };
 }
 
@@ -161,8 +186,23 @@ export function logFeeEngineTrace(params: {
     sale_id: params.saleId,
     company_id: params.companyId,
     gross_amount: params.grossAmount,
+    gross_amount_usage: "asaas_conversion_and_integrity_only",
+    passenger_count: params.engine.passengerBreakdown.length,
+    passenger_unit_prices: params.engine.passengerBreakdown.map((item) => item.unitPrice),
+    passenger_fee_breakdown: params.engine.passengerBreakdown.map((item) => ({
+      unit_price: item.unitPrice,
+      commercial_tier_percent: item.percent,
+      fee_before_cap: item.uncappedFee,
+      fee_after_individual_cap: item.cappedFee,
+      individual_cap_applied: item.capApplied,
+    })),
     representative_eligible: params.representativeEligible,
     total_fee: params.engine.totalFee,
+    commercial_fee_total: params.engine.totalFee,
+    audit_percent_over_gross_not_sent_to_split: amountToGrossPercent(
+      params.engine.totalFee,
+      params.grossAmount,
+    ),
     total_uncapped_fee: params.engine.totalUncappedFee,
     cap_hits: params.engine.capHits,
     distribution_mode: params.distribution.mode,
