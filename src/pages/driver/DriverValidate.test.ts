@@ -13,6 +13,8 @@ import {
   persistApprovedBackCamera,
   readCameraPreference,
   removeCameraPreference,
+  getImmediateCameraFailure,
+  IMMEDIATE_TRACK_ENDED_CODE,
 } from './DriverValidate';
 
 describe('isUsableCameraState', () => {
@@ -29,6 +31,25 @@ describe('isUsableCameraState', () => {
     [{ ...valid, width: 2, height: 2 }, 'placeholder 2x2'],
   ])('rejeita %s (%s)', (state, _reason) => {
     expect(isUsableCameraState(state)).toBe(false);
+  });
+});
+
+describe('validação imediata do retorno de getUserMedia', () => {
+  const stream = (active: boolean, readyState?: MediaStreamTrackState, enabled = true, muted = false) => ({
+    active,
+    getVideoTracks: () => readyState ? [{ readyState, enabled, muted }] as MediaStreamTrack[] : [],
+  });
+
+  it.each([
+    [stream(true, 'ended'), 'track encerrada'],
+    [stream(false, 'live'), 'stream inativo'],
+    [stream(true), 'track ausente'],
+  ])('descarta %s (%s)', (candidate, _reason) => {
+    expect(getImmediateCameraFailure(candidate)).toBe(IMMEDIATE_TRACK_ENDED_CODE);
+  });
+
+  it('mantém track live mesmo muted ou disabled', () => {
+    expect(getImmediateCameraFailure(stream(true, 'live', false, true))).toBeNull();
   });
 });
 
