@@ -90,6 +90,15 @@ type CameraStrategy = { label: string; constraints: MediaStreamConstraints; devi
 type CameraDeviceCandidate = { deviceId: string; label: string; classification: CameraDeviceClassification };
 type CameraPreferenceStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
+export const IMMEDIATE_TRACK_ENDED_CODE = 'camera_track_ended_immediately';
+
+export function getImmediateCameraFailure(stream: Pick<MediaStream, 'active' | 'getVideoTracks'>) {
+  const track = stream.getVideoTracks()[0];
+  return !stream.active || !track || track.readyState !== 'live'
+    ? IMMEDIATE_TRACK_ENDED_CODE
+    : null;
+}
+
 export async function runSerialCameraStrategies<T>(
   strategies: CameraStrategy[],
   handlers: {
@@ -365,8 +374,6 @@ export default function DriverValidate() {
   const [approvedRawDevice, setApprovedRawDevice] = useState<CameraDeviceCandidate | null>(null);
   const rawDiagnosticActive = Boolean(cameraRawMode) || cameraRawDevicesMode;
   const diagnosticLinesRef = useRef<string[]>([]);
-  const knownStopReasonRef = useRef<string | null>(null);
-  const interceptedStopCountRef = useRef(0);
 
   const [processing, setProcessing] = useState(false);
   const [scanLocked, setScanLocked] = useState(false);
@@ -389,11 +396,6 @@ export default function DriverValidate() {
   const scanErrorCountRef = useRef<number>(0);
 
   const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
-
-  // Diagnóstico instalado apenas pelo parâmetro explícito; o wrapper é removido
-  // no cleanup e distingue stop() da aplicação de uma faixa entregue como ended.
-  const diagnosticContextRef = useRef({ authenticated: Boolean(user), loading, initId: 0 });
-  diagnosticContextRef.current = { authenticated: Boolean(user), loading, initId: initCountRef.current };
 
   const recordDiagnostic = useCallback((message: string, data?: unknown) => {
     if (!cameraDebug) return;
@@ -609,7 +611,6 @@ export default function DriverValidate() {
       tracks: stream.getTracks().map(track => ({
         id: track.id, label: track.label, kind: track.kind, readyState: track.readyState,
         enabled: track.enabled, muted: track.muted, settings: track.getSettings?.(),
-        capabilities: track.getCapabilities?.(),
       })),
     });
   }, [recordDiagnostic]);
@@ -629,45 +630,6 @@ export default function DriverValidate() {
   }, [recordDiagnostic]);
 
   useEffect(() => {
-    if (!cameraDebug || typeof MediaStreamTrack === 'undefined') return;
-    const originalStop = MediaStreamTrack.prototype.stop;
-    try {
-      MediaStreamTrack.prototype.stop = function diagnosticStop(this: MediaStreamTrack) {
-        interceptedStopCountRef.current += 1;
-        recordDiagnostic('track.stop JavaScript interceptado', {
-          trackId: this.id, label: this.label, readyStateBefore: this.readyState,
-          url: window.location.href, visibility: document.visibilityState,
-          reason: knownStopReasonRef.current ?? 'desconhecido',
-          ...diagnosticContextRef.current, stack: new Error('MediaStreamTrack.stop call site').stack,
-        });
-        return originalStop.call(this);
-      };
-    } catch (error) {
-      recordDiagnostic('falha ao instalar interceptador de stop', String(error));
-    }
-
-    const lifecycle = (event: Event) => recordDiagnostic(`lifecycle:${event.type}`, {
-      event: event.type, at: new Date().toISOString(), url: window.location.href,
-      visibility: document.visibilityState, persisted: 'persisted' in event ? (event as PageTransitionEvent).persisted : undefined,
-      ...diagnosticContextRef.current,
-    });
-    ['visibilitychange', 'pagehide', 'pageshow', 'freeze', 'resume'].forEach(name =>
-      (name === 'visibilitychange' ? document : window).addEventListener(name, lifecycle));
-    const authDiagnostic = (event: Event) => recordDiagnostic('auth', (event as CustomEvent).detail);
-    window.addEventListener('smartbus:auth-diagnostic', authDiagnostic);
-    recordDiagnostic('DriverValidate:mount', { url: window.location.href });
-    return () => {
-      recordDiagnostic('DriverValidate:unmount', { url: window.location.href });
-      try { MediaStreamTrack.prototype.stop = originalStop; } catch (error) {
-        console.warn('[CAM-DIAG] não foi possível restaurar MediaStreamTrack.stop', error);
-      }
-      window.removeEventListener('smartbus:auth-diagnostic', authDiagnostic);
-      ['visibilitychange', 'pagehide', 'pageshow', 'freeze', 'resume'].forEach(name =>
-        (name === 'visibilitychange' ? document : window).removeEventListener(name, lifecycle));
-    };
-  }, [cameraDebug, recordDiagnostic]);
-
-  useEffect(() => {
     recordDiagnostic('react:state', {
       at: new Date().toISOString(), videoEl: Boolean(videoEl), videoConnected: videoEl?.isConnected,
       loading, authenticated: Boolean(user), initId: initCountRef.current,
@@ -675,10 +637,9 @@ export default function DriverValidate() {
   }, [loading, user, videoEl, recordDiagnostic]);
 
   const stopStreamTracks = useCallback((stream: MediaStream, reason: string) => {
-    knownStopReasonRef.current = reason;
-    try { stopAllMediaStreamTracks(stream); }
-    finally { knownStopReasonRef.current = null; }
-  }, []);
+    recordDiagnostic('track.stop', { reason, trackStates: stream.getTracks().map(track => track.readyState) });
+    stopAllMediaStreamTracks(stream);
+  }, [recordDiagnostic]);
 
   /* ---------- stopCurrentStream ---------- */
 
@@ -790,7 +751,7 @@ export default function DriverValidate() {
         return [] as CameraDeviceCandidate[];
       };
 
-      const validateCandidate = async (candidate: MediaStream, stopCountBeforeRequest: number) => {
+      const validateCandidate = async (candidate: MediaStream) => {
         const track = candidate.getVideoTracks()[0];
         const videoStage = (stage: string, extra?: unknown) => recordDiagnostic(`video:${stage}`, {
           trackState: candidate.getVideoTracks()[0]?.readyState ?? 'ausente',
@@ -800,15 +761,10 @@ export default function DriverValidate() {
           ...((extra && typeof extra === 'object') ? extra : {}),
         });
         logStreamSnapshot('primeiro retorno de getUserMedia', candidate, video);
-        if (!track || !candidate.active || track.readyState !== 'live') {
-          recordDiagnostic(interceptedStopCountRef.current === stopCountBeforeRequest
-            ? 'stream resolvido já inutilizável; nenhum stop JavaScript interceptado durante a chamada'
-            : 'stream resolvido inutilizável após stop JavaScript interceptado durante a chamada', {
-            stopsDuringRequest: interceptedStopCountRef.current - stopCountBeforeRequest,
-            active: candidate.active,
-            trackState: track?.readyState ?? 'ausente',
-          });
-          return { usable: false, detail: `active=${candidate.active}, track=${track?.readyState ?? 'ausente'}` };
+        const immediateFailure = getImmediateCameraFailure(candidate);
+        if (immediateFailure) {
+          recordDiagnostic(immediateFailure, { active: candidate.active, trackState: track?.readyState ?? 'ausente' });
+          return { usable: false, detail: immediateFailure };
         }
         if (!video.isConnected) return { usable: false, detail: 'video desmontado' };
 
@@ -888,7 +844,6 @@ export default function DriverValidate() {
       if (!labelsAndIdsAvailable) {
         // Bootstrap único: abre a opção flexível apenas para liberar labels/IDs,
         // encerra completamente e só então monta a fila física por deviceId.
-        const bootstrapStopCount = interceptedStopCountRef.current;
         recordDiagnostic('cameraBootstrap:start', { constraints: RAW_CAMERA_CONSTRAINTS.generic });
         let bootstrap: MediaStream | null = null;
         try {
@@ -896,7 +851,7 @@ export default function DriverValidate() {
             () => navigator.mediaDevices.getUserMedia(RAW_CAMERA_CONSTRAINTS.generic),
             stream => captureImmediateSnapshot(stream, video, 'normal:bootstrap_autorizacao'),
           );
-          const bootstrapValidation = await validateCandidate(bootstrap, bootstrapStopCount);
+          const bootstrapValidation = await validateCandidate(bootstrap);
           if (bootstrapValidation.usable) availableDevices = await discoverBackCameras('após bootstrap de autorização');
         } catch (error) {
           recordDiagnostic('cameraBootstrap:reject', { detail: error instanceof Error ? `${error.name}: ${error.message}` : String(error) });
@@ -917,24 +872,21 @@ export default function DriverValidate() {
       const classificationById = new Map(availableDevices.map(device => [device.deviceId, device.classification]));
       const failedDeviceIds = new Set<string>();
 
-      const requestContext = new WeakMap<MediaStream, { callId: string; stopCountBeforeRequest: number }>();
       const serialResult = await runSerialCameraStrategies(strategies, {
         acquire: async (strategy, index) => {
           const callId = `${thisInitId}.${index + 1}`;
-          const stopCountBeforeRequest = interceptedStopCountRef.current;
           if (strategy.deviceId && failedDeviceIds.has(strategy.deviceId)) {
             throw new DOMException('Dispositivo já falhou nesta inicialização.', 'InvalidStateError');
           }
           updateDebug({ currentStrategy: strategy.label });
           setScannerStatusMessage(index === 0 ? 'Procurando uma câmera traseira disponível…' : 'Tentando outra câmera…');
           logStep(`${index ? 'fallback serial' : 'tentativa inicial'} → ${strategy.label}`);
-          recordDiagnostic('getUserMedia:start', { callId, label: strategy.label, stack: new Error().stack });
+          recordDiagnostic('getUserMedia:start', { callId, label: strategy.label, constraints: strategy.constraints });
           try {
             const candidate = await acquireWithImmediateSnapshot(
               () => navigator.mediaDevices.getUserMedia(strategy.constraints),
               stream => captureImmediateSnapshot(stream, video, `normal:${strategy.label}`),
             );
-            requestContext.set(candidate, { callId, stopCountBeforeRequest });
             recordDiagnostic('getUserMedia:resolve', { callId, streamId: candidate.id, tracks: candidate.getVideoTracks().length });
             return candidate;
           } catch (error) {
@@ -946,9 +898,6 @@ export default function DriverValidate() {
           }
         },
         afterResolved: async (candidate, strategy) => {
-          const context = requestContext.get(candidate);
-          candidate.getVideoTracks().forEach(track => track.addEventListener('ended', () =>
-            recordDiagnostic('track:ended', { callId: context?.callId, trackId: track.id, visibility: document.visibilityState })));
           if (strategy.deviceId && classificationById.get(strategy.deviceId) === 'traseira') {
             const saved = saveCameraPreference(localStorage, strategy.deviceId, recordPreferenceStorageError);
             if (saved) recordDiagnostic('cameraPreference:saved', { deviceId: strategy.deviceId.slice(0, 8) });
@@ -959,8 +908,7 @@ export default function DriverValidate() {
           }
         },
         validate: async (candidate, strategy) => {
-          const context = requestContext.get(candidate);
-          const validation = await validateCandidate(candidate, context?.stopCountBeforeRequest ?? interceptedStopCountRef.current);
+          const validation = await validateCandidate(candidate);
           if (!validation.usable) logStep(`stream_inutilizavel (${strategy.label}): ${validation.detail}`);
           return validation;
         },
@@ -988,7 +936,13 @@ export default function DriverValidate() {
       attemptResults.push(...serialResult.attempts);
       updateDebug({ attemptResults: [...attemptResults], currentStrategy: selected ? selectedLabel : 'finalizada' });
 
-      if (!selected) throw new DOMException('Todas as estratégias falharam ou retornaram stream inutilizável.', 'StreamEndedError');
+      if (!selected) {
+        const endedImmediately = serialResult.attempts.some(attempt => attempt.detail === IMMEDIATE_TRACK_ENDED_CODE);
+        throw new DOMException(
+          endedImmediately ? IMMEDIATE_TRACK_ENDED_CODE : 'Todas as estratégias falharam ou retornaram stream inutilizável.',
+          endedImmediately ? 'ImmediateTrackEndedError' : 'StreamEndedError',
+        );
+      }
       const track = selected.getVideoTracks()[0];
       updateDebug({
         permission: 'granted', streamExists: true, constraintUsed: selectedLabel,
@@ -1009,9 +963,16 @@ export default function DriverValidate() {
       stopCurrentStream('falha_inicializacao', thisInitId);
       const detail = error instanceof Error ? `${error.name}: ${error.message}` : `Error: ${String(error)}`;
       logStep(`conclusão: falha ao abrir a câmera — ${detail}`);
-      setCameraError((error instanceof DOMException && error.name === 'StreamEndedError'
-        ? 'Nenhuma estratégia de câmera produziu vídeo utilizável. Toque em "Tentar novamente".'
-        : 'Não foi possível acessar a câmera. Verifique a permissão e tente novamente.') + ' Você também pode validar a passagem manualmente.');
+      const trackEndedImmediately = error instanceof DOMException && error.name === 'ImmediateTrackEndedError';
+      const webViewFallback = trackEndedImmediately && environment === 'webview_android'
+        ? ' Caso o problema continue, feche e abra novamente o aplicativo ou utilize temporariamente o Chrome.'
+        : '';
+      setCameraError((trackEndedImmediately
+        ? 'A câmera foi aberta, mas o vídeo foi interrompido pelo dispositivo. Feche outros aplicativos que estejam usando a câmera e tente novamente.'
+        : error instanceof DOMException && error.name === 'StreamEndedError'
+          ? 'Nenhuma estratégia de câmera produziu vídeo utilizável. Toque em "Tentar novamente".'
+          : 'Não foi possível acessar a câmera. Verifique a permissão e tente novamente.')
+        + webViewFallback + ' Você também pode validar a passagem manualmente.');
       updateDebug({ cameraError: detail, lastError: detail, attemptResults: [...attemptResults], streamExists: false });
     } finally {
       finish();
@@ -1047,11 +1008,13 @@ export default function DriverValidate() {
         candidate => captureImmediateSnapshot(candidate, video, `raw:${testType}`),
       );
       recordDiagnostic('getUserMedia:resolve', { testType, at: new Date().toISOString() });
-      stream.getVideoTracks().forEach(track => {
-        track.addEventListener('ended', () => recordDiagnostic('track:ended', { testType, trackId: track.id }));
-        track.addEventListener('mute', () => recordDiagnostic('track:mute', { testType, trackId: track.id }));
-        track.addEventListener('unmute', () => recordDiagnostic('track:unmute', { testType, trackId: track.id }));
-      });
+      if (getImmediateCameraFailure(stream)) {
+        recordDiagnostic(IMMEDIATE_TRACK_ENDED_CODE, {
+          testType, active: stream.active, trackState: stream.getVideoTracks()[0]?.readyState ?? 'ausente',
+        });
+        stopStreamTracks(stream, IMMEDIATE_TRACK_ENDED_CODE);
+        throw new DOMException(IMMEDIATE_TRACK_ENDED_CODE, 'ImmediateTrackEndedError');
+      }
       streamRef.current = stream;
       streamOwnerInitRef.current = 1;
       video.srcObject = stream;
@@ -1103,13 +1066,15 @@ export default function DriverValidate() {
     } catch (error) {
       const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
       recordDiagnostic('getUserMedia:reject', { testType, at: new Date().toISOString(), detail });
-      setCameraError(`Teste bruto rejeitado: ${detail}. Recarregue a página para outro ensaio.`);
+      setCameraError(error instanceof DOMException && error.name === 'ImmediateTrackEndedError'
+        ? 'A câmera foi aberta, mas o vídeo foi interrompido pelo dispositivo. Feche outros aplicativos que estejam usando a câmera e tente novamente.'
+        : 'Não foi possível abrir a câmera neste teste. Recarregue a página e tente novamente.');
       updateDebug({ lastError: detail, cameraError: detail, currentStrategy: `bruto:${testType}:rejeitado` });
     } finally {
       initInProgressRef.current = false;
       updateDebug({ initInProgress: false });
     }
-  }, [captureImmediateSnapshot, recordDiagnostic, recordPreferenceStorageError, stopCurrentStream, updateDebug]);
+  }, [captureImmediateSnapshot, recordDiagnostic, recordPreferenceStorageError, stopCurrentStream, stopStreamTracks, updateDebug]);
 
   /* ---------- Libera o hardware apenas no desmonte real da tela ---------- */
 
