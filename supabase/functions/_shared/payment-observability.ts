@@ -1,7 +1,8 @@
+// @ts-nocheck — arquivo Deno (edge function): tipos resolvidos pelo runtime Deno, não pelo tsc do app.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export type PaymentOwnerType = "company" | "platform" | "unknown";
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 
 export type PaymentTraceLevel = "info" | "warn" | "error";
 export type CriticalPaymentErrorCode =

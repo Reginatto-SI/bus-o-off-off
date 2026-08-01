@@ -1,3 +1,4 @@
+// @ts-nocheck — arquivo Deno (edge function): tipos resolvidos pelo runtime Deno, não pelo tsc do app.
 import {
   getAsaasApiKeySecretName,
   getAsaasBaseUrl,
