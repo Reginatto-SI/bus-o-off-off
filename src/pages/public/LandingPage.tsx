@@ -635,6 +635,16 @@ export default function LandingPage() {
       "Plataforma para vender passagens online, organizar excursões e controlar embarque com pagamento integrado. Sem mensalidade.",
     path: "/",
   });
+  // FAQPage schema derivado da mesma fonte exibida na página, evitando divergência de conteúdo.
+  useJsonLd("faq", {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: LANDING_FAQS.map((item) => ({
+      "@type": "Question",
+      name: item.question,
+      acceptedAnswer: { "@type": "Answer", text: item.answer },
+    })),
+  });
   const [contactModalOpen, setContactModalOpen] = useState(false);
   const [demoRequestModalOpen, setDemoRequestModalOpen] = useState(false);
   const [officialQrModalOpen, setOfficialQrModalOpen] = useState(false);
