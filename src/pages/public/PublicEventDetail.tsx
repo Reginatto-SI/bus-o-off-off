@@ -63,10 +63,28 @@ export default function PublicEventDetail() {
   const eventDescription = event?.description?.trim() ?? '';
   const hasEventDescription = eventDescription.length > 0;
 
+  // Metadados por rota: título/descrição/OG específicos do evento evitam duplicidade com a home.
+  const metaTitle = event?.name
+    ? `${event.name} | Passagens SmartBus`.slice(0, 59)
+    : 'Passagens do evento | SmartBus';
+  const metaDescription = event
+    ? `Compre passagens para ${event.name} em ${event.city}. Escolha o embarque, selecione o assento e pague online com segurança.`.slice(
+        0,
+        158,
+      )
+    : 'Compre passagens de ônibus e van para eventos e excursões no SmartBus. Escolha o embarque, o assento e pague online com segurança.';
+
+  usePageMeta({
+    title: metaTitle,
+    description: metaDescription,
+    path: `/eventos/${id ?? ''}`,
+    ogType: 'article',
+  });
+
   // Schema.org Event para enriquecer resultados de busca da página do evento.
   useJsonLd(
     'event',
-    event
+    event?.name && event?.date
       ? {
           '@context': 'https://schema.org',
           '@type': 'Event',
