@@ -1,5 +1,5 @@
 import { FormEvent, useMemo, useRef, useState } from "react";
-import { usePageMeta } from "@/lib/usePageMeta";
+import { usePageMeta, useJsonLd } from "@/lib/usePageMeta";
 import logo from "@/assets/logo.png";
 import { FloatingWhatsApp } from "@/components/public/FloatingWhatsApp";
 import { Link } from "react-router-dom";
@@ -528,6 +528,17 @@ const LANDING_FAQS = [
       "Sim. Caso o passageiro tenha informado dados incorretos, como nome, telefone ou CPF, é possível realizar a correção diretamente no sistema. Para garantir segurança e rastreabilidade, essas alterações são controladas e podem ter limitações dependendo do status da passagem. Após o embarque, por exemplo, não é possível realizar alterações.",
   },
 ] as const;
+
+// FAQPage schema construído a partir da mesma fonte renderizada, evitando divergência de conteúdo.
+const LANDING_FAQ_JSONLD = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: LANDING_FAQS.map((item) => ({
+    "@type": "Question",
+    name: item.question,
+    acceptedAnswer: { "@type": "Answer", text: item.answer },
+  })),
+};
 // Nova seção comercial antes da FAQ: mostra que começar a vender é um processo simples,
 // visual e rápido, sem transformar a landing em tutorial técnico.
 const GET_STARTED_STEPS = [
@@ -635,6 +646,8 @@ export default function LandingPage() {
       "Plataforma para vender passagens online, organizar excursões e controlar embarque com pagamento integrado. Sem mensalidade.",
     path: "/",
   });
+  // FAQPage schema derivado da mesma fonte exibida na página, evitando divergência de conteúdo.
+  useJsonLd("faq", LANDING_FAQ_JSONLD);
   const [contactModalOpen, setContactModalOpen] = useState(false);
   const [demoRequestModalOpen, setDemoRequestModalOpen] = useState(false);
   const [officialQrModalOpen, setOfficialQrModalOpen] = useState(false);

@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { usePageMeta } from "@/lib/usePageMeta";
+import { usePageMeta, useJsonLd } from "@/lib/usePageMeta";
 import {
   ArrowRight,
   Bus,
@@ -191,6 +191,24 @@ const TRUST_ELEMENTS = [
   },
 ];
 
+// Reforça autoridade de marca nas páginas satélite de marketing (Organization + WebSite).
+const BRAND_JSONLD = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      name: "SmartBus BR",
+      url: "https://www.smartbus.com.br",
+      sameAs: ["https://twitter.com/SmartbusBR"],
+    },
+    {
+      "@type": "WebSite",
+      name: "SmartBus BR",
+      url: "https://www.smartbus.com.br",
+    },
+  ],
+};
+
 export default function SystemForExcursionsPage() {
   usePageMeta({
     title: "Sistema para excursões | SmartBus",
@@ -198,6 +216,7 @@ export default function SystemForExcursionsPage() {
       "Sistema completo para excursões: venda de passagens online, controle de passageiros, pagamento integrado e embarque organizado.",
     path: "/sistema-para-excursoes",
   });
+  useJsonLd("brand-excursoes", BRAND_JSONLD);
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Substituição do header: reuso do mesmo componente da landing principal para manter visual e comportamento idênticos. */}
