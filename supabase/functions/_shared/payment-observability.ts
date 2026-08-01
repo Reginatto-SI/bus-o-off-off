@@ -1,3 +1,4 @@
+// @ts-nocheck — arquivo Deno (edge function): tipos resolvidos pelo runtime Deno, não pelo tsc do app.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export type PaymentOwnerType = "company" | "platform" | "unknown";
 
