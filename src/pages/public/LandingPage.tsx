@@ -636,15 +636,7 @@ export default function LandingPage() {
     path: "/",
   });
   // FAQPage schema derivado da mesma fonte exibida na página, evitando divergência de conteúdo.
-  useJsonLd("faq", {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    mainEntity: LANDING_FAQS.map((item) => ({
-      "@type": "Question",
-      name: item.question,
-      acceptedAnswer: { "@type": "Answer", text: item.answer },
-    })),
-  });
+  useJsonLd("faq", LANDING_FAQ_JSONLD);
   const [contactModalOpen, setContactModalOpen] = useState(false);
   const [demoRequestModalOpen, setDemoRequestModalOpen] = useState(false);
   const [officialQrModalOpen, setOfficialQrModalOpen] = useState(false);
