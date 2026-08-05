@@ -4,7 +4,7 @@ import {
   getAsaasBaseUrl,
   getAsaasWalletSecretName,
   getAsaasWebhookTokenSecretName,
-  resolveEnvironmentFromHost,
+  
   type PaymentEnvironment,
 } from "./runtime-env.ts";
 
