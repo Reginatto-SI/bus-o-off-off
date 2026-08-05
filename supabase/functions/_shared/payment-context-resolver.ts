@@ -219,7 +219,6 @@ export function resolvePaymentContext(params: {
   socio?: MinimalSocio | null;
   request?: Request;
   isPlatformFeeFlow?: boolean;
-  allowHostFallback?: boolean;
 }): ResolvedPaymentContext {
   const saleEnvRaw = params.sale?.payment_environment;
   const hasSaleEnvironment =
