@@ -3,7 +3,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   getAsaasBaseUrl,
   type PaymentEnvironment,
-  resolveEnvironmentFromHost,
 } from "../_shared/runtime-env.ts";
 import {
   extractAccountIdFromAsaasPayload,
@@ -223,8 +222,6 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const { env: hostResolvedEnv, host: detectedHost } = resolveEnvironmentFromHost(req);
-
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
@@ -275,7 +272,7 @@ serve(async (req) => {
       const invalidResponse: CheckResponse = {
         status: "error",
         integration_status: "incomplete",
-        environment: requestedEnvironment ?? hostResolvedEnv,
+        environment: requestedEnvironment ?? "production",
         diagnostic_stage: "input_validation",
         details: {
           has_api_key: false,
@@ -299,8 +296,6 @@ serve(async (req) => {
       logCheck("warn", "[check-asaas-integration] invalid input", {
         company_id: companyId,
         requested_target_environment: body?.target_environment ?? null,
-        detected_host: detectedHost,
-        host_resolved_environment: hostResolvedEnv,
         diagnostic_stage: "input_validation",
         asaas_request_attempted: false,
         error_type: "invalid_input",
