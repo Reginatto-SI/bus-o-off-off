@@ -95,6 +95,8 @@ export interface Company {
   province: string | null;
   postal_code: string | null;
   notes: string | null;
+  // Fonte única de verdade do ambiente operacional de pagamento da empresa.
+  payment_environment?: 'production' | 'sandbox';
   // Asaas: contrato oficial e único por ambiente.
   asaas_account_id_production?: string | null;
   asaas_account_email_production?: string | null;
