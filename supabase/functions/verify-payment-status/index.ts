@@ -264,7 +264,7 @@ serve(async (req) => {
 
     const { data: company } = await supabaseAdmin
       .from("companies")
-      .select("asaas_api_key_production, asaas_api_key_sandbox, platform_fee_percent, socio_split_percent")
+      .select("payment_environment, asaas_api_key_production, asaas_api_key_sandbox, platform_fee_percent, socio_split_percent")
       .eq("id", sale.company_id)
       .single();
 
