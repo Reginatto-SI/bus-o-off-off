@@ -4,7 +4,7 @@ import {
   getAsaasBaseUrl,
   getAsaasWalletSecretName,
   getAsaasWebhookTokenSecretName,
-  resolveEnvironmentFromHost,
+  
   type PaymentEnvironment,
 } from "./runtime-env.ts";
 
@@ -16,7 +16,7 @@ export type PaymentContextMode =
 export type PaymentOwnerType = "platform" | "company";
 
 export type PaymentContextDecisionTrace = {
-  environmentSource: "sale" | "request" | "host";
+  environmentSource: "sale" | "company" | "request";
   hostDetected: string | null;
   ownerDecision: string;
   credentialDecision: string;
@@ -51,6 +51,7 @@ type MinimalSale = {
 };
 
 type MinimalCompany = {
+  payment_environment?: string | null;
   asaas_api_key_production?: string | null;
   asaas_wallet_id_production?: string | null;
   asaas_account_id_production?: string | null;
@@ -218,46 +219,47 @@ export function resolvePaymentContext(params: {
   socio?: MinimalSocio | null;
   request?: Request;
   isPlatformFeeFlow?: boolean;
-  allowHostFallback?: boolean;
 }): ResolvedPaymentContext {
   const saleEnvRaw = params.sale?.payment_environment;
   const hasSaleEnvironment =
     saleEnvRaw === "production" || saleEnvRaw === "sandbox";
+  const companyEnvRaw = params.company?.payment_environment;
+  const hasCompanyEnvironment =
+    companyEnvRaw === "production" || companyEnvRaw === "sandbox";
   const requestedEnvironment = params.requestedEnvironment;
 
   let environment: PaymentEnvironment;
-  let environmentSource: "sale" | "request" | "host";
-  let hostDetected: string | null = null;
+  let environmentSource: "sale" | "company" | "request";
+  const hostDetected: string | null = null;
 
   if (hasSaleEnvironment) {
+    // Venda já persistida carrega o ambiente em que a cobrança foi criada.
     environment = saleEnvRaw;
     environmentSource = "sale";
+  } else if (hasCompanyEnvironment) {
+    /**
+     * Fonte única de verdade do projeto: o ambiente é configuração da empresa.
+     * Domínio/hostname não decidem mais nada no caminho de pagamento.
+     */
+    environment = companyEnvRaw;
+    environmentSource = "company";
   } else if (
     requestedEnvironment === "production" ||
     requestedEnvironment === "sandbox"
   ) {
-    /**
-     * Etapa 2:
-     * o create-asaas-payment deixa de depender primariamente de host encaminhado.
-     * A primeira decisão passa a vir de um ambiente explícito do próprio fluxo.
-     */
     environment = requestedEnvironment;
     environmentSource = "request";
-  } else if (params.request && params.allowHostFallback) {
-    const resolvedFromHost = resolveEnvironmentFromHost(params.request);
-    environment = resolvedFromHost.env;
-    environmentSource = "host";
-    hostDetected = resolvedFromHost.host;
   } else {
     /**
      * Regra de segurança do projeto:
-     * se não conseguimos decidir o ambiente por venda persistida OU request explícito,
-     * o fluxo deve falhar de forma explícita (sem fallback silencioso para sandbox).
+     * sem venda, sem empresa e sem ambiente explícito o fluxo falha de forma
+     * explícita (nunca fallback silencioso para sandbox).
      */
     throw new Error(
-      "payment_environment_unresolved: contexto sem venda válida e sem ambiente explícito",
+      "payment_environment_unresolved: contexto sem venda, sem empresa e sem ambiente explícito",
     );
   }
+
 
   const isPlatformFeeFlow =
     params.mode === "platform_fee" || Boolean(params.isPlatformFeeFlow);

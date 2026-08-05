@@ -1,36 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import {
-  resolveEnvironmentFromHostname,
-  resolvePaymentEnvironmentFromAppOrigin,
+  DEFAULT_PAYMENT_ENVIRONMENT,
+  normalizePaymentEnvironment,
 } from '@/hooks/use-runtime-payment-environment';
 
-describe('use-runtime-payment-environment helpers', () => {
-  it('prioriza o ambiente explícito quando ele é informado', () => {
-    expect(
-      resolvePaymentEnvironmentFromAppOrigin(
-        'https://preview.smartbusbr.com.br',
-        'production',
-      ),
-    ).toBe('production');
-
-    expect(
-      resolvePaymentEnvironmentFromAppOrigin(
-        'https://smartbusbr.com.br',
-        'sandbox',
-      ),
-    ).toBe('sandbox');
+describe('ambiente de pagamento por empresa', () => {
+  it('aceita apenas os ambientes oficiais', () => {
+    expect(normalizePaymentEnvironment('production')).toBe('production');
+    expect(normalizePaymentEnvironment('sandbox')).toBe('sandbox');
   });
 
-  it('resolve produção apenas para os hosts oficiais', () => {
-    expect(resolveEnvironmentFromHostname('smartbusbr.com.br')).toBe('production');
-    expect(resolveEnvironmentFromHostname('WWW.SMARTBUSBR.COM.BR')).toBe('production');
-    // Comentário de suporte: previews e domínios do Lovable continuam no fluxo sandbox.
-    expect(resolveEnvironmentFromHostname('lovable.dev')).toBe('sandbox');
-    expect(resolveEnvironmentFromHostname('preview.smartbusbr.com.br')).toBe('sandbox');
-    expect(resolveEnvironmentFromHostname('localhost')).toBe('sandbox');
+  it('não assume ambiente quando o valor é ausente ou inválido', () => {
+    // Comentário de suporte: sem ambiente válido, a tela deve exibir erro,
+    // nunca cair silenciosamente em sandbox.
+    expect(normalizePaymentEnvironment(null)).toBeNull();
+    expect(normalizePaymentEnvironment(undefined)).toBeNull();
+    expect(normalizePaymentEnvironment('')).toBeNull();
+    expect(normalizePaymentEnvironment('PRODUCTION')).toBeNull();
+    expect(normalizePaymentEnvironment('homolog')).toBeNull();
   });
 
-  it('faz fallback seguro para sandbox quando a origem é inválida', () => {
-    expect(resolvePaymentEnvironmentFromAppOrigin('origem-invalida', null)).toBe('sandbox');
+  it('mantém produção como padrão oficial de novas empresas', () => {
+    expect(DEFAULT_PAYMENT_ENVIRONMENT).toBe('production');
   });
 });

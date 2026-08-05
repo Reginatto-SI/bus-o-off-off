@@ -504,6 +504,7 @@ export type Database = {
           manual_reservation_ttl_minutes: number
           name: string
           notes: string | null
+          payment_environment: string
           phone: string | null
           platform_fee_percent: number
           postal_code: string | null
@@ -568,6 +569,7 @@ export type Database = {
           manual_reservation_ttl_minutes?: number
           name: string
           notes?: string | null
+          payment_environment?: string
           phone?: string | null
           platform_fee_percent?: number
           postal_code?: string | null
@@ -632,6 +634,7 @@ export type Database = {
           manual_reservation_ttl_minutes?: number
           name?: string
           notes?: string | null
+          payment_environment?: string
           phone?: string | null
           platform_fee_percent?: number
           postal_code?: string | null
