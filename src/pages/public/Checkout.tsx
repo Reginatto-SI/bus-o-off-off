@@ -312,6 +312,10 @@ export default function Checkout() {
     sandboxReady: boolean;
   } | null>(null);
   const [companyPlatformFeePercent, setCompanyPlatformFeePercent] = useState(0);
+  // Fonte única de verdade: o ambiente operacional é configuração da empresa do evento.
+  const [companyPaymentEnvironment, setCompanyPaymentEnvironment] = useState<
+    string | null
+  >(null);
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
   // Comentário de suporte: mantemos o método escolhido explícito para evitar cobrança UNDEFINED no Asaas.
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pix");
@@ -322,7 +326,7 @@ export default function Checkout() {
   const {
     environment: runtimePaymentEnvironment,
     source: runtimePaymentEnvironmentSource,
-  } = useRuntimePaymentEnvironment();
+  } = useRuntimePaymentEnvironment(companyPaymentEnvironment);
   const isPixReadyForCurrentEnvironment =
     runtimePaymentEnvironment === "production"
       ? Boolean(companyPixStatus?.productionReady)
@@ -717,7 +721,7 @@ export default function Checkout() {
           // A fonte oficial do cálculo financeiro é o snapshot gerado no backend.
           const { data: companyData, error: companyError } = await supabase
             .from("companies")
-            .select("platform_fee_percent, asaas_pix_ready_production, asaas_pix_ready_sandbox")
+            .select("payment_environment, platform_fee_percent, asaas_pix_ready_production, asaas_pix_ready_sandbox")
             .eq("id", eventData.company_id)
             .single();
 
@@ -729,6 +733,10 @@ export default function Checkout() {
             return;
           }
           setCompanyPlatformFeePercent(Number(companyData.platform_fee_percent ?? 0));
+          setCompanyPaymentEnvironment(
+            (companyData as { payment_environment?: string | null })
+              .payment_environment ?? null,
+          );
           setCompanyPixStatus({
             productionReady: Boolean(companyData.asaas_pix_ready_production),
             sandboxReady: Boolean(companyData.asaas_pix_ready_sandbox),
