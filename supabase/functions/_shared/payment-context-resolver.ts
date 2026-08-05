@@ -51,6 +51,7 @@ type MinimalSale = {
 };
 
 type MinimalCompany = {
+  payment_environment?: string | null;
   asaas_api_key_production?: string | null;
   asaas_wallet_id_production?: string | null;
   asaas_account_id_production?: string | null;
