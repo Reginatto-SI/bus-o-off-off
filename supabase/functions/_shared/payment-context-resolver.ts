@@ -16,7 +16,7 @@ export type PaymentContextMode =
 export type PaymentOwnerType = "platform" | "company";
 
 export type PaymentContextDecisionTrace = {
-  environmentSource: "sale" | "request" | "host";
+  environmentSource: "sale" | "company" | "request";
   hostDetected: string | null;
   ownerDecision: string;
   credentialDecision: string;
