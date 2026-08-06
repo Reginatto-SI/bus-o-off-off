@@ -90,6 +90,28 @@ export default function PublicEvents() {
   const filteredEvents = useMemo(() => filterEventsByTerm(events, searchTerm), [events, searchTerm]);
   const visuallyBalancedEvents = useMemo(() => interleaveEventCards(filteredEvents), [filteredEvents]);
 
+  // Dados estruturados do catálogo público: descreve a coleção de passagens disponíveis.
+  const catalogJsonLd = useMemo(() => {
+    if (events.length === 0) return null;
+    return {
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: 'Passagens disponíveis',
+      url: 'https://www.smartbus.com.br/eventos',
+      mainEntity: {
+        '@type': 'ItemList',
+        itemListElement: events.slice(0, 30).map((event, index) => ({
+          '@type': 'ListItem',
+          position: index + 1,
+          name: event.name,
+          url: `https://www.smartbus.com.br/eventos/${event.id}`,
+        })),
+      },
+    } as Record<string, unknown>;
+  }, [events]);
+  useJsonLd('events-catalog', catalogJsonLd);
+
+
   return (
     <PublicLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-8">
