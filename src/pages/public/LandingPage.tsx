@@ -2052,6 +2052,18 @@ export default function LandingPage() {
                 <MessageCircleMore className="h-4 w-4 text-primary" />
                 Contato comercial
               </button>
+              {/* Endereço institucional: reforça presença física de forma discreta, sem virar argumento comercial. */}
+              <address className="not-italic">
+                <p className="text-xs font-semibold uppercase tracking-wide text-white/60">Escritório SmartBus BR</p>
+                <p className="mt-1 flex items-start gap-2 text-sm leading-relaxed text-white/80">
+                  <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <span>
+                    Rua Professor Melo, 59 — Bairro Amazonas
+                    <br />
+                    Contagem/MG — CEP 32223-510
+                  </span>
+                </p>
+              </address>
               <div className="flex items-center gap-1">
                 {landingSocialLinks.map((item) => (
                   <a
@@ -2067,6 +2079,7 @@ export default function LandingPage() {
                   </a>
                 ))}
               </div>
+
             </div>
             <div>
               <h4 className="mb-4 text-sm font-semibold text-white">Para passageiros</h4>
