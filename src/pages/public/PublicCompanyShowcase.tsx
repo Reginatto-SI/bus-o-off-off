@@ -22,6 +22,8 @@ import { downloadShowcaseQrPng, downloadShowcaseQrSvg } from '@/lib/showcaseShar
 import { filterEventsByTerm } from '@/lib/eventSearch';
 import { buildEventOperationalEndMap, filterOperationallyVisibleEvents } from '@/lib/eventOperationalWindow';
 import { formatCnpj } from '@/lib/pdfUtils';
+import { usePageMeta, useJsonLd } from '@/lib/usePageMeta';
+
 
 const HERO_BADGE_FALLBACKS = [
   'Passagens para eventos',
