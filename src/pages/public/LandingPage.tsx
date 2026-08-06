@@ -1502,9 +1502,9 @@ export default function LandingPage() {
             ))}
           </div>
           <div className="mt-8 rounded-2xl border border-primary/20 bg-primary/5 px-5 py-3 text-sm text-foreground shadow-sm">
-            <span className="font-semibold text-primary">Exemplo:</span>{" "}
-            João compra regularmente com sua empresa. Você cadastra o CPF dele e oferece 10% de desconto nas passagens
-            dos eventos selecionados, durante o período definido.
+            <span className="font-semibold text-primary">Exemplo:</span> João compra regularmente com sua empresa. Você
+            cadastra o CPF dele e oferece 10% de desconto nas passagens dos eventos selecionados, durante o período
+            definido.
           </div>
           <div className="mt-8 flex justify-center">
             <Button
@@ -1871,8 +1871,8 @@ export default function LandingPage() {
               Você só paga quando vende e nunca paga caro
             </h2>
             <p className="mx-auto mt-3 max-w-3xl text-muted-foreground sm:text-lg">
-              A taxa é calculada pelo valor individual de cada passagem. Mesmo quando o cliente compra várias
-              passagens na mesma venda, cada uma mantém sua própria faixa.
+              A taxa é calculada pelo valor individual de cada passagem. Mesmo quando o cliente compra várias passagens
+              na mesma venda, cada uma mantém sua própria faixa.
             </p>
           </div>
 
@@ -2079,7 +2079,6 @@ export default function LandingPage() {
                   </a>
                 ))}
               </div>
-
             </div>
             <div>
               <h4 className="mb-4 text-sm font-semibold text-white">Para passageiros</h4>
@@ -2183,8 +2182,8 @@ export default function LandingPage() {
             </p>
             {/* Nota institucional: descreve exatamente o que o certificado comprova, sem sugerir homologação do software. */}
             <p className="mt-2 text-center text-xs leading-relaxed text-white/55">
-              Empresa responsável pela SmartBus BR cadastrada no Cadastur (Ministério do Turismo) como Agência de
-              Turismo — cadastro nº 67.871.644/0001-26.{" "}
+              Empresa responsável pela SmartBus cadastrada no Cadastur (Ministério do Turismo) como Agência de Turismo —
+              cadastro nº 67.871.644/0001-26.{" "}
               <a
                 href="/Docs/Certificado_Cadastur.pdf"
                 target="_blank"
@@ -2196,7 +2195,6 @@ export default function LandingPage() {
             </p>
           </div>
         </div>
-
       </footer>
       <Dialog open={officialQrModalOpen} onOpenChange={setOfficialQrModalOpen}>
         <DialogContent className="sm:max-w-md">
