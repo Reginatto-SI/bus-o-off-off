@@ -2161,6 +2161,17 @@ export default function LandingPage() {
                     Baixar kit de marca
                   </a>
                 </li>
+                <li>
+                  {/* Cadastur: link fiel ao documento — cadastro da empresa responsável como Agência de Turismo. */}
+                  <a
+                    href="/Docs/Certificado_Cadastur.pdf"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-white/80 transition-colors hover:text-white"
+                  >
+                    Ver certificado Cadastur
+                  </a>
+                </li>
               </ul>
             </div>
           </div>
@@ -2170,8 +2181,22 @@ export default function LandingPage() {
             <p className="text-center text-xs text-white/70">
               © {new Date().getFullYear()} SmartBus. Todos os direitos reservados • CNPJ 67.871.644/0001-26
             </p>
+            {/* Nota institucional: descreve exatamente o que o certificado comprova, sem sugerir homologação do software. */}
+            <p className="mt-2 text-center text-xs leading-relaxed text-white/55">
+              Empresa responsável pela SmartBus BR cadastrada no Cadastur (Ministério do Turismo) como Agência de
+              Turismo — cadastro nº 67.871.644/0001-26.{" "}
+              <a
+                href="/Docs/Certificado_Cadastur.pdf"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-4 transition-colors hover:text-white"
+              >
+                Ver certificado Cadastur
+              </a>
+            </p>
           </div>
         </div>
+
       </footer>
       <Dialog open={officialQrModalOpen} onOpenChange={setOfficialQrModalOpen}>
         <DialogContent className="sm:max-w-md">
