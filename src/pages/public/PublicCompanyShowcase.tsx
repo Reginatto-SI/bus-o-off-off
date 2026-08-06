@@ -22,6 +22,8 @@ import { downloadShowcaseQrPng, downloadShowcaseQrSvg } from '@/lib/showcaseShar
 import { filterEventsByTerm } from '@/lib/eventSearch';
 import { buildEventOperationalEndMap, filterOperationallyVisibleEvents } from '@/lib/eventOperationalWindow';
 import { formatCnpj } from '@/lib/pdfUtils';
+import { usePageMeta, useJsonLd } from '@/lib/usePageMeta';
+
 
 const HERO_BADGE_FALLBACKS = [
   'Passagens para eventos',
@@ -183,6 +185,35 @@ export default function PublicCompanyShowcase() {
     phone: company?.whatsapp ?? null,
     message: `Olá! Vim pela vitrine da ${companyDisplayName || 'empresa'} e quero mais informações.`,
   });
+
+  // SEO por rota: título/descrição/canonical/OG únicos por vitrine, evitando duplicidade com a home.
+  const seoName = companyDisplayName || 'Vitrine';
+  const seoTitle = `${seoName} — Passagens e excursões | SmartBus`;
+  const seoDescriptionBase =
+    company?.intro_text?.trim() ||
+    `Compre passagens para excursões, viagens e eventos da ${seoName}${companyLocation ? ` em ${companyLocation}` : ''}. Escolha seu assento e receba sua passagem digital.`;
+  const seoDescription = seoDescriptionBase.slice(0, 158);
+  usePageMeta({
+    title: seoTitle.slice(0, 60),
+    description: seoDescription,
+    path: `/empresa/${showcaseSlug || normalizedNick}`,
+    ogImage: company?.cover_image_url || company?.logo_url || undefined,
+  });
+
+  const showcaseJsonLd = useMemo(() => {
+    if (!company) return null;
+    return {
+      '@context': 'https://schema.org',
+      '@type': 'Organization',
+      name: seoName,
+      url: `https://www.smartbus.com.br/empresa/${showcaseSlug || normalizedNick}`,
+      ...(company.logo_url ? { logo: company.logo_url } : {}),
+      ...(company.city
+        ? { address: { '@type': 'PostalAddress', addressLocality: company.city, addressRegion: company.state ?? undefined } }
+        : {}),
+    } as Record<string, unknown>;
+  }, [company, seoName, showcaseSlug, normalizedNick]);
+  useJsonLd('company-showcase', showcaseJsonLd);
 
   if (nick !== normalizedNick && normalizedNick) {
     return <Navigate to={`/empresa/${normalizedNick}`} replace />;
