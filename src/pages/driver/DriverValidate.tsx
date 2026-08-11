@@ -71,6 +71,25 @@ type BarcodeDetection = { rawValue?: string };
 type BarcodeDetectorInstance = { detect: (source: HTMLVideoElement) => Promise<BarcodeDetection[]> };
 type BarcodeDetectorConstructor = new (options: { formats: string[] }) => BarcodeDetectorInstance;
 type ScannerEngine = 'barcode_detector' | 'jsqr' | 'none';
+type IsolatedTrackEvent = {
+  event: 'ended' | 'mute' | 'unmute'; timestamp: string; elapsedMs: number;
+  streamActive: boolean; trackReadyState: MediaStreamTrackState; trackMuted: boolean;
+};
+type IsolatedCameraResult = {
+  requestedAt: string; camera: CameraFacing; constraints: MediaStreamConstraints; acquisitionMs?: number;
+  initial?: {
+    timestamp: string; streamActive: boolean; trackCount: number; videoTrackCount: number;
+    trackReadyState?: MediaStreamTrackState; trackEnabled?: boolean; trackMuted?: boolean;
+    facingMode?: string; trackWidth?: number; trackHeight?: number;
+    tracks: Array<{ kind: string; readyState: MediaStreamTrackState; enabled: boolean; muted: boolean }>;
+  };
+  preview?: {
+    videoReadyState?: number; videoWidth?: number; videoHeight?: number; streamActive?: boolean;
+    trackReadyState?: MediaStreamTrackState; trackEnabled?: boolean; trackMuted?: boolean; errorName?: string;
+  };
+  events: IsolatedTrackEvent[];
+  acquisitionErrorName?: string;
+};
 
 declare global {
   interface Window {
@@ -228,6 +247,43 @@ export function getCameraErrorMessage(errorName: string, facing: CameraFacing) {
   }
 }
 
+const formatIsolatedCameraResult = (result: IsolatedCameraResult) => {
+  const initial = result.initial;
+  const preview = result.preview;
+  return [
+    '=== SMARTBUS ISOLATED CAMERA TEST ===', '',
+    `Data: ${result.requestedAt}`,
+    `Rota: ${window.location.pathname}`,
+    `User Agent: ${navigator.userAgent}`,
+    `Câmera solicitada: ${result.camera === 'back' ? 'traseira' : 'frontal'}`,
+    `Constraints: ${JSON.stringify(result.constraints)}`,
+    `Tempo até getUserMedia resolver: ${result.acquisitionMs ?? 'não resolveu'} ms`, '',
+    'SNAPSHOT APÓS GETUSERMEDIA',
+    `streamActive: ${initial?.streamActive ?? 'indisponível'}`,
+    `trackCount: ${initial?.trackCount ?? 'indisponível'}`,
+    `videoTrackCount: ${initial?.videoTrackCount ?? 'indisponível'}`,
+    `trackReadyState: ${initial?.trackReadyState ?? 'indisponível'}`,
+    `trackEnabled: ${initial?.trackEnabled ?? 'indisponível'}`,
+    `trackMuted: ${initial?.trackMuted ?? 'indisponível'}`,
+    `facingMode: ${initial?.facingMode ?? 'indisponível'}`,
+    `trackWidth: ${initial?.trackWidth ?? 'indisponível'}`,
+    `trackHeight: ${initial?.trackHeight ?? 'indisponível'}`,
+    `tracks: ${JSON.stringify(initial?.tracks ?? [])}`,
+    `acquisitionErrorName: ${result.acquisitionErrorName ?? 'nenhum'}`, '',
+    'SNAPSHOT APÓS VIDEO.PLAY',
+    `videoReadyState: ${preview?.videoReadyState ?? 'não iniciado'}`,
+    `videoWidth: ${preview?.videoWidth ?? 'não iniciado'}`,
+    `videoHeight: ${preview?.videoHeight ?? 'não iniciado'}`,
+    `streamActive: ${preview?.streamActive ?? 'não iniciado'}`,
+    `trackReadyState: ${preview?.trackReadyState ?? 'não iniciado'}`,
+    `trackEnabled: ${preview?.trackEnabled ?? 'não iniciado'}`,
+    `trackMuted: ${preview?.trackMuted ?? 'não iniciado'}`,
+    `playErrorName: ${preview?.errorName ?? 'nenhum'}`, '',
+    'EVENTOS DA TRACK',
+    ...(result.events.length ? result.events.map(event => JSON.stringify(event)) : ['nenhum']),
+  ].join('\n');
+};
+
 const DECODER_ERROR_MESSAGE = 'Não foi possível ler o QR neste momento. A câmera continua ativa; tente apontá-la novamente.';
 
 
@@ -281,6 +337,17 @@ export default function DriverValidate() {
   const videoElementRef = useRef<HTMLVideoElement | null>(null);
   const attachedVideoRef = useRef<HTMLVideoElement | null>(null);
 
+  // O laboratório mantém ownership próprio para nunca compartilhar recursos com o scanner produtivo.
+  const diagnosticStreamRef = useRef<MediaStream | null>(null);
+  const diagnosticVideoRef = useRef<HTMLVideoElement | null>(null);
+  const diagnosticTrackRef = useRef<MediaStreamTrack | null>(null);
+  const diagnosticRemoveListenersRef = useRef<(() => void) | null>(null);
+  const diagnosticRequestIdRef = useRef(0);
+  const diagnosticOpeningRef = useRef(false);
+  const [diagnosticOpening, setDiagnosticOpening] = useState(false);
+  const [diagnosticActive, setDiagnosticActive] = useState(false);
+  const [diagnosticResult, setDiagnosticResult] = useState<IsolatedCameraResult | null>(null);
+
   const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
 
   const videoRef = useCallback((node: HTMLVideoElement | null) => {
@@ -313,6 +380,128 @@ export default function DriverValidate() {
   const clearCameraLogs = useCallback(() => {
     clearCameraDiagnosticEvents();
   }, []);
+
+  const closeIsolatedCameraTest = useCallback(() => {
+    diagnosticRequestIdRef.current += 1;
+    diagnosticOpeningRef.current = false;
+    diagnosticRemoveListenersRef.current?.();
+    diagnosticRemoveListenersRef.current = null;
+    if (diagnosticVideoRef.current) diagnosticVideoRef.current.srcObject = null;
+    diagnosticStreamRef.current?.getTracks().forEach(track => track.stop());
+    diagnosticStreamRef.current = null;
+    diagnosticTrackRef.current = null;
+    if (mountedRef.current) {
+      setDiagnosticOpening(false);
+      setDiagnosticActive(false);
+    }
+  }, []);
+
+  const startIsolatedCameraTest = useCallback(async (facing: CameraFacing) => {
+    if (streamRef.current || initInProgressRef.current || cameraReadyRef.current) {
+      toast({ title: 'Feche a câmera normal antes de iniciar o diagnóstico.' });
+      return;
+    }
+    if (diagnosticOpeningRef.current || diagnosticStreamRef.current) return;
+
+    const requestId = ++diagnosticRequestIdRef.current;
+    const startedAt = performance.now();
+    const constraints = getCameraConstraints(facing);
+    const baseResult: IsolatedCameraResult = {
+      requestedAt: new Date().toISOString(), camera: facing, constraints, events: [],
+    };
+    diagnosticOpeningRef.current = true;
+    setDiagnosticOpening(true);
+    setDiagnosticResult(baseResult);
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      const acquisitionMs = Math.round(performance.now() - startedAt);
+      const tracks = stream.getTracks();
+      const videoTracks = stream.getVideoTracks();
+      const track = videoTracks[0];
+      const settings = track?.getSettings();
+      // Este snapshot precede srcObject, play e stop para preservar exatamente o estado entregue pelo navegador.
+      const initial: IsolatedCameraResult['initial'] = {
+        timestamp: new Date().toISOString(), streamActive: stream.active,
+        trackCount: tracks.length, videoTrackCount: videoTracks.length,
+        trackReadyState: track?.readyState, trackEnabled: track?.enabled, trackMuted: track?.muted,
+        facingMode: settings?.facingMode, trackWidth: settings?.width, trackHeight: settings?.height,
+        tracks: tracks.map(item => ({ kind: item.kind, readyState: item.readyState, enabled: item.enabled, muted: item.muted })),
+      };
+      const grantedResult = { ...baseResult, acquisitionMs, initial };
+
+      if (requestId !== diagnosticRequestIdRef.current || !mountedRef.current) {
+        tracks.forEach(item => item.stop());
+        return;
+      }
+
+      diagnosticStreamRef.current = stream;
+      diagnosticTrackRef.current = track ?? null;
+      setDiagnosticActive(true);
+      setDiagnosticResult(grantedResult);
+
+      if (!track || !diagnosticVideoRef.current) return;
+      const recordTrackEvent = (event: IsolatedTrackEvent['event']) => {
+        const entry: IsolatedTrackEvent = {
+          event, timestamp: new Date().toISOString(), elapsedMs: Math.round(performance.now() - startedAt),
+          streamActive: stream.active, trackReadyState: track.readyState, trackMuted: track.muted,
+        };
+        setDiagnosticResult(current => current ? { ...current, events: [...current.events, entry] } : current);
+      };
+      const onEnded = () => recordTrackEvent('ended');
+      const onMute = () => recordTrackEvent('mute');
+      const onUnmute = () => recordTrackEvent('unmute');
+      track.addEventListener('ended', onEnded);
+      track.addEventListener('mute', onMute);
+      track.addEventListener('unmute', onUnmute);
+      diagnosticRemoveListenersRef.current = () => {
+        track.removeEventListener('ended', onEnded);
+        track.removeEventListener('mute', onMute);
+        track.removeEventListener('unmute', onUnmute);
+      };
+
+      const video = diagnosticVideoRef.current;
+      video.srcObject = stream;
+      try {
+        await video.play();
+        setDiagnosticResult(current => current ? { ...current, preview: {
+          videoReadyState: video.readyState, videoWidth: video.videoWidth, videoHeight: video.videoHeight,
+          streamActive: stream.active, trackReadyState: track.readyState,
+          trackEnabled: track.enabled, trackMuted: track.muted,
+        } } : current);
+      } catch (error: unknown) {
+        const errorName = error instanceof Error ? error.name : 'Error';
+        setDiagnosticResult(current => current ? { ...current, preview: {
+          videoReadyState: video.readyState, videoWidth: video.videoWidth, videoHeight: video.videoHeight,
+          streamActive: stream.active, trackReadyState: track.readyState,
+          trackEnabled: track.enabled, trackMuted: track.muted, errorName,
+        } } : current);
+      }
+    } catch (error: unknown) {
+      const acquisitionErrorName = error instanceof Error ? error.name : 'Error';
+      if (requestId === diagnosticRequestIdRef.current && mountedRef.current) {
+        setDiagnosticResult({ ...baseResult, acquisitionErrorName });
+      }
+    } finally {
+      if (requestId === diagnosticRequestIdRef.current) {
+        diagnosticOpeningRef.current = false;
+        if (mountedRef.current) setDiagnosticOpening(false);
+      }
+    }
+  }, [toast]);
+
+  const copyIsolatedCameraResult = useCallback(async () => {
+    if (!diagnosticResult) {
+      toast({ title: 'Nenhum resultado isolado registrado ainda.' });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(formatIsolatedCameraResult(diagnosticResult));
+      toast({ title: 'Resultado isolado copiado.' });
+    } catch {
+      toast({ title: 'Não foi possível copiar o resultado isolado.', variant: 'destructive' });
+    }
+  }, [diagnosticResult, toast]);
 
   const serviceReasonLabel = useMemo(() => {
     if (!serviceOverlay) return '';
@@ -498,7 +687,7 @@ export default function DriverValidate() {
   }, []);
 
   const startCamera = useCallback(async (video: HTMLVideoElement, facing: CameraFacing) => {
-    if (initInProgressRef.current) return;
+    if (initInProgressRef.current || diagnosticOpeningRef.current || diagnosticStreamRef.current) return;
 
     cleanupCamera('new_session');
     const cameraSessionId = ++sessionIdRef.current;
@@ -618,6 +807,8 @@ export default function DriverValidate() {
       cleanupCamera('component_unmount');
     };
   }, [cleanupCamera]);
+
+  useEffect(() => () => closeIsolatedCameraTest(), [closeIsolatedCameraTest]);
 
   /* ---------- Reanexa o stream caso o elemento de vídeo seja recriado ---------- */
 
@@ -846,7 +1037,7 @@ export default function DriverValidate() {
                   type="button"
                   variant={selectedCamera === 'back' ? 'default' : 'outline'}
                   className="h-auto min-h-20 flex-col gap-1 whitespace-normal px-3 py-3"
-                  disabled={cameraOpening || !videoEl}
+                  disabled={cameraOpening || diagnosticOpening || diagnosticActive || !videoEl}
                   onClick={() => videoEl && startCamera(videoEl, 'back')}
                 >
                   <span>Câmera traseira</span>
@@ -856,7 +1047,7 @@ export default function DriverValidate() {
                   type="button"
                   variant={selectedCamera === 'front' ? 'default' : 'outline'}
                   className="h-auto min-h-20 flex-col gap-1 whitespace-normal px-3 py-3"
-                  disabled={cameraOpening || !videoEl}
+                  disabled={cameraOpening || diagnosticOpening || diagnosticActive || !videoEl}
                   onClick={() => videoEl && startCamera(videoEl, 'front')}
                 >
                   <span>Câmera frontal</span>
@@ -1058,6 +1249,74 @@ export default function DriverValidate() {
             </div>
           </CardContent>
         </Card>
+
+        {canUseCameraDiagnostics && (
+          <Card>
+            <CardContent className="space-y-3 p-4">
+              <div>
+                <p className="text-sm font-medium">Diagnóstico isolado da câmera</p>
+                <p className="text-xs text-muted-foreground">Laboratório independente do scanner normal.</p>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={diagnosticOpening || diagnosticActive}
+                  onClick={() => void startIsolatedCameraTest('back')}
+                >
+                  Testar câmera traseira
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={diagnosticOpening || diagnosticActive}
+                  onClick={() => void startIsolatedCameraTest('front')}
+                >
+                  Testar câmera frontal
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={!diagnosticOpening && !diagnosticActive}
+                  onClick={closeIsolatedCameraTest}
+                >
+                  Fechar teste
+                </Button>
+                <Button type="button" variant="ghost" size="sm" disabled={!diagnosticResult} onClick={copyIsolatedCameraResult}>
+                  Copiar resultado
+                </Button>
+              </div>
+
+              <video
+                ref={diagnosticVideoRef}
+                className="aspect-[3/4] w-full rounded-lg bg-black object-cover"
+                autoPlay
+                muted
+                playsInline
+              />
+
+              {diagnosticResult && (
+                <div className="space-y-1 rounded-md border bg-muted/30 p-3 text-xs">
+                  <p>Câmera solicitada: {diagnosticResult.camera === 'back' ? 'traseira' : 'frontal'}</p>
+                  <p>Tempo de aquisição: {diagnosticResult.acquisitionMs === undefined ? 'aguardando' : `${(diagnosticResult.acquisitionMs / 1000).toFixed(1)} s`}</p>
+                  <p>Stream ativo: {diagnosticResult.initial ? (diagnosticResult.initial.streamActive ? 'sim' : 'não') : 'indisponível'}</p>
+                  <p>Track: {diagnosticResult.initial?.trackReadyState ?? 'indisponível'}</p>
+                  <p>Facing mode: {diagnosticResult.initial?.facingMode ?? 'indisponível'}</p>
+                  <p>Resolução reportada: {diagnosticResult.initial?.trackWidth ?? '—'} × {diagnosticResult.initial?.trackHeight ?? '—'}</p>
+                  <p>Preview: {diagnosticResult.preview?.errorName
+                    ? `erro ${diagnosticResult.preview.errorName}`
+                    : diagnosticResult.preview
+                      ? `${diagnosticResult.preview.videoWidth} × ${diagnosticResult.preview.videoHeight}`
+                      : 'não iniciado'}</p>
+                  {diagnosticResult.acquisitionErrorName && <p>Erro de aquisição: {diagnosticResult.acquisitionErrorName}</p>}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Versão compacta */}
         <p className="mt-3 text-center text-[10px] text-muted-foreground">

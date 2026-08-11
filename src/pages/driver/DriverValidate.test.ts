@@ -65,7 +65,7 @@ describe('aquisição real da sessão', () => {
     renderValidator();
 
     fireEvent.click(screen.getByRole('button', { name: /câmera traseira/i }));
-    fireEvent.click(screen.getByRole('button', { name: /câmera frontal/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^câmera frontal/i }));
     expect(getUserMedia).toHaveBeenCalledOnce();
     expect(getUserMedia).toHaveBeenCalledWith(getCameraConstraints('back'));
 
@@ -88,7 +88,7 @@ describe('aquisição real da sessão', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /câmera traseira/i }));
     await screen.findByRole('button', { name: /fechar câmera/i });
-    fireEvent.click(screen.getByRole('button', { name: /câmera frontal/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^câmera frontal/i }));
     await waitFor(() => expect(getUserMedia).toHaveBeenCalledTimes(2));
 
     expect(order.indexOf('back:stop')).toBeLessThan(order.findIndex(item => item.includes('"user"')));
@@ -279,7 +279,7 @@ describe('ownership de stream obsoleto', () => {
     expect(invalid.tracks[0].stop).toHaveBeenCalledOnce();
     expect(getUserMedia).toHaveBeenCalledOnce();
 
-    fireEvent.click(screen.getByRole('button', { name: /câmera frontal/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^câmera frontal/i }));
     expect(await screen.findByRole('button', { name: /fechar câmera/i })).toBeInTheDocument();
     expect(getUserMedia).toHaveBeenCalledTimes(2);
     expect(getUserMedia).toHaveBeenLastCalledWith(getCameraConstraints('front'));
@@ -371,7 +371,7 @@ describe('ownership de stream obsoleto', () => {
     const view = renderValidator();
     const video = view.container.querySelector('video')!;
 
-    fireEvent.click(screen.getByRole('button', { name: /câmera frontal/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^câmera frontal/i }));
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     expect(detectorConstructed).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: /fechar câmera/i })).not.toBeInTheDocument();
