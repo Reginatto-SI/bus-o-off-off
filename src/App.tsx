@@ -10,6 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useIsBelowBreakpoint } from "@/hooks/use-mobile";
 import { canAccessTechnicalDesktopRoute } from "@/components/layout/adminNavigation";
 import { VersionUpdateBanner } from "@/components/system/VersionUpdateBanner";
+import { MobileDeveloperConsole } from "@/components/system/MobileDeveloperConsole";
 
 // Auth
 import Login from "./pages/Login";
@@ -109,6 +110,8 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
+          {/* Console temporário carregado apenas após confirmar developer autenticado no mobile. */}
+          <MobileDeveloperConsole />
           {/* Banner global para avisar nova versão sem depender de PWA/service worker */}
           <VersionUpdateBanner />
           <Routes>
