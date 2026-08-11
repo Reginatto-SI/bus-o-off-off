@@ -8,6 +8,10 @@ import { getPersistedPhase } from '@/lib/driverTripStorage';
 import { PHASE_CONFIG, REASON_MESSAGES } from '@/lib/driverPhaseConfig';
 import { getDriverPreferences } from '@/lib/driverPreferences';
 import { playBeep, vibrateDevice } from '@/lib/driverScannerFeedback';
+import { cameraLog, clearCameraDiagnosticEvents, formatCameraDiagnosticLogs, getCameraDiagnosticEvents } from '@/lib/cameraDiagnostics';
+import { shouldEnableMobileDeveloperConsole } from '@/components/system/MobileDeveloperConsole';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -211,7 +215,13 @@ const DECODER_ERROR_MESSAGE = 'Não foi possível ler o QR neste momento. A câm
 export default function DriverValidate() {
   const navigate = useNavigate();
   const { user, userRole, loading, activeCompanyId } = useAuth();
+  const isMobile = useIsMobile();
+  const { toast } = useToast();
   const canAccessDriverPortal = userRole === 'motorista' || userRole === 'operador' || userRole === 'gerente' || userRole === 'developer';
+  // Reutiliza exatamente a autorização do Eruda para não criar uma segunda regra de acesso ao diagnóstico.
+  const canUseCameraDiagnostics = shouldEnableMobileDeveloperConsole({
+    authenticated: Boolean(user), userRole, isMobile, loading,
+  });
 
   // Read active phase from localStorage
   const activePhase = user && activeCompanyId ? getPersistedPhase(user.id, activeCompanyId) : 'ida';
@@ -254,10 +264,6 @@ export default function DriverValidate() {
 
   const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
 
-  const cameraLog = useCallback((event: string, data: Record<string, unknown>) => {
-    console.info(`[CAMERA] ${event}`, data);
-  }, []);
-
   const videoRef = useCallback((node: HTMLVideoElement | null) => {
     videoElementRef.current = node;
     setVideoEl(node);
@@ -267,6 +273,27 @@ export default function DriverValidate() {
     if (!overlay) return '';
     return REASON_MESSAGES[overlay.reason_code] ?? 'Validação bloqueada';
   }, [overlay]);
+
+  // Copia o buffer inteiro de uma vez e mantém o desenvolvedor na tela normal do validador.
+  const copyCameraLogs = useCallback(async () => {
+    if (getCameraDiagnosticEvents().length === 0) {
+      toast({ title: 'Nenhum log de câmera registrado ainda.' });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(formatCameraDiagnosticLogs({
+        route: window.location.pathname,
+        userAgent: navigator.userAgent,
+      }));
+      toast({ title: 'Logs da câmera copiados.' });
+    } catch {
+      toast({ title: 'Não foi possível copiar os logs.', variant: 'destructive' });
+    }
+  }, [toast]);
+
+  const clearCameraLogs = useCallback(() => {
+    clearCameraDiagnosticEvents();
+  }, []);
 
   const serviceReasonLabel = useMemo(() => {
     if (!serviceOverlay) return '';
@@ -449,7 +476,7 @@ export default function DriverValidate() {
       setTorchSupported(false);
     }
     cameraLog('CAMERA SESSION END', { cameraSessionId: endedSessionId, reason });
-  }, [cameraLog]);
+  }, []);
 
   const startCamera = useCallback(async (video: HTMLVideoElement, facing: CameraFacing) => {
     if (initInProgressRef.current) return;
@@ -554,7 +581,7 @@ export default function DriverValidate() {
         if (mountedRef.current) setCameraOpening(false);
       }
     }
-  }, [cameraLog, cleanupCamera]);
+  }, [cleanupCamera]);
 
   /* ---------- Libera o hardware apenas no desmonte real da tela ---------- */
 
@@ -659,7 +686,7 @@ export default function DriverValidate() {
         cameraLog('CAMERA DECODER STOP', { cameraSessionId: sessionIdRef.current, reason: 'decoder_paused' });
       }
     };
-  }, [cameraLog, cameraReady, handleValidate, overlay, processing, scanLocked, scannerSupported, serviceOverlay, videoEl]);
+  }, [cameraReady, handleValidate, overlay, processing, scanLocked, scannerSupported, serviceOverlay, videoEl]);
 
   useEffect(() => {
     if (!cameraReady || overlay || processing) return;
@@ -814,6 +841,16 @@ export default function DriverValidate() {
                 <Button type="button" variant="ghost" size="sm" className="w-full" onClick={() => cleanupCamera('user_closed')}>
                   Fechar câmera
                 </Button>
+              )}
+              {canUseCameraDiagnostics && (
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <Button type="button" variant="outline" size="sm" onClick={copyCameraLogs}>
+                    Copiar logs da câmera
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" onClick={clearCameraLogs}>
+                    Limpar logs
+                  </Button>
+                </div>
               )}
             </div>
 
