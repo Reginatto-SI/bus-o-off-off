@@ -100,14 +100,54 @@ export const isCurrentCameraSession = (currentSessionId: number, candidateSessio
 
 type CameraAcquisitionResult = { status: 'attached'; stream: MediaStream } | { status: 'stale'; stream: null };
 
+const PREVIEW_IMAGE_TIMEOUT_MS = 5_000;
+
+export class CameraPreviewUnavailableError extends Error {
+  constructor() {
+    super('The camera stream did not provide a video image.');
+    this.name = 'CameraPreviewUnavailableError';
+  }
+}
+
+export const waitForVideoImage = (
+  video: Pick<HTMLVideoElement, 'videoWidth' | 'videoHeight' | 'addEventListener' | 'removeEventListener'>,
+  timeoutMs = PREVIEW_IMAGE_TIMEOUT_MS,
+) => new Promise<void>((resolve, reject) => {
+  const hasImage = () => video.videoWidth > 0 && video.videoHeight > 0;
+  if (hasImage()) {
+    resolve();
+    return;
+  }
+
+  const timeoutId = window.setTimeout(() => finish(new CameraPreviewUnavailableError()), timeoutMs);
+  const finish = (error?: Error) => {
+    window.clearTimeout(timeoutId);
+    video.removeEventListener('loadeddata', handleVideoData);
+    video.removeEventListener('canplay', handleVideoData);
+    video.removeEventListener('resize', handleVideoData);
+    if (error) reject(error); else resolve();
+  };
+  const handleVideoData = () => {
+    // Eventos naturais podem ocorrer antes de o navegador publicar as dimensões.
+    if (hasImage()) finish();
+  };
+
+  video.addEventListener('loadeddata', handleVideoData);
+  video.addEventListener('canplay', handleVideoData);
+  video.addEventListener('resize', handleVideoData);
+  // Uma única janela limitada evita deixar a UI eternamente em "Abrindo câmera".
+});
+
 export async function acquireCameraSession(input: {
   constraints: MediaStreamConstraints;
-  video: Pick<HTMLVideoElement, 'srcObject' | 'play'>;
+  video: Pick<HTMLVideoElement, 'srcObject' | 'play'> & Partial<Pick<HTMLVideoElement, 'videoWidth' | 'videoHeight' | 'readyState' | 'addEventListener' | 'removeEventListener'>>;
   getUserMedia: (constraints: MediaStreamConstraints) => Promise<MediaStream>;
   isCurrent: () => boolean;
   onGranted?: (stream: MediaStream) => void;
   onAccepted?: (stream: MediaStream) => void;
   onReleased?: (stream: MediaStream) => void;
+  onPlayed?: (stream: MediaStream) => void;
+  waitForImage?: (video: HTMLVideoElement) => Promise<void>;
 }): Promise<CameraAcquisitionResult> {
   const stream = await input.getUserMedia(input.constraints);
   input.onGranted?.(stream);
@@ -120,10 +160,15 @@ export async function acquireCameraSession(input: {
   input.video.srcObject = stream;
   try {
     await input.video.play();
+    input.onPlayed?.(stream);
+    // play() confirma reprodução permitida, não que um frame com dimensões chegou.
+    await (input.waitForImage ?? waitForVideoImage)(input.video as HTMLVideoElement);
   } catch (error) {
     // A aquisição aceita é dona apenas deste stream; uma rejeição de play não pode deixá-lo órfão.
-    if (input.video.srcObject === stream) input.video.srcObject = null;
-    stopAllMediaStreamTracks(stream);
+    if (input.video.srcObject === stream) {
+      input.video.srcObject = null;
+      stopAllMediaStreamTracks(stream);
+    }
     input.onReleased?.(stream);
     throw error;
   }
@@ -142,6 +187,8 @@ export async function acquireCameraSession(input: {
 export function getCameraErrorMessage(errorName: string, facing: CameraFacing) {
   const alternative = facing === 'back' ? 'frontal' : 'traseira';
   switch (errorName) {
+    case 'CameraPreviewUnavailableError':
+      return `A câmera ${facing === 'back' ? 'traseira' : 'frontal'} foi acessada, mas não forneceu imagem. Tente novamente ou utilize a câmera ${alternative}.`;
     case 'NotAllowedError':
       return 'O acesso à câmera foi negado. Autorize a câmera nas permissões do navegador e tente novamente.';
     case 'NotFoundError':
@@ -432,11 +479,26 @@ export default function DriverValidate() {
         isCurrent: () => mountedRef.current
           && document.visibilityState === 'visible'
           && isCurrentCameraSession(sessionIdRef.current, cameraSessionId),
-        onGranted: stream => cameraLog('CAMERA GRANTED', {
-          cameraSessionId,
-          camera: facing,
-          trackCount: stream.getTracks().length,
-        }),
+        onGranted: stream => {
+          const track = stream.getVideoTracks()[0];
+          const settings = track?.getSettings?.();
+          // Diagnóstico deliberadamente não inclui deviceId nem qualquer conteúdo capturado.
+          cameraLog('CAMERA GRANTED', {
+            cameraSessionId,
+            camera: facing,
+            streamActive: stream.active,
+            videoTrackExists: Boolean(track),
+            trackReadyState: track?.readyState,
+            trackEnabled: track?.enabled,
+            trackMuted: track?.muted,
+            facingMode: settings?.facingMode,
+            trackWidth: settings?.width,
+            trackHeight: settings?.height,
+            videoReadyState: video.readyState,
+            videoWidth: video.videoWidth,
+            videoHeight: video.videoHeight,
+          });
+        },
         onAccepted: stream => {
           streamRef.current = stream;
           attachedVideoRef.current = video;
@@ -448,6 +510,13 @@ export default function DriverValidate() {
             if (attachedVideoRef.current === video) attachedVideoRef.current = null;
           }
         },
+        onPlayed: () => cameraLog('CAMERA PLAY RESOLVED', {
+          cameraSessionId,
+          camera: facing,
+          videoReadyState: video.readyState,
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight,
+        }),
       });
       if (acquisition.status === 'stale') {
         cameraLog('CAMERA STALE STREAM DISCARDED', { cameraSessionId, camera: facing });
@@ -455,7 +524,13 @@ export default function DriverValidate() {
       }
 
       const stream = acquisition.stream;
-      cameraLog('CAMERA STREAM ATTACHED', { cameraSessionId, camera: facing });
+      cameraLog('CAMERA PREVIEW READY', {
+        cameraSessionId,
+        camera: facing,
+        videoReadyState: video.readyState,
+        videoWidth: video.videoWidth,
+        videoHeight: video.videoHeight,
+      });
       detectorRef.current = window.BarcodeDetector ? new window.BarcodeDetector({ formats: ['qr_code'] }) : null;
       scannerEngineRef.current = detectorRef.current ? 'barcode_detector' : 'jsqr';
       setScannerSupported(true);

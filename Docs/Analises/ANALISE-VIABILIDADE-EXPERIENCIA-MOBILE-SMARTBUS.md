@@ -680,3 +680,29 @@ A primeira implementação deve ser a fundação responsiva e navegação: revis
 - `src/pages/representative/RepresentativeDashboard.tsx`: painel de representante.
 - `src/pages/public/*`: jornadas públicas e passageiro.
 - `public/marketing/smartbus-tips/*`: ativos promocionais internos existentes.
+
+## Teste físico — Chrome Android — stream traseiro sem imagem
+
+### Comportamento observado
+
+O teste foi executado em um dispositivo Android real, no SmartBus web aberto diretamente no Google Chrome. A câmera frontal funcionou e exibiu o preview. Ao escolher a câmera traseira, `getUserMedia` aparentemente resolveu, a interface mostrou a câmera como ativa e exibiu a área do scanner, mas o preview permaneceu completamente preto e nenhuma mensagem de erro foi apresentada.
+
+### Diagnóstico e causa comprovada no código
+
+O código considerava a câmera pronta depois de `getUserMedia` e `video.play()`, sem confirmar que o elemento `<video>` havia recebido dimensões reais. Portanto, o estado anterior conseguia confundir “MediaStream recebido” com “imagem entregue”. O teste de campo não trouxe uma captura dos valores de `MediaStreamTrack.getSettings()`, então ainda não há evidência para afirmar qual lente o Chrome entregou nem para atribuir o preto a uma causa específica do navegador ou do hardware.
+
+A instrumentação adicionada registra, por sessão e sem expor `deviceId` ou conteúdo capturado: câmera solicitada, `stream.active`, existência da video track, `readyState`, `enabled`, `muted`, `facingMode`, largura e altura retornadas por `getSettings()`, além de `video.readyState`, `videoWidth` e `videoHeight` nos momentos de concessão, resolução de `play()` e confirmação do preview.
+
+### Alteração mínima realizada
+
+Após uma única aquisição e um único `video.play()`, o fluxo aguarda eventos naturais do vídeo (`loadeddata`, `canplay` ou `resize`) e somente aceita o preview quando `videoWidth > 0` e `videoHeight > 0`. Há um único limite de cinco segundos para impedir que a tela permaneça indefinidamente em “Abrindo câmera”; não há polling, retry, fallback ou segunda aquisição automática.
+
+Se as dimensões continuarem zeradas, somente o stream daquela sessão é encerrado, `srcObject` é limpo, `cameraReady` permanece falso e a interface informa que a câmera escolhida foi acessada, mas não forneceu imagem. A escolha do usuário é preservada e continuam disponíveis as ações manuais de tentar novamente ou escolher a outra câmera. O decoder é criado apenas depois da confirmação do preview.
+
+### Testes automatizados
+
+Foram cobertos o stream cuja reprodução resolve mas mantém dimensões zeradas, a ausência de `cameraReady`, o encerramento isolado desse stream, a inexistência de uma segunda chamada a `getUserMedia`, a ausência de troca automática para a câmera frontal, o caminho válido com dimensões reais, a ordem preview antes do decoder, a câmera frontal, a proteção contra sessão obsoleta e a idempotência do cleanup.
+
+### Validação física pendente
+
+É necessário repetir o teste no mesmo aparelho e inspecionar os logs `[CAMERA]` para registrar os valores reais de `facingMode`, largura, altura e estado da track fornecidos pelo Chrome, assim como `videoWidth`/`videoHeight`. Esses valores não podem ser inventados a partir do relato atual. A nova mensagem e o cleanup também devem ser confirmados em campo. Até essa evidência existir, não há justificativa para trocar `facingMode: { ideal: "environment" }` por `exact`, usar `deviceId` ou adicionar qualquer fallback automático.

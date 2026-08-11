@@ -25,7 +25,11 @@ const deferred = <T,>() => {
 };
 
 const createStream = (id: string) => {
-  const tracks = [{ stop: vi.fn(), getCapabilities: vi.fn(() => ({})) }];
+  const tracks = [{
+    stop: vi.fn(), getCapabilities: vi.fn(() => ({})),
+    getSettings: vi.fn(() => ({ facingMode: 'environment', width: 1280, height: 720 })),
+    readyState: 'live', enabled: true, muted: false,
+  }];
   return {
     id,
     tracks,
@@ -43,6 +47,8 @@ describe('aquisição real da sessão', () => {
   beforeEach(() => {
     Object.defineProperty(window, 'isSecureContext', { configurable: true, value: true });
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+    Object.defineProperty(HTMLVideoElement.prototype, 'videoWidth', { configurable: true, value: 640 });
+    Object.defineProperty(HTMLVideoElement.prototype, 'videoHeight', { configurable: true, value: 480 });
   });
 
   it('usa environment para traseira e user para frontal', () => {
@@ -189,6 +195,8 @@ describe('decoder não possui o hardware', () => {
     vi.useFakeTimers();
     Object.defineProperty(window, 'isSecureContext', { configurable: true, value: true });
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+    Object.defineProperty(HTMLVideoElement.prototype, 'videoWidth', { configurable: true, value: 640 });
+    Object.defineProperty(HTMLVideoElement.prototype, 'videoHeight', { configurable: true, value: 480 });
     const active = createStream('decoder-stream');
     const getUserMedia = vi.fn(async () => active.stream);
     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia } });
@@ -239,6 +247,7 @@ describe('ownership de stream obsoleto', () => {
     const acquisition = acquireCameraSession({
       constraints: getCameraConstraints('back'), video,
       getUserMedia: vi.fn(async () => old.stream), isCurrent: () => sessionCurrent,
+      waitForImage: vi.fn(async () => undefined),
     });
     await Promise.resolve();
     sessionCurrent = false;
@@ -260,6 +269,58 @@ describe('ownership de stream obsoleto', () => {
     })).rejects.toMatchObject({ name: 'AbortError' });
     expect(acquired.tracks[0].stop).toHaveBeenCalledOnce();
     expect(video.srcObject).toBeNull();
+  });
+
+  it('stream sem imagem é encerrado sem aceitar cameraReady nem adquirir outra câmera', async () => {
+    vi.useFakeTimers();
+    Object.defineProperty(window, 'isSecureContext', { configurable: true, value: true });
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+    Object.defineProperty(HTMLVideoElement.prototype, 'videoWidth', { configurable: true, value: 0 });
+    Object.defineProperty(HTMLVideoElement.prototype, 'videoHeight', { configurable: true, value: 0 });
+    const back = createStream('black-preview');
+    const getUserMedia = vi.fn(async () => back.stream);
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia } });
+    renderValidator();
+
+    fireEvent.click(screen.getByRole('button', { name: /câmera traseira/i }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+
+    expect(screen.getByText(/câmera traseira foi acessada, mas não forneceu imagem/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /fechar câmera/i })).not.toBeInTheDocument();
+    expect(back.tracks[0].stop).toHaveBeenCalledOnce();
+    expect(getUserMedia).toHaveBeenCalledOnce();
+    expect(getUserMedia).toHaveBeenCalledWith(getCameraConstraints('back'));
+    vi.useRealTimers();
+  });
+
+  it('decoder é configurado somente depois que a imagem do preview é validada', async () => {
+    Object.defineProperty(window, 'isSecureContext', { configurable: true, value: true });
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+    Object.defineProperty(HTMLVideoElement.prototype, 'videoWidth', { configurable: true, value: 0 });
+    Object.defineProperty(HTMLVideoElement.prototype, 'videoHeight', { configurable: true, value: 0 });
+    const acquired = createStream('valid-preview');
+    const getUserMedia = vi.fn(async () => acquired.stream);
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia } });
+    const detectorConstructed = vi.fn();
+    class DetectorMock { constructor() { detectorConstructed(); } detect = vi.fn(async () => []); }
+    window.BarcodeDetector = DetectorMock as unknown as typeof window.BarcodeDetector;
+    const view = renderValidator();
+    const video = view.container.querySelector('video')!;
+
+    fireEvent.click(screen.getByRole('button', { name: /câmera frontal/i }));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(detectorConstructed).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /fechar câmera/i })).not.toBeInTheDocument();
+
+    Object.defineProperty(video, 'videoWidth', { configurable: true, value: 1280 });
+    Object.defineProperty(video, 'videoHeight', { configurable: true, value: 720 });
+    fireEvent(video, new Event('loadeddata'));
+    expect(await screen.findByRole('button', { name: /fechar câmera/i })).toBeInTheDocument();
+    expect(detectorConstructed).toHaveBeenCalledOnce();
+    expect(getUserMedia).toHaveBeenCalledOnce();
+    expect(getUserMedia).toHaveBeenCalledWith(getCameraConstraints('front'));
+    expect(acquired.tracks[0].stop).not.toHaveBeenCalled();
+    delete window.BarcodeDetector;
   });
 });
 
