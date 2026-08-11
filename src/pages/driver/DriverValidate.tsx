@@ -113,11 +113,19 @@ export class CameraPreviewUnavailableError extends Error {
   }
 }
 
+export class CameraStreamInvalidError extends Error {
+  constructor() {
+    super('The camera stream is not active.');
+    this.name = 'CameraStreamInvalidError';
+  }
+}
+
 export const waitForVideoImage = (
   video: Pick<HTMLVideoElement, 'videoWidth' | 'videoHeight' | 'addEventListener' | 'removeEventListener'>,
   timeoutMs = PREVIEW_IMAGE_TIMEOUT_MS,
 ) => new Promise<void>((resolve, reject) => {
-  const hasImage = () => video.videoWidth > 0 && video.videoHeight > 0;
+  // Alguns navegadores expõem dimensões placeholder, como 2x2, sem um preview real.
+  const hasImage = () => video.videoWidth >= 16 && video.videoHeight >= 16;
   if (hasImage()) {
     resolve();
     return;
@@ -148,6 +156,7 @@ export async function acquireCameraSession(input: {
   getUserMedia: (constraints: MediaStreamConstraints) => Promise<MediaStream>;
   isCurrent: () => boolean;
   onGranted?: (stream: MediaStream) => void;
+  onInvalid?: (stream: MediaStream, track: MediaStreamTrack | undefined) => void;
   onAccepted?: (stream: MediaStream) => void;
   onReleased?: (stream: MediaStream) => void;
   onPlayed?: (stream: MediaStream) => void;
@@ -158,6 +167,14 @@ export async function acquireCameraSession(input: {
   if (!input.isCurrent()) {
     stopAllMediaStreamTracks(stream);
     return { status: 'stale', stream: null };
+  }
+
+  const videoTrack = stream.getVideoTracks()[0];
+  // getUserMedia pode resolver mesmo quando a track já chegou encerrada; não publique esse stream.
+  if (!videoTrack || !stream.active || videoTrack.readyState !== 'live') {
+    input.onInvalid?.(stream, videoTrack);
+    stopAllMediaStreamTracks(stream);
+    throw new CameraStreamInvalidError();
   }
 
   input.onAccepted?.(stream);
@@ -191,6 +208,8 @@ export async function acquireCameraSession(input: {
 export function getCameraErrorMessage(errorName: string, facing: CameraFacing) {
   const alternative = facing === 'back' ? 'frontal' : 'traseira';
   switch (errorName) {
+    case 'CameraStreamInvalidError':
+      return `A câmera ${facing === 'back' ? 'traseira' : 'frontal'} foi acessada, mas não permaneceu ativa. Tente novamente ou utilize a câmera ${alternative}.`;
     case 'CameraPreviewUnavailableError':
       return `A câmera ${facing === 'back' ? 'traseira' : 'frontal'} foi acessada, mas não forneceu imagem. Tente novamente ou utilize a câmera ${alternative}.`;
     case 'NotAllowedError':
@@ -526,6 +545,13 @@ export default function DriverValidate() {
             videoHeight: video.videoHeight,
           });
         },
+        onInvalid: (stream, track) => cameraLog('CAMERA STREAM INVALID', {
+          cameraSessionId,
+          camera: facing,
+          streamActive: stream.active,
+          videoTrackExists: Boolean(track),
+          trackReadyState: track?.readyState,
+        }),
         onAccepted: stream => {
           streamRef.current = stream;
           attachedVideoRef.current = video;

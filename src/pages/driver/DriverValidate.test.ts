@@ -8,6 +8,7 @@ import DriverValidate, {
   getCameraConstraints,
   getCameraErrorMessage,
   isCurrentCameraSession,
+  waitForVideoImage,
 } from './DriverValidate';
 
 vi.mock('@/contexts/AuthContext', () => ({
@@ -35,6 +36,7 @@ const createStream = (id: string) => {
     tracks,
     stream: {
       id,
+      active: true,
       getTracks: () => tracks,
       getVideoTracks: () => tracks,
     } as unknown as MediaStream,
@@ -223,6 +225,68 @@ describe('decoder não possui o hardware', () => {
 });
 
 describe('ownership de stream obsoleto', () => {
+  it.each([
+    ['sem video track', true, undefined],
+    ['inativo', false, 'live'],
+    ['com track encerrada', true, 'ended'],
+  ])('rejeita stream %s antes do play e sem segunda aquisição', async (_label, active, readyState) => {
+    const allTrack = { stop: vi.fn() };
+    const videoTrack = readyState ? { stop: vi.fn(), readyState } : undefined;
+    const stream = {
+      active,
+      getTracks: () => videoTrack ? [videoTrack] : [allTrack],
+      getVideoTracks: () => videoTrack ? [videoTrack] : [],
+    } as unknown as MediaStream;
+    const getUserMedia = vi.fn(async () => stream);
+    const video = { srcObject: null as MediaStream | null, play: vi.fn() };
+    const onAccepted = vi.fn();
+
+    await expect(acquireCameraSession({
+      constraints: getCameraConstraints('back'), video, getUserMedia,
+      isCurrent: () => true, onAccepted,
+    })).rejects.toMatchObject({ name: 'CameraStreamInvalidError' });
+
+    expect(getUserMedia).toHaveBeenCalledOnce();
+    expect(video.play).not.toHaveBeenCalled();
+    expect(video.srcObject).toBeNull();
+    expect(onAccepted).not.toHaveBeenCalled();
+    expect((videoTrack ?? allTrack).stop).toHaveBeenCalledOnce();
+  });
+
+  it('stream inválido não ativa câmera nem decoder e uma nova tentativa manual válida funciona', async () => {
+    Object.defineProperty(window, 'isSecureContext', { configurable: true, value: true });
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+    Object.defineProperty(HTMLVideoElement.prototype, 'videoWidth', { configurable: true, value: 640 });
+    Object.defineProperty(HTMLVideoElement.prototype, 'videoHeight', { configurable: true, value: 480 });
+    const invalid = createStream('invalid');
+    Object.defineProperty(invalid.stream, 'active', { value: false });
+    invalid.tracks[0].readyState = 'ended';
+    const valid = createStream('valid-front');
+    const getUserMedia = vi.fn()
+      .mockResolvedValueOnce(invalid.stream)
+      .mockResolvedValueOnce(valid.stream);
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia } });
+    const detectorConstructed = vi.fn();
+    class DetectorMock { constructor() { detectorConstructed(); } detect = vi.fn(async () => []); }
+    window.BarcodeDetector = DetectorMock as unknown as typeof window.BarcodeDetector;
+    renderValidator();
+
+    fireEvent.click(screen.getByRole('button', { name: /câmera traseira/i }));
+    expect(await screen.findByText(/não permaneceu ativa/i)).toBeInTheDocument();
+    expect(play).not.toHaveBeenCalled();
+    expect(detectorConstructed).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /fechar câmera/i })).not.toBeInTheDocument();
+    expect(invalid.tracks[0].stop).toHaveBeenCalledOnce();
+    expect(getUserMedia).toHaveBeenCalledOnce();
+
+    fireEvent.click(screen.getByRole('button', { name: /câmera frontal/i }));
+    expect(await screen.findByRole('button', { name: /fechar câmera/i })).toBeInTheDocument();
+    expect(getUserMedia).toHaveBeenCalledTimes(2);
+    expect(getUserMedia).toHaveBeenLastCalledWith(getCameraConstraints('front'));
+    expect(detectorConstructed).toHaveBeenCalledOnce();
+    delete window.BarcodeDetector;
+  });
+
   it('descarta resposta anterior ao play sem associar ou aceitar', async () => {
     const stale = createStream('stale');
     const video = { srcObject: null as MediaStream | null, play: vi.fn() };
@@ -341,5 +405,27 @@ describe('erros operacionais', () => {
     expect(() => cleanupCameraResources(video, null)).not.toThrow();
     expect(() => cleanupCameraResources(video, null)).not.toThrow();
     expect(isCurrentCameraSession(2, 2)).toBe(true);
+  });
+
+  it('preview 2x2 aguarda dimensões mínimas plausíveis', async () => {
+    const listeners = new Map<string, EventListener>();
+    const video = {
+      videoWidth: 2,
+      videoHeight: 2,
+      addEventListener: vi.fn((name: string, listener: EventListener) => listeners.set(name, listener)),
+      removeEventListener: vi.fn(),
+    };
+    let resolved = false;
+    const waiting = waitForVideoImage(video, 1_000).then(() => { resolved = true; });
+
+    listeners.get('loadeddata')?.(new Event('loadeddata'));
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+
+    video.videoWidth = 16;
+    video.videoHeight = 16;
+    listeners.get('resize')?.(new Event('resize'));
+    await waiting;
+    expect(resolved).toBe(true);
   });
 });
