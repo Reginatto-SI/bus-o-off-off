@@ -222,18 +222,26 @@ export function classifyCameraDevice(label: string): CameraDeviceClassification 
   return 'não classificada';
 }
 
-type CameraEnvironment = 'webview_android' | 'navegador';
+type CameraEnvironment = 'app_nativo' | 'webview_android' | 'navegador';
 
 /**
- * Detecta WebView Android embarcado (WebInto.app e similares).
- * Detecção ESTRITA: apenas UA "Dalvik/..." ou "; wv)".
- * Usado somente para a mensagem exibida — nunca para decidir o fluxo da câmera.
+ * Detecta o ambiente de execução apenas para mensagens de erro contextualizadas.
+ * Nunca é usado para decidir o fluxo da câmera.
  */
 function detectCameraEnvironment(): CameraEnvironment {
+  const cap = (window as any)?.Capacitor;
+  if (cap?.isNativePlatform?.() === true) return 'app_nativo';
   const ua = navigator.userAgent || '';
   if (/Dalvik/i.test(ua) || /;\s*wv\)/i.test(ua)) return 'webview_android';
   return 'navegador';
 }
+
+function describeCameraEnvironment(env: CameraEnvironment): string {
+  if (env === 'app_nativo') return 'App nativo (Capacitor)';
+  if (env === 'webview_android') return 'WebView Android (app instalado)';
+  return 'navegador';
+}
+
 
 type DebugInfo = {
   permission: string;
@@ -1598,7 +1606,7 @@ export default function DriverValidate() {
                 `backCameras: ${debugInfo.candidateBackCameras.length > 0 ? debugInfo.candidateBackCameras.join(' | ') : 'nenhuma'}`,
                 `devices: ${debugInfo.devices.length > 0 ? debugInfo.devices.join(' | ') : 'nenhum'}`,
                 ...(attemptLines.length > 0 ? ['--- tentativas:', ...attemptLines] : ['--- tentativas: nenhuma']),
-                `--- ambiente: ${debugInfo.environment === 'webview_android' ? 'WebView Android (app instalado)' : 'navegador'}`,
+                `--- ambiente: ${describeCameraEnvironment(debugInfo.environment)}`,
                 ...(debugInfo.timeline.length > 0 ? ['--- timeline:', ...debugInfo.timeline.map(t => `  ${t}`)] : ['--- timeline: vazia']),
                 '--- diagnóstico detalhado:',
                 ...diagnosticLinesRef.current,
@@ -1645,7 +1653,7 @@ export default function DriverValidate() {
                 ))}
               </ul>
             ) : <p className="ml-3">nenhuma</p>}
-            <p><strong>ambiente:</strong> {debugInfo.environment === 'webview_android' ? 'WebView Android (app instalado)' : 'navegador'}</p>
+            <p><strong>ambiente:</strong> {describeCameraEnvironment(debugInfo.environment)}</p>
             <p><strong>timeline:</strong></p>
             {debugInfo.timeline.length > 0 ? (
               <ol className="ml-3 list-decimal">
