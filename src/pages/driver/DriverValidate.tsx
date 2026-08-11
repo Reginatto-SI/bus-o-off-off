@@ -1653,7 +1653,7 @@ export default function DriverValidate() {
                 ))}
               </ul>
             ) : <p className="ml-3">nenhuma</p>}
-            <p><strong>ambiente:</strong> {debugInfo.environment === 'webview_android' ? 'WebView Android (app instalado)' : 'navegador'}</p>
+            <p><strong>ambiente:</strong> {describeCameraEnvironment(debugInfo.environment)}</p>
             <p><strong>timeline:</strong></p>
             {debugInfo.timeline.length > 0 ? (
               <ol className="ml-3 list-decimal">
