@@ -814,11 +814,21 @@ export default function DriverValidate() {
           videoWidth: video.videoWidth,
           videoHeight: video.videoHeight,
         }),
-      });
+          });
+          break;
+        } catch (lensError: unknown) {
+          const lensErrorName = lensError instanceof Error ? lensError.name : 'Error';
+          cameraLog('CAMERA LENS REJECTED', { cameraSessionId, camera: facing, lensIndex, errorName: lensErrorName });
+          if (!LENS_RETRYABLE_ERRORS.has(lensErrorName) || lensIndex === candidates.length - 1) throw lensError;
+        }
+      }
+
+      if (!acquisition) throw new CameraStreamInvalidError();
       if (acquisition.status === 'stale') {
         cameraLog('CAMERA STALE STREAM DISCARDED', { cameraSessionId, camera: facing });
         return;
       }
+
 
       const stream = acquisition.stream;
       cameraLog('CAMERA PREVIEW READY', {
