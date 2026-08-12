@@ -99,7 +99,7 @@ describe('diagnóstico de câmera no validador normal', () => {
     await waitFor(() => expect(order).toContain('play'));
 
     expect(getUserMedia).toHaveBeenCalledWith({
-      video: { facingMode: { ideal: facingMode } }, audio: false,
+      video: { facingMode: { exact: facingMode } }, audio: false,
     });
     expect(order.indexOf('snapshot')).toBeLessThan(order.indexOf('play'));
     expect(detector).not.toHaveBeenCalled();

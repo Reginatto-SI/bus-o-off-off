@@ -101,10 +101,52 @@ declare global {
 
 export type CameraFacing = 'back' | 'front';
 
+// `exact` faz o navegador falhar de forma explícita quando a orientação pedida não existe,
+// em vez de entregar silenciosamente qualquer outra lente.
 export const getCameraConstraints = (facing: CameraFacing): MediaStreamConstraints => ({
-  video: { facingMode: { ideal: facing === 'back' ? 'environment' : 'user' } },
+  video: { facingMode: { exact: facing === 'back' ? 'environment' : 'user' } },
   audio: false,
 });
+
+export const getDeviceCameraConstraints = (deviceId: string): MediaStreamConstraints => ({
+  video: { deviceId: { exact: deviceId } },
+  audio: false,
+});
+
+type EnumerableCameraDevice = Pick<MediaDeviceInfo, 'kind' | 'deviceId' | 'label'> & {
+  getCapabilities?: () => MediaTrackCapabilities;
+};
+
+// Em Android com várias lentes traseiras o navegador pode entregar uma lente que o sistema
+// encerra imediatamente. Escolher o deviceId torna a lente explícita e verificável.
+// A classificação usa apenas `facingMode` das capabilities — nunca o texto do label.
+export const selectLensDeviceIds = (devices: EnumerableCameraDevice[], facing: CameraFacing): string[] => {
+  const target = facing === 'back' ? 'environment' : 'user';
+  const videoInputs = devices.filter(device => device.kind === 'videoinput');
+  // Sem label a permissão ainda não foi concedida; as capabilities não são confiáveis nesse estado.
+  if (!videoInputs.length || videoInputs.every(device => !device.label)) return [];
+  return videoInputs
+    .filter(device => {
+      const modes = device.getCapabilities?.().facingMode;
+      return Array.isArray(modes) && modes.includes(target);
+    })
+    .map(device => device.deviceId)
+    .filter(Boolean);
+};
+
+export const buildCameraCandidates = (deviceIds: string[], facing: CameraFacing): MediaStreamConstraints[] =>
+  deviceIds.length ? deviceIds.map(getDeviceCameraConstraints) : [getCameraConstraints(facing)];
+
+// Falhas que indicam "esta lente não serve"; a próxima lente da mesma orientação pode ser tentada.
+// Qualquer outra falha (permissão, contexto inseguro, cancelamento) encerra a ação do usuário.
+const LENS_RETRYABLE_ERRORS = new Set([
+  'CameraStreamInvalidError',
+  'CameraPreviewUnavailableError',
+  'OverconstrainedError',
+  'NotFoundError',
+  'NotReadableError',
+]);
+
 
 export const stopAllMediaStreamTracks = (stream: Pick<MediaStream, 'getTracks'>) => {
   stream.getTracks().forEach(track => track.stop());
@@ -405,10 +447,15 @@ export default function DriverValidate() {
 
     const requestId = ++diagnosticRequestIdRef.current;
     const startedAt = performance.now();
-    const constraints = getCameraConstraints(facing);
+    // O laboratório usa a mesma estratégia de seleção do fluxo produtivo (uma única lente,
+    // sem loop) para que o resultado represente o que o validador realmente faz.
+    const enumerateForTest = navigator.mediaDevices?.enumerateDevices?.bind(navigator.mediaDevices);
+    const testDeviceIds = enumerateForTest ? selectLensDeviceIds(await enumerateForTest(), facing) : [];
+    const constraints = buildCameraCandidates(testDeviceIds, facing)[0];
     const baseResult: IsolatedCameraResult = {
       requestedAt: new Date().toISOString(), camera: facing, constraints, events: [],
     };
+
     diagnosticOpeningRef.current = true;
     setDiagnosticOpening(true);
     setDiagnosticResult(baseResult);
@@ -703,11 +750,24 @@ export default function DriverValidate() {
         throw new DOMException('API de câmera indisponível em contexto não seguro.', 'SecurityError');
       }
 
-      const constraints = getCameraConstraints(facing);
-      cameraLog('CAMERA REQUEST', { cameraSessionId, camera: facing, constraints });
-      const acquisition = await acquireCameraSession({
+      const enumerate = navigator.mediaDevices.enumerateDevices?.bind(navigator.mediaDevices);
+      const deviceIds = enumerate ? selectLensDeviceIds(await enumerate(), facing) : [];
+      const candidates = buildCameraCandidates(deviceIds, facing);
+      cameraLog('CAMERA LENS LIST', {
+        cameraSessionId, camera: facing, lensCount: candidates.length, selectedByDeviceId: deviceIds.length > 0,
+      });
+
+      // Lista finita e determinística: uma tentativa por lente da orientação escolhida,
+      // dentro da mesma ação do usuário. Não há retry automático depois disso.
+      let acquisition: CameraAcquisitionResult | null = null;
+      for (let lensIndex = 0; lensIndex < candidates.length; lensIndex += 1) {
+        const constraints = candidates[lensIndex];
+        cameraLog('CAMERA REQUEST', { cameraSessionId, camera: facing, lensIndex, constraints });
+        try {
+          acquisition = await acquireCameraSession({
         constraints,
         video,
+
         getUserMedia: requestedConstraints => navigator.mediaDevices.getUserMedia(requestedConstraints),
         // O prompt pode ocultar a página enquanto a Promise está pendente. A decisão
         // de aceitar o stream é feita somente quando a aquisição resolve.
@@ -759,11 +819,21 @@ export default function DriverValidate() {
           videoWidth: video.videoWidth,
           videoHeight: video.videoHeight,
         }),
-      });
+          });
+          break;
+        } catch (lensError: unknown) {
+          const lensErrorName = lensError instanceof Error ? lensError.name : 'Error';
+          cameraLog('CAMERA LENS REJECTED', { cameraSessionId, camera: facing, lensIndex, errorName: lensErrorName });
+          if (!LENS_RETRYABLE_ERRORS.has(lensErrorName) || lensIndex === candidates.length - 1) throw lensError;
+        }
+      }
+
+      if (!acquisition) throw new CameraStreamInvalidError();
       if (acquisition.status === 'stale') {
         cameraLog('CAMERA STALE STREAM DISCARDED', { cameraSessionId, camera: facing });
         return;
       }
+
 
       const stream = acquisition.stream;
       cameraLog('CAMERA PREVIEW READY', {
@@ -1079,8 +1149,8 @@ export default function DriverValidate() {
                 autoPlay
                 muted
                 playsInline
-                // @ts-expect-error — webkit-playsinline is required by older iOS but absent from React types
-                webkit-playsinline="true"
+                {...{ 'webkit-playsinline': 'true' }}
+
               />
 
               {/* Scan frame overlay */}
