@@ -1144,8 +1144,8 @@ export default function DriverValidate() {
                 autoPlay
                 muted
                 playsInline
-                // @ts-expect-error — webkit-playsinline is required by older iOS but absent from React types
-                webkit-playsinline="true"
+                {...{ 'webkit-playsinline': 'true' }}
+
               />
 
               {/* Scan frame overlay */}
