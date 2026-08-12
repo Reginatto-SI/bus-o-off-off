@@ -202,7 +202,7 @@ describe('decoder não possui o hardware', () => {
     const active = createStream('decoder-stream');
     const getUserMedia = vi.fn(async () => active.stream);
     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia } });
-    const detect = vi.fn(async () => { throw new Error('decode failed'); });
+    const detect = vi.fn(async (): Promise<Array<{ rawValue?: string }>> => { throw new Error('decode failed'); });
     class DetectorMock { detect = detect; }
     window.BarcodeDetector = DetectorMock as unknown as typeof window.BarcodeDetector;
     renderValidator();
