@@ -447,10 +447,15 @@ export default function DriverValidate() {
 
     const requestId = ++diagnosticRequestIdRef.current;
     const startedAt = performance.now();
-    const constraints = getCameraConstraints(facing);
+    // O laboratório usa a mesma estratégia de seleção do fluxo produtivo (uma única lente,
+    // sem loop) para que o resultado represente o que o validador realmente faz.
+    const enumerateForTest = navigator.mediaDevices?.enumerateDevices?.bind(navigator.mediaDevices);
+    const testDeviceIds = enumerateForTest ? selectLensDeviceIds(await enumerateForTest(), facing) : [];
+    const constraints = buildCameraCandidates(testDeviceIds, facing)[0];
     const baseResult: IsolatedCameraResult = {
       requestedAt: new Date().toISOString(), camera: facing, constraints, events: [],
     };
+
     diagnosticOpeningRef.current = true;
     setDiagnosticOpening(true);
     setDiagnosticResult(baseResult);
