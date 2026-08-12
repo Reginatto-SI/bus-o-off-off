@@ -745,11 +745,24 @@ export default function DriverValidate() {
         throw new DOMException('API de câmera indisponível em contexto não seguro.', 'SecurityError');
       }
 
-      const constraints = getCameraConstraints(facing);
-      cameraLog('CAMERA REQUEST', { cameraSessionId, camera: facing, constraints });
-      const acquisition = await acquireCameraSession({
+      const enumerate = navigator.mediaDevices.enumerateDevices?.bind(navigator.mediaDevices);
+      const deviceIds = enumerate ? selectLensDeviceIds(await enumerate(), facing) : [];
+      const candidates = buildCameraCandidates(deviceIds, facing);
+      cameraLog('CAMERA LENS LIST', {
+        cameraSessionId, camera: facing, lensCount: candidates.length, selectedByDeviceId: deviceIds.length > 0,
+      });
+
+      // Lista finita e determinística: uma tentativa por lente da orientação escolhida,
+      // dentro da mesma ação do usuário. Não há retry automático depois disso.
+      let acquisition: CameraAcquisitionResult | null = null;
+      for (let lensIndex = 0; lensIndex < candidates.length; lensIndex += 1) {
+        const constraints = candidates[lensIndex];
+        cameraLog('CAMERA REQUEST', { cameraSessionId, camera: facing, lensIndex, constraints });
+        try {
+          acquisition = await acquireCameraSession({
         constraints,
         video,
+
         getUserMedia: requestedConstraints => navigator.mediaDevices.getUserMedia(requestedConstraints),
         // O prompt pode ocultar a página enquanto a Promise está pendente. A decisão
         // de aceitar o stream é feita somente quando a aquisição resolve.
