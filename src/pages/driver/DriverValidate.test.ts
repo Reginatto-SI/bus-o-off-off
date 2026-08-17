@@ -4,12 +4,11 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import DriverValidate, {
   acquireCameraSession,
-  buildCameraCandidates,
   cleanupCameraResources,
   getCameraConstraints,
   getCameraErrorMessage,
   isCurrentCameraSession,
-  selectLensDeviceIds,
+
   waitForVideoImage,
 } from './DriverValidate';
 
