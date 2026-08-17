@@ -675,12 +675,17 @@ export default function DriverValidate() {
     const stream = streamRef.current;
     cleanupCameraResources(attachedVideoRef.current ?? videoElementRef.current, stream);
     if (stream) {
+      // O estado das tracks no encerramento mostra se a lente anterior foi realmente
+      // liberada antes de uma nova abertura — hipótese de ocupação do hardware no Android.
       cameraLog('CAMERA TRACK STOP', {
         cameraSessionId: endedSessionId,
         reason,
         trackCount: stream.getTracks().length,
+        trackStates: stream.getTracks().map(track => track.readyState),
+        streamActive: stream.active,
       });
     }
+
     streamRef.current = null;
     attachedVideoRef.current = null;
     detectorRef.current = null;
