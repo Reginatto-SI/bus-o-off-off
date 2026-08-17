@@ -101,51 +101,15 @@ declare global {
 
 export type CameraFacing = 'back' | 'front';
 
-// `exact` faz o navegador falhar de forma explícita quando a orientação pedida não existe,
-// em vez de entregar silenciosamente qualquer outra lente.
+// `ideal` é a forma padrão (MDN/W3C) de pedir uma orientação: o navegador escolhe a lente
+// adequada do aparelho. Não usamos `exact` nem `deviceId` porque isso transfere para o app
+// uma escolha de lente que o navegador faz melhor — e foi justamente essa complexidade
+// (enumerateDevices + fila de lentes) que divergiu da versão funcional do validador.
 export const getCameraConstraints = (facing: CameraFacing): MediaStreamConstraints => ({
-  video: { facingMode: { exact: facing === 'back' ? 'environment' : 'user' } },
+  video: { facingMode: { ideal: facing === 'back' ? 'environment' : 'user' } },
   audio: false,
 });
 
-export const getDeviceCameraConstraints = (deviceId: string): MediaStreamConstraints => ({
-  video: { deviceId: { exact: deviceId } },
-  audio: false,
-});
-
-type EnumerableCameraDevice = Pick<MediaDeviceInfo, 'kind' | 'deviceId' | 'label'> & {
-  getCapabilities?: () => MediaTrackCapabilities;
-};
-
-// Em Android com várias lentes traseiras o navegador pode entregar uma lente que o sistema
-// encerra imediatamente. Escolher o deviceId torna a lente explícita e verificável.
-// A classificação usa apenas `facingMode` das capabilities — nunca o texto do label.
-export const selectLensDeviceIds = (devices: EnumerableCameraDevice[], facing: CameraFacing): string[] => {
-  const target = facing === 'back' ? 'environment' : 'user';
-  const videoInputs = devices.filter(device => device.kind === 'videoinput');
-  // Sem label a permissão ainda não foi concedida; as capabilities não são confiáveis nesse estado.
-  if (!videoInputs.length || videoInputs.every(device => !device.label)) return [];
-  return videoInputs
-    .filter(device => {
-      const modes = device.getCapabilities?.().facingMode;
-      return Array.isArray(modes) && modes.includes(target);
-    })
-    .map(device => device.deviceId)
-    .filter(Boolean);
-};
-
-export const buildCameraCandidates = (deviceIds: string[], facing: CameraFacing): MediaStreamConstraints[] =>
-  deviceIds.length ? deviceIds.map(getDeviceCameraConstraints) : [getCameraConstraints(facing)];
-
-// Falhas que indicam "esta lente não serve"; a próxima lente da mesma orientação pode ser tentada.
-// Qualquer outra falha (permissão, contexto inseguro, cancelamento) encerra a ação do usuário.
-const LENS_RETRYABLE_ERRORS = new Set([
-  'CameraStreamInvalidError',
-  'CameraPreviewUnavailableError',
-  'OverconstrainedError',
-  'NotFoundError',
-  'NotReadableError',
-]);
 
 
 export const stopAllMediaStreamTracks = (stream: Pick<MediaStream, 'getTracks'>) => {
