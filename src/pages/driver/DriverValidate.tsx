@@ -714,21 +714,13 @@ export default function DriverValidate() {
         throw new DOMException('API de câmera indisponível em contexto não seguro.', 'SecurityError');
       }
 
-      const enumerate = navigator.mediaDevices.enumerateDevices?.bind(navigator.mediaDevices);
-      const deviceIds = enumerate ? selectLensDeviceIds(await enumerate(), facing) : [];
-      const candidates = buildCameraCandidates(deviceIds, facing);
-      cameraLog('CAMERA LENS LIST', {
-        cameraSessionId, camera: facing, lensCount: candidates.length, selectedByDeviceId: deviceIds.length > 0,
-      });
+      // Uma escolha do usuário → uma constraint → uma aquisição. Sem enumeração, sem fila
+      // de lentes e sem fallback: se esta aquisição falhar, o usuário decide o que fazer.
+      const constraints = getCameraConstraints(facing);
+      const requestedAt = performance.now();
+      cameraLog('CAMERA REQUEST', { cameraSessionId, camera: facing, constraints });
 
-      // Lista finita e determinística: uma tentativa por lente da orientação escolhida,
-      // dentro da mesma ação do usuário. Não há retry automático depois disso.
-      let acquisition: CameraAcquisitionResult | null = null;
-      for (let lensIndex = 0; lensIndex < candidates.length; lensIndex += 1) {
-        const constraints = candidates[lensIndex];
-        cameraLog('CAMERA REQUEST', { cameraSessionId, camera: facing, lensIndex, constraints });
-        try {
-          acquisition = await acquireCameraSession({
+      const acquisition = await acquireCameraSession({
         constraints,
         video,
 
@@ -745,6 +737,7 @@ export default function DriverValidate() {
           cameraLog('CAMERA GRANTED', {
             cameraSessionId,
             camera: facing,
+            acquisitionMs: Math.round(performance.now() - requestedAt),
             streamActive: stream.active,
             videoTrackExists: Boolean(track),
             trackReadyState: track?.readyState,
@@ -783,14 +776,8 @@ export default function DriverValidate() {
           videoWidth: video.videoWidth,
           videoHeight: video.videoHeight,
         }),
-          });
-          break;
-        } catch (lensError: unknown) {
-          const lensErrorName = lensError instanceof Error ? lensError.name : 'Error';
-          cameraLog('CAMERA LENS REJECTED', { cameraSessionId, camera: facing, lensIndex, errorName: lensErrorName });
-          if (!LENS_RETRYABLE_ERRORS.has(lensErrorName) || lensIndex === candidates.length - 1) throw lensError;
-        }
-      }
+      });
+
 
       if (!acquisition) throw new CameraStreamInvalidError();
       if (acquisition.status === 'stale') {
