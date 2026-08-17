@@ -101,51 +101,15 @@ declare global {
 
 export type CameraFacing = 'back' | 'front';
 
-// `exact` faz o navegador falhar de forma explícita quando a orientação pedida não existe,
-// em vez de entregar silenciosamente qualquer outra lente.
+// `ideal` é a forma padrão (MDN/W3C) de pedir uma orientação: o navegador escolhe a lente
+// adequada do aparelho. Não usamos `exact` nem `deviceId` porque isso transfere para o app
+// uma escolha de lente que o navegador faz melhor — e foi justamente essa complexidade
+// (enumerateDevices + fila de lentes) que divergiu da versão funcional do validador.
 export const getCameraConstraints = (facing: CameraFacing): MediaStreamConstraints => ({
-  video: { facingMode: { exact: facing === 'back' ? 'environment' : 'user' } },
+  video: { facingMode: { ideal: facing === 'back' ? 'environment' : 'user' } },
   audio: false,
 });
 
-export const getDeviceCameraConstraints = (deviceId: string): MediaStreamConstraints => ({
-  video: { deviceId: { exact: deviceId } },
-  audio: false,
-});
-
-type EnumerableCameraDevice = Pick<MediaDeviceInfo, 'kind' | 'deviceId' | 'label'> & {
-  getCapabilities?: () => MediaTrackCapabilities;
-};
-
-// Em Android com várias lentes traseiras o navegador pode entregar uma lente que o sistema
-// encerra imediatamente. Escolher o deviceId torna a lente explícita e verificável.
-// A classificação usa apenas `facingMode` das capabilities — nunca o texto do label.
-export const selectLensDeviceIds = (devices: EnumerableCameraDevice[], facing: CameraFacing): string[] => {
-  const target = facing === 'back' ? 'environment' : 'user';
-  const videoInputs = devices.filter(device => device.kind === 'videoinput');
-  // Sem label a permissão ainda não foi concedida; as capabilities não são confiáveis nesse estado.
-  if (!videoInputs.length || videoInputs.every(device => !device.label)) return [];
-  return videoInputs
-    .filter(device => {
-      const modes = device.getCapabilities?.().facingMode;
-      return Array.isArray(modes) && modes.includes(target);
-    })
-    .map(device => device.deviceId)
-    .filter(Boolean);
-};
-
-export const buildCameraCandidates = (deviceIds: string[], facing: CameraFacing): MediaStreamConstraints[] =>
-  deviceIds.length ? deviceIds.map(getDeviceCameraConstraints) : [getCameraConstraints(facing)];
-
-// Falhas que indicam "esta lente não serve"; a próxima lente da mesma orientação pode ser tentada.
-// Qualquer outra falha (permissão, contexto inseguro, cancelamento) encerra a ação do usuário.
-const LENS_RETRYABLE_ERRORS = new Set([
-  'CameraStreamInvalidError',
-  'CameraPreviewUnavailableError',
-  'OverconstrainedError',
-  'NotFoundError',
-  'NotReadableError',
-]);
 
 
 export const stopAllMediaStreamTracks = (stream: Pick<MediaStream, 'getTracks'>) => {
@@ -447,11 +411,10 @@ export default function DriverValidate() {
 
     const requestId = ++diagnosticRequestIdRef.current;
     const startedAt = performance.now();
-    // O laboratório usa a mesma estratégia de seleção do fluxo produtivo (uma única lente,
-    // sem loop) para que o resultado represente o que o validador realmente faz.
-    const enumerateForTest = navigator.mediaDevices?.enumerateDevices?.bind(navigator.mediaDevices);
-    const testDeviceIds = enumerateForTest ? selectLensDeviceIds(await enumerateForTest(), facing) : [];
-    const constraints = buildCameraCandidates(testDeviceIds, facing)[0];
+    // O laboratório usa exatamente a mesma constraint do fluxo produtivo, para que o
+    // resultado do diagnóstico represente o que o validador realmente pede ao navegador.
+    const constraints = getCameraConstraints(facing);
+
     const baseResult: IsolatedCameraResult = {
       requestedAt: new Date().toISOString(), camera: facing, constraints, events: [],
     };
@@ -710,14 +673,22 @@ export default function DriverValidate() {
       cameraLog('CAMERA DECODER STOP', { cameraSessionId: endedSessionId, reason });
     }
     const stream = streamRef.current;
+    // O estado das tracks é lido ANTES do stop, para mostrar se a lente anterior ainda
+    // estava viva quando a tela pediu o encerramento (hipótese de ocupação no Android).
+    const trackStatesBeforeStop = stream?.getTracks().map(track => track.readyState) ?? [];
+    const streamActiveBeforeStop = stream?.active ?? false;
     cleanupCameraResources(attachedVideoRef.current ?? videoElementRef.current, stream);
     if (stream) {
       cameraLog('CAMERA TRACK STOP', {
         cameraSessionId: endedSessionId,
         reason,
-        trackCount: stream.getTracks().length,
+        trackCount: trackStatesBeforeStop.length,
+        trackStatesBeforeStop,
+        streamActiveBeforeStop,
       });
     }
+
+
     streamRef.current = null;
     attachedVideoRef.current = null;
     detectorRef.current = null;
@@ -750,21 +721,13 @@ export default function DriverValidate() {
         throw new DOMException('API de câmera indisponível em contexto não seguro.', 'SecurityError');
       }
 
-      const enumerate = navigator.mediaDevices.enumerateDevices?.bind(navigator.mediaDevices);
-      const deviceIds = enumerate ? selectLensDeviceIds(await enumerate(), facing) : [];
-      const candidates = buildCameraCandidates(deviceIds, facing);
-      cameraLog('CAMERA LENS LIST', {
-        cameraSessionId, camera: facing, lensCount: candidates.length, selectedByDeviceId: deviceIds.length > 0,
-      });
+      // Uma escolha do usuário → uma constraint → uma aquisição. Sem enumeração, sem fila
+      // de lentes e sem fallback: se esta aquisição falhar, o usuário decide o que fazer.
+      const constraints = getCameraConstraints(facing);
+      const requestedAt = performance.now();
+      cameraLog('CAMERA REQUEST', { cameraSessionId, camera: facing, constraints });
 
-      // Lista finita e determinística: uma tentativa por lente da orientação escolhida,
-      // dentro da mesma ação do usuário. Não há retry automático depois disso.
-      let acquisition: CameraAcquisitionResult | null = null;
-      for (let lensIndex = 0; lensIndex < candidates.length; lensIndex += 1) {
-        const constraints = candidates[lensIndex];
-        cameraLog('CAMERA REQUEST', { cameraSessionId, camera: facing, lensIndex, constraints });
-        try {
-          acquisition = await acquireCameraSession({
+      const acquisition = await acquireCameraSession({
         constraints,
         video,
 
@@ -781,6 +744,7 @@ export default function DriverValidate() {
           cameraLog('CAMERA GRANTED', {
             cameraSessionId,
             camera: facing,
+            acquisitionMs: Math.round(performance.now() - requestedAt),
             streamActive: stream.active,
             videoTrackExists: Boolean(track),
             trackReadyState: track?.readyState,
@@ -819,20 +783,14 @@ export default function DriverValidate() {
           videoWidth: video.videoWidth,
           videoHeight: video.videoHeight,
         }),
-          });
-          break;
-        } catch (lensError: unknown) {
-          const lensErrorName = lensError instanceof Error ? lensError.name : 'Error';
-          cameraLog('CAMERA LENS REJECTED', { cameraSessionId, camera: facing, lensIndex, errorName: lensErrorName });
-          if (!LENS_RETRYABLE_ERRORS.has(lensErrorName) || lensIndex === candidates.length - 1) throw lensError;
-        }
-      }
+      });
 
-      if (!acquisition) throw new CameraStreamInvalidError();
       if (acquisition.status === 'stale') {
         cameraLog('CAMERA STALE STREAM DISCARDED', { cameraSessionId, camera: facing });
         return;
       }
+
+
 
 
       const stream = acquisition.stream;

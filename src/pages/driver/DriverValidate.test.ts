@@ -4,12 +4,11 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import DriverValidate, {
   acquireCameraSession,
-  buildCameraCandidates,
   cleanupCameraResources,
   getCameraConstraints,
   getCameraErrorMessage,
   isCurrentCameraSession,
-  selectLensDeviceIds,
+
   waitForVideoImage,
 } from './DriverValidate';
 
@@ -55,50 +54,27 @@ describe('aquisição real da sessão', () => {
     Object.defineProperty(HTMLVideoElement.prototype, 'videoHeight', { configurable: true, value: 480 });
   });
 
-  it('usa environment exato para traseira e user exato para frontal', () => {
-    expect(getCameraConstraints('back')).toEqual({ video: { facingMode: { exact: 'environment' } }, audio: false });
-    expect(getCameraConstraints('front')).toEqual({ video: { facingMode: { exact: 'user' } }, audio: false });
+  it('usa environment ideal para traseira e user ideal para frontal', () => {
+    expect(getCameraConstraints('back')).toEqual({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+    expect(getCameraConstraints('front')).toEqual({ video: { facingMode: { ideal: 'user' } }, audio: false });
   });
 
-  it('seleciona somente lentes cujas capabilities declaram a orientação pedida', () => {
-    const devices = [
-      { kind: 'audioinput' as const, deviceId: 'mic', label: 'Mic' },
-      { kind: 'videoinput' as const, deviceId: 'front-1', label: 'Front', getCapabilities: () => ({ facingMode: ['user'] }) },
-      { kind: 'videoinput' as const, deviceId: 'back-1', label: 'Back wide', getCapabilities: () => ({ facingMode: ['environment'] }) },
-      { kind: 'videoinput' as const, deviceId: 'back-2', label: 'Back macro', getCapabilities: () => ({ facingMode: ['environment'] }) },
-    ];
-    expect(selectLensDeviceIds(devices, 'back')).toEqual(['back-1', 'back-2']);
-    expect(selectLensDeviceIds(devices, 'front')).toEqual(['front-1']);
-  });
-
-  it('ignora a enumeração enquanto os labels estiverem vazios (permissão ainda não concedida)', () => {
-    const devices = [{ kind: 'videoinput' as const, deviceId: 'back-1', label: '', getCapabilities: () => ({ facingMode: ['environment'] }) }];
-    expect(selectLensDeviceIds(devices, 'back')).toEqual([]);
-    expect(buildCameraCandidates([], 'back')).toEqual([getCameraConstraints('back')]);
-    expect(buildCameraCandidates(['back-1'], 'back')).toEqual([{ video: { deviceId: { exact: 'back-1' } }, audio: false }]);
-  });
-
-  it('avança para a próxima lente traseira quando a track chega encerrada', async () => {
-    const enumerateDevices = vi.fn(async () => [
-      { kind: 'videoinput', deviceId: 'back-1', label: 'Back wide', getCapabilities: () => ({ facingMode: ['environment'] }) },
-      { kind: 'videoinput', deviceId: 'back-2', label: 'Back main', getCapabilities: () => ({ facingMode: ['environment'] }) },
-    ] as unknown as MediaDeviceInfo[]);
+  it('não enumera dispositivos nem tenta outra lente quando a track chega encerrada', async () => {
+    const enumerateDevices = vi.fn(async () => [] as MediaDeviceInfo[]);
     const dead = createStream('dead');
     dead.tracks[0].readyState = 'ended';
     (dead.stream as unknown as { active: boolean }).active = false;
-    const alive = createStream('alive');
-    const getUserMedia = vi.fn(async (constraints: MediaStreamConstraints) => {
-      const deviceId = (constraints.video as MediaTrackConstraints).deviceId as { exact: string };
-      return deviceId.exact === 'back-1' ? dead.stream : alive.stream;
-    });
+    const getUserMedia = vi.fn(async () => dead.stream);
     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia, enumerateDevices } });
     renderValidator();
 
     fireEvent.click(screen.getByRole('button', { name: /câmera traseira/i }));
-    await screen.findByRole('button', { name: /fechar câmera/i });
-    expect(getUserMedia).toHaveBeenCalledTimes(2);
-    expect(dead.tracks[0].stop).toHaveBeenCalled();
+    await waitFor(() => expect(dead.tracks[0].stop).toHaveBeenCalled());
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+    expect(getUserMedia).toHaveBeenCalledWith(getCameraConstraints('back'));
+    expect(enumerateDevices).not.toHaveBeenCalled();
   });
+
 
 
   it('cliques concorrentes produzem somente uma chamada de getUserMedia', async () => {
