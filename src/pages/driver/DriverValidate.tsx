@@ -778,8 +778,8 @@ export default function DriverValidate() {
       });
 
 
-      if (!acquisition) throw new CameraStreamInvalidError();
       if (acquisition.status === 'stale') {
+
         cameraLog('CAMERA STALE STREAM DISCARDED', { cameraSessionId, camera: facing });
         return;
       }
