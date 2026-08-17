@@ -673,18 +673,21 @@ export default function DriverValidate() {
       cameraLog('CAMERA DECODER STOP', { cameraSessionId: endedSessionId, reason });
     }
     const stream = streamRef.current;
+    // O estado das tracks é lido ANTES do stop, para mostrar se a lente anterior ainda
+    // estava viva quando a tela pediu o encerramento (hipótese de ocupação no Android).
+    const trackStatesBeforeStop = stream?.getTracks().map(track => track.readyState) ?? [];
+    const streamActiveBeforeStop = stream?.active ?? false;
     cleanupCameraResources(attachedVideoRef.current ?? videoElementRef.current, stream);
     if (stream) {
-      // O estado das tracks no encerramento mostra se a lente anterior foi realmente
-      // liberada antes de uma nova abertura — hipótese de ocupação do hardware no Android.
       cameraLog('CAMERA TRACK STOP', {
         cameraSessionId: endedSessionId,
         reason,
-        trackCount: stream.getTracks().length,
-        trackStates: stream.getTracks().map(track => track.readyState),
-        streamActive: stream.active,
+        trackCount: trackStatesBeforeStop.length,
+        trackStatesBeforeStop,
+        streamActiveBeforeStop,
       });
     }
+
 
     streamRef.current = null;
     attachedVideoRef.current = null;
