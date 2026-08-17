@@ -777,12 +777,12 @@ export default function DriverValidate() {
         }),
       });
 
-
       if (acquisition.status === 'stale') {
-
         cameraLog('CAMERA STALE STREAM DISCARDED', { cameraSessionId, camera: facing });
         return;
       }
+
+
 
 
       const stream = acquisition.stream;
