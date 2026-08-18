@@ -197,9 +197,9 @@ describe('aquisição real da sessão', () => {
     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia } });
     renderValidator();
     fireEvent.click(screen.getByRole('button', { name: /câmera traseira/i }));
+    await waitFor(() => expect(getUserMedia).toHaveBeenCalledOnce());
     Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
     fireEvent(document, new Event('visibilitychange'));
-    expect(getUserMedia).toHaveBeenCalledOnce();
     expect(screen.getByText(/abrindo câmera/i)).toBeInTheDocument();
 
     const late = createStream('hidden-late');
