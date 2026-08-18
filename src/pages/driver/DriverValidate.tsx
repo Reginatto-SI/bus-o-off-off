@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { getPersistedPhase } from '@/lib/driverTripStorage';
 import { PHASE_CONFIG, REASON_MESSAGES } from '@/lib/driverPhaseConfig';
-import { getDriverPreferences } from '@/lib/driverPreferences';
+import { getDriverPreferences, getApprovedBackLensId, setApprovedBackLensId, clearApprovedBackLensId } from '@/lib/driverPreferences';
 import { playBeep, vibrateDevice } from '@/lib/driverScannerFeedback';
 import { cameraLog, clearCameraDiagnosticEvents, formatCameraDiagnosticLogs, getCameraDiagnosticEvents } from '@/lib/cameraDiagnostics';
 import { shouldEnableMobileDeveloperConsole } from '@/components/system/MobileDeveloperConsole';
