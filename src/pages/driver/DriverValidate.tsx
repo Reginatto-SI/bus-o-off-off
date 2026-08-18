@@ -1370,7 +1370,30 @@ export default function DriverValidate() {
                     Usar câmera {selectedCamera === 'front' ? 'traseira' : 'frontal'}
                   </Button>
                 </div>
+                {availableLenses.length > 0 && (
+                  <div className="space-y-1 rounded-lg border p-2">
+                    <p className="text-xs text-muted-foreground">Escolher a lente manualmente:</p>
+                    {availableLenses.map(lens => (
+                      <Button
+                        key={lens.deviceId}
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="w-full justify-start whitespace-normal text-left"
+                        disabled={cameraOpening}
+                        onClick={() => {
+                          if (!videoEl) return;
+                          setApprovedBackLensId(lens.deviceId);
+                          startCamera(videoEl, lens.facing === 'front' ? 'front' : 'back', lens.deviceId);
+                        }}
+                      >
+                        {lens.label}
+                      </Button>
+                    ))}
+                  </div>
+                )}
               </div>
+
             )}
 
             {/* Manual token fallback */}
