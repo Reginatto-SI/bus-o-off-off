@@ -1,44 +1,57 @@
-# Câmera traseira: o problema está fora do código do validador
+# Câmera traseira: escolher a lente que o aparelho realmente entrega
 
-## O que os dois logs provam
+## O que o teste no Webcam Tests provou
 
-Os logs são conclusivos e apontam para o mesmo comportamento nos dois caminhos:
+No mesmo Chrome, mesmo aparelho (Galaxy S24 Ultra, Android), o Webcam Tests funciona — mas apenas com **camera 0, facing back** selecionada explicitamente. O site lista quatro lentes (0 e 2 traseiras, 1 e 3 frontais) e permite escolher uma a uma; só a 0 abre. A ficha técnica confirma stream real: 480x640, 30 FPS.
 
-- **Fluxo produtivo** (sessão 4): constraint `{ video: { facingMode: { ideal: 'environment' } }, audio: false }`, uma única chamada, `getUserMedia` demora **4753 ms** e resolve com `streamActive: false` e `trackReadyState: "ended"`.
-- **Laboratório isolado**: mesma constraint mínima, sem React, sem decoder, sem scanner — `4583 ms` e novamente `ended`, com `videoWidth: 2` após o play (imagem morta).
-- **Frontal**: `533 ms`, `live`, 480x640, preview normal.
+Isso muda o diagnóstico anterior. O aparelho não está com a câmera travada: existe **uma** lente traseira funcional e outras que o sistema não entrega. Quando o SmartBus pede `facingMode: { ideal: 'environment' }`, o Chrome escolhe a lente traseira por conta própria — e nesse aparelho ele escolhe uma que resolve em ~4,7 s com a track já `ended`. O Webcam Tests não usa `facingMode`: ele usa `deviceId` da lente escolhida pelo usuário.
 
-O laboratório isolado é praticamente o `getUserMedia` puro. Ele reproduz a falha. Isso descarta código de sessão, cleanup, decoder, layout, lifecycle e constraints como causa: **o navegador está entregando uma track já encerrada para a lente traseira deste aparelho**. Nenhuma reescrita adicional no `DriverValidate.tsx` muda isso — as tentativas anteriores (enumeração, `deviceId: exact`, fila de lentes, `ideal`) já cobriram o espaço de constraints e todas terminaram no mesmo `ended`.
+Ou seja: a correção não é mexer em `facingMode`, é **selecionar a lente por `deviceId`, testando as traseiras até uma entregar track viva** — e lembrar dela.
 
-O padrão (4-5 s de espera seguidos de track morta, só na traseira) é o comportamento típico do Android quando o HAL da câmera traseira não consegue abrir: lente ocupada por outro app/serviço, câmera do sistema em estado inconsistente, ou falha específica do aparelho/versão do Chrome.
+Tentativas anteriores com `deviceId` falharam porque combinavam `facingMode: { exact }`, fila de candidatos montada antes da permissão e descarte por critérios extras. Aqui a regra é mais simples e direta.
 
-## O que proponho fazer
+## O que será feito
 
-### 1. Confirmar fora do SmartBus (você, no aparelho — 2 minutos)
+### 1. Seleção de lente traseira por `deviceId`, na ordem certa
 
-Antes de qualquer alteração de código, precisamos saber se é o aparelho ou o Chrome:
+Ao clicar em "Câmera traseira":
 
-1. Reiniciar o aparelho (libera o HAL da câmera de forma confiável).
-2. Abrir o app **Câmera** nativo e confirmar que a traseira funciona; fechar o app completamente.
-3. No mesmo Chrome, abrir `https://webcamtests.com` (site neutro, nada do SmartBus) e testar a câmera traseira.
-4. Se possível, repetir em um segundo aparelho Android.
+```text
+1. abre a lente lembrada (localStorage) se houver → track live? usa.
+2. senão: getUserMedia({ video: true }) só para garantir permissão/labels
+3. enumerateDevices() → filtra videoinput traseiras
+   (facingMode das capabilities; se ausente, usa a ordem/label)
+4. tenta uma a uma, na ordem da enumeração, encerrando a anterior antes:
+   getUserMedia({ video: { deviceId: { exact: id } } })
+   → track live e stream ativo? adota, salva o deviceId e para.
+   → track ended? descarta, encerra e vai para a próxima.
+5. nenhuma serve → mensagem de erro (item 3)
+```
 
-Resultado esperado:
+A frontal continua exatamente como está hoje (`facingMode: { ideal: 'user' }`), porque funciona em 533 ms.
 
-- **Falha também no webcamtests** → é o aparelho/navegador. O código do validador está correto e não será alterado; a saída é operacional (reiniciar, atualizar Chrome, usar outro aparelho, ou o app nativo Android que já existe no projeto).
-- **Funciona no webcamtests e falha no SmartBus** → aí sim existe algo específico da nossa página. Nesse caso investigo em seguida com foco em Permissions-Policy/iframe de preview, contexto de origem e ciclo de vida — e trago a correção mínima.
+### 2. Lente lembrada por aparelho
 
-### 2. Ajuste mínimo no validador, independente do resultado
+O `deviceId` que funcionou fica salvo no navegador do aparelho. Nas próximas aberturas a câmera abre direto nele, sem varredura — abertura rápida como a frontal. Se ele falhar depois (troca de aparelho, navegador reinstalado), a lembrança é descartada e a varredura roda de novo automaticamente.
 
-Uma única mudança de produto, sem tocar na lógica de aquisição:
+### 3. Seletor manual de lente (fallback visível)
 
-- Quando a traseira retornar track encerrada, a tela passa a exibir uma mensagem objetiva e acionável no lugar do erro técnico atual: "A câmera traseira foi liberada pelo navegador, mas encerrada pelo sistema do aparelho. Feche outros apps que usem a câmera, reinicie o aparelho e tente novamente. Enquanto isso, use a câmera frontal ou o token manual."
-- Botão de atalho para alternar para a frontal ao lado da mensagem (troca continua manual e explícita).
+Se a varredura não encontrar nenhuma lente traseira viva, a tela mostra a lista de câmeras do aparelho (como o Webcam Tests faz) para o motorista escolher manualmente. A escolha manual também é lembrada. Isso garante que nunca fiquemos sem saída em um aparelho novo.
+
+### 4. Log de homologação
+
+Mantido e ampliado: quantas lentes traseiras foram encontradas, qual `deviceId` (abreviado) foi tentado, tempo de cada tentativa, `readyState` resultante e qual foi adotada.
 
 ## O que não será feito
 
-Sem retry automático, sleep, watchdog, fila de lentes, `enumerateDevices`, `deviceId`, resolução forçada, fallback silencioso ou regra por fabricante. Esse caminho já foi percorrido e não é a causa.
+Sem retry cego, sleep artificial, watchdog, troca automática para a frontal, resolução forçada ou regra por fabricante. Uma tentativa por lente, na ordem, com encerramento limpo entre elas.
 
 ## Detalhes técnicos
 
-Arquivo alterado no item 2: `src/pages/driver/DriverValidate.tsx` (apenas o texto de `CameraStreamInvalidError` e o botão de troca na área de erro). Nada de backend, banco, pagamentos, vendas ou autenticação é tocado. O laboratório isolado e o log de homologação permanecem como estão, restritos a developer.
+Arquivos alterados:
+
+- `src/pages/driver/DriverValidate.tsx` — seleção por `deviceId` com varredura ordenada, persistência da lente aprovada, seletor manual e logs.
+- `src/lib/driverPreferences.ts` — chave de persistência da lente traseira aprovada.
+- `src/pages/driver/DriverValidate.test.ts` — contratos: lente lembrada usada primeiro; varredura só quando necessário; encerramento da tentativa anterior antes da próxima; adoção da primeira lente `live`; descarte de lente `ended`; frontal permanece em `facingMode: ideal`; nenhum stream duplicado.
+
+Nada de backend, banco, pagamentos, vendas, embarque ou autenticação é tocado. O laboratório isolado passa a permitir escolher a lente, refletindo o teste que você fez no Webcam Tests.
