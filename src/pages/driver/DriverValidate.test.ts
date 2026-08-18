@@ -48,6 +48,7 @@ const renderValidator = () => render(React.createElement(MemoryRouter, null, Rea
 
 describe('aquisição real da sessão', () => {
   beforeEach(() => {
+    localStorage.clear();
     Object.defineProperty(window, 'isSecureContext', { configurable: true, value: true });
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
     Object.defineProperty(HTMLVideoElement.prototype, 'videoWidth', { configurable: true, value: 640 });
