@@ -378,6 +378,7 @@ export default function DriverValidate() {
   const [scannerSupported, setScannerSupported] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [availableLenses, setAvailableLenses] = useState<CameraLens[]>([]);
   const [overlay, setOverlay] = useState<ValidationResponse | null>(null);
   const [serviceOverlay, setServiceOverlay] = useState<ServiceQrResponse | null>(null);
   const [serviceEventName, setServiceEventName] = useState<string | null>(null);
