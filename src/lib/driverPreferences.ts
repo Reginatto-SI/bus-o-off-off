@@ -33,3 +33,28 @@ export function setDriverPreferences(prefs: Partial<DriverPreferences>): DriverP
   localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   return updated;
 }
+
+const BACK_LENS_KEY = 'smartbus_driver_back_lens';
+
+// A lente traseira aprovada é lembrada por aparelho: alguns celulares expõem várias
+// lentes traseiras e apenas uma entrega vídeo real (as demais chegam com track encerrada).
+export function getApprovedBackLensId(): string | null {
+  try {
+    const value = localStorage.getItem(BACK_LENS_KEY);
+    return value && value.trim() ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setApprovedBackLensId(deviceId: string) {
+  try {
+    localStorage.setItem(BACK_LENS_KEY, deviceId);
+  } catch { /* armazenamento indisponível não pode impedir a leitura */ }
+}
+
+export function clearApprovedBackLensId() {
+  try {
+    localStorage.removeItem(BACK_LENS_KEY);
+  } catch { /* idem */ }
+}

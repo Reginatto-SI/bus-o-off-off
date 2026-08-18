@@ -48,6 +48,7 @@ const renderValidator = () => render(React.createElement(MemoryRouter, null, Rea
 
 describe('aquisição real da sessão', () => {
   beforeEach(() => {
+    localStorage.clear();
     Object.defineProperty(window, 'isSecureContext', { configurable: true, value: true });
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
     Object.defineProperty(HTMLVideoElement.prototype, 'videoWidth', { configurable: true, value: 640 });
@@ -59,23 +60,40 @@ describe('aquisição real da sessão', () => {
     expect(getCameraConstraints('front')).toEqual({ video: { facingMode: { ideal: 'user' } }, audio: false });
   });
 
-  it('não enumera dispositivos nem tenta outra lente quando a track chega encerrada', async () => {
-    const enumerateDevices = vi.fn(async () => [] as MediaDeviceInfo[]);
+  it('varre as lentes traseiras e adota a primeira que entrega vídeo vivo', async () => {
+    const enumerateDevices = vi.fn(async () => ([
+      { kind: 'videoinput', deviceId: 'back-dead', label: 'camera 2, facing back' },
+      { kind: 'videoinput', deviceId: 'back-live', label: 'camera 0, facing back' },
+      { kind: 'videoinput', deviceId: 'front-1', label: 'camera 1, facing front' },
+    ] as unknown as MediaDeviceInfo[]));
     const dead = createStream('dead');
     dead.tracks[0].readyState = 'ended';
     (dead.stream as unknown as { active: boolean }).active = false;
-    const getUserMedia = vi.fn(async () => dead.stream);
+    const live = createStream('live');
+    const getUserMedia = vi.fn(async (constraints: MediaStreamConstraints) => {
+      const deviceId = (constraints.video as MediaTrackConstraints).deviceId as { exact: string } | undefined;
+      return deviceId?.exact === 'back-live' ? live.stream : dead.stream;
+    });
     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia, enumerateDevices } });
     renderValidator();
 
     fireEvent.click(screen.getByRole('button', { name: /câmera traseira/i }));
-    await waitFor(() => expect(dead.tracks[0].stop).toHaveBeenCalled());
-    expect(getUserMedia).toHaveBeenCalledTimes(1);
-    expect(getUserMedia).toHaveBeenCalledWith(getCameraConstraints('back'));
-    expect(enumerateDevices).not.toHaveBeenCalled();
+    expect(await screen.findByRole('button', { name: /fechar câmera/i })).toBeInTheDocument();
+    expect(dead.tracks[0].stop).toHaveBeenCalled();
+    expect(getUserMedia).toHaveBeenCalledWith({ video: { deviceId: { exact: 'back-live' } }, audio: false });
+    expect(localStorage.getItem('smartbus_driver_back_lens')).toBe('back-live');
   });
 
+  it('sem enumeração disponível mantém a abertura padrão por facingMode', async () => {
+    const live = createStream('default');
+    const getUserMedia = vi.fn(async () => live.stream);
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia } });
+    renderValidator();
 
+    fireEvent.click(screen.getByRole('button', { name: /câmera traseira/i }));
+    expect(await screen.findByRole('button', { name: /fechar câmera/i })).toBeInTheDocument();
+    expect(getUserMedia).toHaveBeenCalledWith(getCameraConstraints('back'));
+  });
 
   it('cliques concorrentes produzem somente uma chamada de getUserMedia', async () => {
     const pending = deferred<MediaStream>();
@@ -85,13 +103,14 @@ describe('aquisição real da sessão', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /câmera traseira/i }));
     fireEvent.click(screen.getByRole('button', { name: /^câmera frontal/i }));
-    expect(getUserMedia).toHaveBeenCalledOnce();
+    await waitFor(() => expect(getUserMedia).toHaveBeenCalledOnce());
     expect(getUserMedia).toHaveBeenCalledWith(getCameraConstraints('back'));
 
     const first = createStream('first');
     await act(async () => pending.resolve(first.stream));
     expect(await screen.findByRole('button', { name: /fechar câmera/i })).toBeInTheDocument();
   });
+
 
   it('troca para a frontal somente depois de parar completamente a traseira', async () => {
     const order: string[] = [];
@@ -134,6 +153,7 @@ describe('aquisição real da sessão', () => {
     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: vi.fn(() => pending.promise) } });
     const view = renderValidator();
     fireEvent.click(screen.getByRole('button', { name: /câmera traseira/i }));
+    await waitFor(() => expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalled());
     view.unmount();
 
     const late = createStream('late');
@@ -178,9 +198,9 @@ describe('aquisição real da sessão', () => {
     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia } });
     renderValidator();
     fireEvent.click(screen.getByRole('button', { name: /câmera traseira/i }));
+    await waitFor(() => expect(getUserMedia).toHaveBeenCalledOnce());
     Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
     fireEvent(document, new Event('visibilitychange'));
-    expect(getUserMedia).toHaveBeenCalledOnce();
     expect(screen.getByText(/abrindo câmera/i)).toBeInTheDocument();
 
     const late = createStream('hidden-late');
