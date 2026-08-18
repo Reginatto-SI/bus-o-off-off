@@ -125,17 +125,27 @@ export const classifyLensLabel = (label: string): CameraFacing | 'unknown' => {
 // Lista as câmeras do aparelho. Labels só existem após uma permissão concedida; por isso
 // a enumeração acontece depois de a tela já ter conseguido abrir alguma câmera.
 export async function listCameraLenses(
-  enumerateDevices: () => Promise<MediaDeviceInfo[]> = () => navigator.mediaDevices.enumerateDevices(),
+  enumerateDevices: (() => Promise<MediaDeviceInfo[]>) | undefined =
+    navigator.mediaDevices?.enumerateDevices
+      ? () => navigator.mediaDevices.enumerateDevices()
+      : undefined,
 ): Promise<CameraLens[]> {
-  const devices = await enumerateDevices();
-  return devices
-    .filter(device => device.kind === 'videoinput' && device.deviceId)
-    .map(device => ({
-      deviceId: device.deviceId,
-      label: device.label || 'Câmera sem identificação',
-      facing: classifyLensLabel(device.label ?? ''),
-    }));
+  if (!enumerateDevices) return [];
+  try {
+    const devices = await enumerateDevices();
+    return devices
+      .filter(device => device.kind === 'videoinput' && device.deviceId)
+      .map(device => ({
+        deviceId: device.deviceId,
+        label: device.label || 'Câmera sem identificação',
+        facing: classifyLensLabel(device.label ?? ''),
+      }));
+  } catch {
+    // Enumeração indisponível não pode impedir a abertura padrão da câmera.
+    return [];
+  }
 }
+
 
 // Ordem de tentativa: lente lembrada, depois as traseiras, depois as não identificadas.
 export function buildBackLensQueue(lenses: CameraLens[], rememberedDeviceId: string | null): string[] {
