@@ -754,7 +754,7 @@ export default function DriverValidate() {
     cameraLog('CAMERA SESSION END', { cameraSessionId: endedSessionId, reason });
   }, []);
 
-  const startCamera = useCallback(async (video: HTMLVideoElement, facing: CameraFacing) => {
+  const startCamera = useCallback(async (video: HTMLVideoElement, facing: CameraFacing, forcedDeviceId?: string) => {
     if (initInProgressRef.current || diagnosticOpeningRef.current || diagnosticStreamRef.current) return;
 
     cleanupCamera('new_session');
@@ -764,86 +764,156 @@ export default function DriverValidate() {
     setCameraOpening(true);
     setCameraError(null);
     setScannerStatusMessage(null);
-    cameraLog('CAMERA SESSION START', { cameraSessionId, camera: facing });
+    cameraLog('CAMERA SESSION START', { cameraSessionId, camera: facing, manualLens: Boolean(forcedDeviceId) });
 
     try {
       if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
         throw new DOMException('API de câmera indisponível em contexto não seguro.', 'SecurityError');
       }
 
-      // Uma escolha do usuário → uma constraint → uma aquisição. Sem enumeração, sem fila
-      // de lentes e sem fallback: se esta aquisição falhar, o usuário decide o que fazer.
-      const constraints = getCameraConstraints(facing);
-      const requestedAt = performance.now();
-      cameraLog('CAMERA REQUEST', { cameraSessionId, camera: facing, constraints });
+      const isCurrent = () => mountedRef.current
+        && document.visibilityState === 'visible'
+        && isCurrentCameraSession(sessionIdRef.current, cameraSessionId);
 
-      const acquisition = await acquireCameraSession({
-        constraints,
-        video,
-
-        getUserMedia: requestedConstraints => navigator.mediaDevices.getUserMedia(requestedConstraints),
-        // O prompt pode ocultar a página enquanto a Promise está pendente. A decisão
-        // de aceitar o stream é feita somente quando a aquisição resolve.
-        isCurrent: () => mountedRef.current
-          && document.visibilityState === 'visible'
-          && isCurrentCameraSession(sessionIdRef.current, cameraSessionId),
-        onGranted: stream => {
-          const track = stream.getVideoTracks()[0];
-          const settings = track?.getSettings?.();
-          // Diagnóstico deliberadamente não inclui deviceId nem qualquer conteúdo capturado.
-          cameraLog('CAMERA GRANTED', {
+      // Uma tentativa = uma constraint = uma aquisição, sempre com encerramento limpo em caso de falha.
+      const attempt = (constraints: MediaStreamConstraints) => {
+        const requestedAt = performance.now();
+        cameraLog('CAMERA REQUEST', { cameraSessionId, camera: facing, constraints });
+        return acquireCameraSession({
+          constraints,
+          video,
+          getUserMedia: requestedConstraints => navigator.mediaDevices.getUserMedia(requestedConstraints),
+          // O prompt pode ocultar a página enquanto a Promise está pendente. A decisão
+          // de aceitar o stream é feita somente quando a aquisição resolve.
+          isCurrent,
+          onGranted: stream => {
+            const track = stream.getVideoTracks()[0];
+            const settings = track?.getSettings?.();
+            cameraLog('CAMERA GRANTED', {
+              cameraSessionId,
+              camera: facing,
+              acquisitionMs: Math.round(performance.now() - requestedAt),
+              streamActive: stream.active,
+              videoTrackExists: Boolean(track),
+              trackReadyState: track?.readyState,
+              trackEnabled: track?.enabled,
+              trackMuted: track?.muted,
+              facingMode: settings?.facingMode,
+              trackWidth: settings?.width,
+              trackHeight: settings?.height,
+              videoReadyState: video.readyState,
+              videoWidth: video.videoWidth,
+              videoHeight: video.videoHeight,
+            });
+          },
+          onInvalid: (stream, track) => cameraLog('CAMERA STREAM INVALID', {
             cameraSessionId,
             camera: facing,
-            acquisitionMs: Math.round(performance.now() - requestedAt),
             streamActive: stream.active,
             videoTrackExists: Boolean(track),
             trackReadyState: track?.readyState,
-            trackEnabled: track?.enabled,
-            trackMuted: track?.muted,
-            facingMode: settings?.facingMode,
-            trackWidth: settings?.width,
-            trackHeight: settings?.height,
+          }),
+          onAccepted: stream => {
+            streamRef.current = stream;
+            attachedVideoRef.current = video;
+          },
+          onReleased: stream => {
+            // O callback é protegido por identidade para nunca limpar ownership de uma sessão posterior.
+            if (streamRef.current === stream) {
+              streamRef.current = null;
+              if (attachedVideoRef.current === video) attachedVideoRef.current = null;
+            }
+          },
+          onPlayed: () => cameraLog('CAMERA PLAY RESOLVED', {
+            cameraSessionId,
+            camera: facing,
             videoReadyState: video.readyState,
             videoWidth: video.videoWidth,
             videoHeight: video.videoHeight,
-          });
-        },
-        onInvalid: (stream, track) => cameraLog('CAMERA STREAM INVALID', {
-          cameraSessionId,
-          camera: facing,
-          streamActive: stream.active,
-          videoTrackExists: Boolean(track),
-          trackReadyState: track?.readyState,
-        }),
-        onAccepted: stream => {
-          streamRef.current = stream;
-          attachedVideoRef.current = video;
-        },
-        onReleased: stream => {
-          // O callback é protegido por identidade para nunca limpar ownership de uma sessão posterior.
-          if (streamRef.current === stream) {
-            streamRef.current = null;
-            if (attachedVideoRef.current === video) attachedVideoRef.current = null;
-          }
-        },
-        onPlayed: () => cameraLog('CAMERA PLAY RESOLVED', {
-          cameraSessionId,
-          camera: facing,
-          videoReadyState: video.readyState,
-          videoWidth: video.videoWidth,
-          videoHeight: video.videoHeight,
-        }),
-      });
+          }),
+        });
+      };
 
-      if (acquisition.status === 'stale') {
+      let acquisition: CameraAcquisitionResult | null = null;
+      let approvedDeviceId: string | null = null;
+      let lastErrorName = 'CameraStreamInvalidError';
+
+      const errorNameOf = (error: unknown) =>
+        error instanceof DOMException || error instanceof Error ? error.name : 'Error';
+
+      // Percorre as lentes candidatas: a primeira que entregar imagem viva é adotada.
+      const runQueue = async (queue: string[]): Promise<CameraAcquisitionResult | null> => {
+        for (const deviceId of queue) {
+          try {
+            const result = await attempt(getDeviceCameraConstraints(deviceId));
+            approvedDeviceId = deviceId;
+            return result;
+          } catch (error) {
+            const errorName = errorNameOf(error);
+            lastErrorName = errorName;
+            cameraLog('CAMERA LENS REJECTED', {
+              cameraSessionId,
+              lens: deviceId.slice(-6),
+              errorName,
+            });
+            if (!LENS_RETRYABLE_ERRORS.has(errorName)) throw error;
+            if (!isCurrent()) return null;
+          }
+        }
+        return null;
+      };
+
+      if (facing === 'front') {
+        acquisition = await attempt(getCameraConstraints('front'));
+      } else if (forcedDeviceId) {
+        acquisition = await attempt(getDeviceCameraConstraints(forcedDeviceId));
+        approvedDeviceId = forcedDeviceId;
+      } else {
+        const remembered = getApprovedBackLensId();
+        if (remembered) {
+          acquisition = await runQueue([remembered]);
+          if (!acquisition) clearApprovedBackLensId();
+        }
+
+        if (!acquisition) {
+          let lenses = await listCameraLenses();
+          if (lenses.length === 0 || lenses.every(lens => lens.facing === 'unknown' && !lens.label.trim())) {
+            // Sem permissão concedida ainda o navegador esconde labels: uma abertura curta libera a lista.
+            const bootstrap = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+            stopAllMediaStreamTracks(bootstrap);
+            lenses = await listCameraLenses();
+          }
+          if (mountedRef.current) setAvailableLenses(lenses);
+          const queue = buildBackLensQueue(lenses, null).filter(deviceId => deviceId !== remembered);
+          cameraLog('CAMERA LENS SCAN', { cameraSessionId, lensCount: lenses.length, candidateCount: queue.length });
+          acquisition = await runQueue(queue);
+        }
+
+        if (!acquisition && isCurrent()) {
+          // Último recurso: deixar o navegador escolher a lente traseira.
+          try {
+            acquisition = await attempt(getCameraConstraints('back'));
+          } catch (error) {
+            lastErrorName = errorNameOf(error);
+          }
+        }
+
+        if (!acquisition) {
+          const failure = new Error('Nenhuma lente traseira entregou imagem.');
+          failure.name = lastErrorName;
+          throw failure;
+        }
+
+        if (approvedDeviceId) setApprovedBackLensId(approvedDeviceId);
+      }
+
+      if (!acquisition || acquisition.status === 'stale') {
         cameraLog('CAMERA STALE STREAM DISCARDED', { cameraSessionId, camera: facing });
         return;
       }
 
-
-
-
       const stream = acquisition.stream;
+
       cameraLog('CAMERA PREVIEW READY', {
         cameraSessionId,
         camera: facing,
