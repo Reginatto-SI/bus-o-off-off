@@ -888,12 +888,13 @@ export default function DriverValidate() {
 
         if (!acquisition) {
           let lenses = await listCameraLenses();
-          if (lenses.length === 0 || lenses.every(lens => lens.facing === 'unknown' && !lens.label.trim())) {
-            // Sem permissão concedida ainda o navegador esconde labels: uma abertura curta libera a lista.
+          if (lenses.length > 0 && lenses.every(lens => lens.label === 'Câmera sem identificação')) {
+            // Sem permissão concedida ainda o navegador esconde os rótulos: uma abertura curta libera a lista.
             const bootstrap = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
             stopAllMediaStreamTracks(bootstrap);
             lenses = await listCameraLenses();
           }
+
           if (mountedRef.current) setAvailableLenses(lenses);
           const queue = buildBackLensQueue(lenses, null).filter(deviceId => deviceId !== remembered);
           cameraLog('CAMERA LENS SCAN', { cameraSessionId, lensCount: lenses.length, candidateCount: queue.length });
