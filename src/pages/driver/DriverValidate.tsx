@@ -101,14 +101,64 @@ declare global {
 
 export type CameraFacing = 'back' | 'front';
 
-// `ideal` é a forma padrão (MDN/W3C) de pedir uma orientação: o navegador escolhe a lente
-// adequada do aparelho. Não usamos `exact` nem `deviceId` porque isso transfere para o app
-// uma escolha de lente que o navegador faz melhor — e foi justamente essa complexidade
-// (enumerateDevices + fila de lentes) que divergiu da versão funcional do validador.
+// A frontal usa a orientação padrão (`ideal`) porque o navegador acerta a lente.
 export const getCameraConstraints = (facing: CameraFacing): MediaStreamConstraints => ({
   video: { facingMode: { ideal: facing === 'back' ? 'environment' : 'user' } },
   audio: false,
 });
+
+// A traseira é pedida por lente específica: aparelhos com várias lentes traseiras podem
+// entregar uma track já encerrada quando a escolha fica a cargo do navegador.
+export const getDeviceCameraConstraints = (deviceId: string): MediaStreamConstraints => ({
+  video: { deviceId: { exact: deviceId } },
+  audio: false,
+});
+
+export type CameraLens = { deviceId: string; label: string; facing: CameraFacing | 'unknown' };
+
+export const classifyLensLabel = (label: string): CameraFacing | 'unknown' => {
+  if (/back|rear|traseir|environment/i.test(label)) return 'back';
+  if (/front|frontal|user|self/i.test(label)) return 'front';
+  return 'unknown';
+};
+
+// Lista as câmeras do aparelho. Labels só existem após uma permissão concedida; por isso
+// a enumeração acontece depois de a tela já ter conseguido abrir alguma câmera.
+export async function listCameraLenses(
+  enumerateDevices: () => Promise<MediaDeviceInfo[]> = () => navigator.mediaDevices.enumerateDevices(),
+): Promise<CameraLens[]> {
+  const devices = await enumerateDevices();
+  return devices
+    .filter(device => device.kind === 'videoinput' && device.deviceId)
+    .map(device => ({
+      deviceId: device.deviceId,
+      label: device.label || 'Câmera sem identificação',
+      facing: classifyLensLabel(device.label ?? ''),
+    }));
+}
+
+// Ordem de tentativa: lente lembrada, depois as traseiras, depois as não identificadas.
+export function buildBackLensQueue(lenses: CameraLens[], rememberedDeviceId: string | null): string[] {
+  const back = lenses.filter(lens => lens.facing === 'back').map(lens => lens.deviceId);
+  const unknown = lenses.filter(lens => lens.facing === 'unknown').map(lens => lens.deviceId);
+  const ordered = [...back, ...unknown];
+  if (rememberedDeviceId && ordered.includes(rememberedDeviceId)) {
+    return [rememberedDeviceId, ...ordered.filter(id => id !== rememberedDeviceId)];
+  }
+  return rememberedDeviceId ? [rememberedDeviceId, ...ordered] : ordered;
+}
+
+// Erros que significam "esta lente não serve"; qualquer outro interrompe a varredura.
+export const LENS_RETRYABLE_ERRORS = new Set([
+  'CameraStreamInvalidError',
+  'CameraPreviewUnavailableError',
+  'NotReadableError',
+  'OverconstrainedError',
+  'AbortError',
+  'NotFoundError',
+]);
+
+
 
 
 
