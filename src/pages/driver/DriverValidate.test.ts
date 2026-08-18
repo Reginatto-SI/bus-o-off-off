@@ -152,6 +152,7 @@ describe('aquisição real da sessão', () => {
     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: vi.fn(() => pending.promise) } });
     const view = renderValidator();
     fireEvent.click(screen.getByRole('button', { name: /câmera traseira/i }));
+    await waitFor(() => expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalled());
     view.unmount();
 
     const late = createStream('late');
