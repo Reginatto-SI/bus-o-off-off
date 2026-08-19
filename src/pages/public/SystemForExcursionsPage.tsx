@@ -104,15 +104,11 @@ const NAV_LINKS = [
     description: "Coordene grupos grandes com mais controle e organização",
   },
   {
-    title: "Sistema para eventos",
-    href: "/sistema-para-eventos",
-    description: "Venda ingressos e gerencie participantes com facilidade",
+    title: "Como organizar uma excursão",
+    href: "/como-organizar-excursao",
+    description: "Guia prático da organização até o dia da saída",
   },
-  {
-    title: "Sistema para viagens",
-    href: "/sistema-para-viagens",
-    description: "Estruture sua operação com mais profissionalismo",
-  },
+
 ];
 
 const FAQ_ITEMS = [
