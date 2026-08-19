@@ -288,19 +288,14 @@ const LANDING_SCENARIO_LINKS = [
     description: "Organize excursões com vendas e embarque em um só lugar",
   },
   {
-    title: "Sistema para eventos",
-    href: "/sistema-para-eventos",
-    description: "Venda ingressos e gerencie participantes com facilidade",
-  },
-  {
     title: "Sistema para caravanas",
     href: "/sistema-para-caravanas",
     description: "Coordene grupos grandes com mais controle e organização",
   },
   {
-    title: "Sistema para viagens",
-    href: "/sistema-para-viagens",
-    description: "Estruture sua operação com mais profissionalismo",
+    title: "Como organizar uma excursão",
+    href: "/como-organizar-excursao",
+    description: "Guia prático da organização até o dia da saída",
   },
 ];
 // Bloco de indicação: aproveita o programa existente para transformar clientes em canal orgânico de crescimento
