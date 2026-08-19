@@ -71,6 +71,7 @@ import AboutSmartbus from "./pages/public/AboutSmartbus";
 import RepresentativeRegistration from "./pages/public/RepresentativeRegistration";
 import SystemForExcursionsPage from "./pages/public/SystemForExcursionsPage";
 import HowToOrganizeExcursionPage from "./pages/public/HowToOrganizeExcursionPage";
+import SystemForCaravansPage from "./pages/public/SystemForCaravansPage";
 
 import PublicRootRedirect from "./pages/public/PublicRootRedirect";
 import NotFound from "./pages/NotFound";
@@ -141,6 +142,7 @@ const App = () => (
             <Route path="/sobre-smartbus-br" element={<AboutSmartbus />} />
             <Route path="/sistema-para-excursoes" element={<SystemForExcursionsPage />} />
             <Route path="/como-organizar-excursao" element={<HowToOrganizeExcursionPage />} />
+            <Route path="/sistema-para-caravanas" element={<SystemForCaravansPage />} />
             
             {/* Seller Portal (mobile-first, fora do admin) */}
             <Route path="/vendedor/minhas-vendas" element={<SellerDashboard />} />

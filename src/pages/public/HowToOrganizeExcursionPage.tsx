@@ -103,7 +103,7 @@ const CLUSTER_LINKS = [
     title: "Sistema para caravanas",
     href: "/sistema-para-caravanas",
     description: "Explore um cenário próximo para operações em grupo.",
-    available: false,
+    available: true,
   },
 ];
 
