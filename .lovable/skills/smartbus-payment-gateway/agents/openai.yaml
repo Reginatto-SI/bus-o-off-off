@@ -1,4 +1,0 @@
-interface:
-  display_name: "SmartBus Payment Gateway"
-  short_description: "Audita e orienta integrações seguras de gateways no SmartBus"
-  default_prompt: "Use $smartbus-payment-gateway para avaliar ou planejar uma integração de gateway de pagamento no SmartBus antes de alterar código."
