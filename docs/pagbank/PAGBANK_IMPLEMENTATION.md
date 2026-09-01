@@ -1,212 +1,410 @@
-# Implementação PagBank — checkpoint
+# PagBank no SmartBus — checkpoint e auditoria técnica final
 
-## Objetivo
+> Auditoria documental concluída em 2026-09-01, na branch local
+> `feature/pagbank-integration`. Nenhum código funcional, banco, migration, RLS,
+> Edge Function, credencial ou comportamento do Asaas foi alterado.
 
-Adicionar o PagBank como novo gateway de pagamento do SmartBus de forma incremental, preservando o funcionamento atual do Asaas durante a transição e mantendo um único contrato SmartBus para venda, confirmação, tickets, financeiro, ambientes e diagnóstico.
+## 1. Resumo executivo e gate
 
-O objetivo de médio/longo prazo é permitir a migração gradual para o PagBank e, futuramente, suportar outros gateways como Mercado Pago e PayPal sem reconstruir novamente o domínio de pagamentos. Isso não autoriza criar uma arquitetura genérica excessiva nesta fase: a evolução deve continuar mínima, incremental e baseada nos casos comprovados.
+**Resultado:** a criação de Checkout/Payment Link com PIX e cartão é tecnicamente
+plausível, mas a integração **não está liberada para implementação**. A evidência
+disponível não fecha os gates de split, idempotência de criação, autenticação e
+replay de webhook, onboarding de todos os recebedores, estorno e chargeback.
 
-## Estado atual
+## PODE INICIAR IMPLEMENTAÇÃO?
 
-**Decisões de produto concluídas; implementação funcional ainda não iniciada.**
+**NÃO**
 
-A branch persistente `feature/pagbank-integration` existe no GitHub e é a área oficial de desenvolvimento do PagBank. Ela foi criada a partir da `main` atual e, no momento da criação, ambas estavam idênticas no commit `52034416d8f9f32c52b6a06035ac662c811b3a4a`. Desde então, a branch recebeu apenas atualizações documentais deste checkpoint.
+Bloqueios exatos:
 
-Nenhuma credencial, migration, Edge Function, regra financeira ou comportamento de produção foi alterado.
+1. homologar, com contas reais elegíveis, os quatro cenários financeiros
+   SmartBus em PIX e cartão/parcelamento, incluindo arredondamento, rejeição de
+   recebedor, liquidação e consulta do split;
+2. obter contrato/documentação vinculante da PB Integrações sobre idempotência
+   de `POST /orders` e `POST /checkouts`, ou aprovar posteriormente uma estratégia
+   que elimine a janela de timeout pós-criação sem cobrança duplicada;
+3. aprovar autenticação, anti-replay, retries e deduplicação do webhook: o material
+   disponível recomenda apenas segredo curto na URL e consulta posterior;
+4. comprovar onboarding, elegibilidade, rotação/revogação e obtenção de `account.id`
+   para empresa, Marketplace, sócio e representante, por tenant e ambiente;
+5. obter contrato operacional da PB Integrações (papel jurídico/técnico, SLA,
+   suporte, custos, suboperadores, retenção/trânsito de dados e saída/portabilidade);
+6. decidir política SmartBus para chargeback e aprovar o efeito de
+   `charge_transfer.percentage`, estornos total/parcial e valores já liquidados;
+7. validar em sandbox e em piloto de produção que Checkout hospedado aceita split
+   obrigatório; o corpus demonstra split em **Orders**, não no Checkout hospedado;
+8. aprovar, em tarefa de dados/segurança separada, a persistência mínima de gateway,
+   ambiente, credencial usada e IDs externos por venda, sem executar migration aqui.
 
-O bloqueio de persistência remota está resolvido. O próximo gate é técnico: comprovar as capacidades críticas do PagBank antes de iniciar código funcional.
+Contagem da matriz final: **5 `COMPATÍVEL`**, **16 `ADAPTAÇÃO NECESSÁRIA`**,
+**3 `CAPABILITY GAP`**, **4 `DECISÃO AINDA NECESSÁRIA`** e **1 `NÃO APLICÁVEL À
+PRIMEIRA FASE`** (29 responsabilidades).
 
-## Arquitetura atual de pagamentos
+## 2. Método, escopo e qualidade da evidência
 
-- A venda é a âncora multiempresa: checkout persiste `company_id`, método, `payment_environment`, passageiros e locks antes de chamar diretamente `create-asaas-payment`.
-- A Edge Function relê venda/empresa, calcula a regra financeira central, resolve recebedores, cria a cobrança Asaas e persiste campos `asaas_*`. `externalReference = sale.id` correlaciona o fluxo.
-- `asaas-webhook` é a confirmação prioritária; `verify-payment-status` é fallback. Ambos convergem em `_shared/payment-finalization.ts`, que finaliza a venda e cria tickets de modo reentrante. `get-asaas-payment-link` reabre a cobrança existente.
-- Configuração e diagnóstico estão em `/admin/empresa` e `/admin/diagnostico-vendas`. Logs (`sale_logs`, `sale_integration_logs`), dedup Asaas e reconciliação já existem, mas parte da terminologia/modelagem é específica do provedor.
-- Conceitos reutilizáveis: venda, passageiros, locks, tickets, ambiente central, engine de taxa, snapshot, ledger de comissão, finalização, reconciliação e parte da observabilidade.
-- Acoplamentos atuais: componentes `Asaas*`, chamadas de função, resolvedor de credenciais, campos `asaas_*`, status/link, split e dedup.
+Foram cruzados o código e migrations atuais, as referências obrigatórias das duas
+Skills, exemplos instalados e URLs oficiais nelas indicadas. Em 2026-09-01, o
+ambiente recebeu HTTP 403 ao tentar acessar diretamente páginas do PagBank e da
+PB Integrações; portanto, conteúdo não presente no repositório não foi tratado
+como confirmado. A Skill é material técnico útil, mas não é contrato nem fotografia
+infalível do provedor.
 
-Detalhes e fontes de verdade: `AGENTS.md`, Skill `smartbus-payment-gateway`, Skill `pagbank-connect`, respectivas referências e código atual.
+Hierarquia usada:
 
-## Análise de viabilidade
+1. regra aprovada/normativa SmartBus;
+2. código real para descrever o Asaas atual;
+3. documentação oficial PagBank referenciada pela Skill;
+4. documentação/Skill da PB Integrações para comportamento específico da camada;
+5. hipótese, sempre marcada como pendente.
 
-**Viável de forma incremental, condicionada à validação dos capability gaps técnicos.**
+Fontes externas registradas para revalidação humana:
 
-A Skill PagBank Connect informa suporte a Connect Key, Orders, Payment Link, Pix, cartão, boleto, sandbox, webhooks e split por valores fixos. Isso cobre os blocos básicos necessários, mas ainda não comprova equivalência operacional/financeira completa com o contrato atual do SmartBus.
+- PagBank: [Checkout](https://developer.pagbank.com.br/docs/checkout),
+  [Orders](https://developer.pagbank.com.br/reference/criar-pedido),
+  [split](https://developer.pagbank.com.br/reference/divisao-de-pagamento) e
+  [taxas/parcelas](https://developer.pagbank.com.br/reference/calcular-taxas);
+- PB Integrações: [site](https://pbintegracoes.com/),
+  [termos](https://pbintegracoes.com/terms/),
+  [autorização](https://pbintegracoes.com/connect/autorizar/) e
+  [suporte](https://ajuda.pbintegracoes.com/hc/pt-br/requests/new).
 
-| Responsabilidade SmartBus | Asaas atual | PagBank confirmado nas referências | Avaliação |
+## 3. Natureza da PagBank Connect / PB Integrações
+
+**Classificação: `DECISÃO AINDA NECESSÁRIA`.**
+
+- Não é integração direta: o SmartBus enviaria Bearer Connect Key, dados do
+  comprador, itens, valores, recebedores, cartão criptografado/3DS e URLs de
+  notificação a `https://ws.pbintegracoes.com/pspro/v7/`; a camada então acessa
+  recursos PagBank. Endpoints `connectInfo`, `accountId` e a própria Connect Key
+  são específicos da intermediária.
+- A afirmação “parceiro oficial desde 2014” e “gratuita” consta da Skill fornecida,
+  mas não pôde ser validada contra contrato/termos nesta sessão. “Gratuita” não
+  prova ausência de tarifas PagBank, mudança futura de preço ou custo de suporte.
+- Dependências adicionais: disponibilidade, segurança, política de dados,
+  compatibilidade de payload, renovação da autorização, suporte e continuidade
+  da PB Integrações. A mesma key que cria deve consultar, elevando lock-in
+  operacional e exigindo guardar a versão efetiva da credencial.
+- O tráfego inclui dados pessoais e financeiros. PAN não deve trafegar em claro;
+  cartão é criptografado com public key e 3DS ocorre no browser, mas metadados da
+  compra e identificadores passam pela intermediária.
+- Sandbox e produção usam Connect Keys distintas no mesmo host intermediário.
+  Pedidos sandbox não aparecem no painel PagBank e a consulta de split sandbox
+  documentada troca para host interno PagBank sem Bearer — diferença relevante
+  para diagnóstico e evidência de paridade.
+- É possível modelar várias keys por empresa/ambiente, mas a recomendação simples
+  de uma única variável `PAGBANK_CONNECT_KEY` **não serve** ao SmartBus multiempresa.
+- Alternativa a comparar: API oficial PagBank direta, com credenciais/autorização
+  e contrato marketplace oficiais. Não escolher uma das abordagens antes de obter
+  respostas contratuais, SLA e homologação financeira equivalentes.
+
+Conclusão: **adequação ainda não comprovada**. A camada reduz trabalho de conexão,
+mas acrescenta terceiro crítico, lock-in da key e pontos cegos incompatíveis com
+liberação financeira imediata.
+
+## 4. Produtos: Payment Link, Checkout e Orders
+
+**Classificação geral: `ADAPTAÇÃO NECESSÁRIA`.**
+
+- **Checkout** é o recurso hospedado criado por `POST connect/ws/checkouts`; sua
+  resposta tem `CHEC_...` e link `rel=PAY`. Aceita `CREDIT_CARD` e `PIX`, URL de
+  retorno, uma notification URL de até 100 caracteres, expiração opcional,
+  ativação/inativação, consulta e configuração de parcelas.
+- **Payment Link** é a experiência/URL `PAY` produzida pelo Checkout, não um quarto
+  contrato independente no material analisado.
+- **Orders** (`ORDE_...`) é a API de pedido/cobrança usada para PIX direto, cartão
+  criptografado e split em `charges[].splits` ou `qr_codes[].splits`. Checkout pode
+  listar `orders[]` posteriormente, mas isso não torna os payloads equivalentes.
+- A primeira fase aprovada pede checkout hospedado. A evidência de split instalada
+  demonstra Orders, não split dentro de `POST /checkouts`. Trocar silenciosamente
+  para cartão/PIX direto violaria a decisão de escopo. Esse conflito é bloqueante.
+- Correlação por `reference_id`, consulta por ID e recuperação pelo ID persistido
+  são possíveis. Não há prova de busca/listagem por `reference_id` nem de sua
+  unicidade; ele não resolve sozinho timeout pós-criação.
+
+## 5. Split financeiro — gate crítico
+
+**Classificação: `CAPABILITY GAP` até homologação.**
+
+O SmartBus calcula valores fixos em centavos para preservar taxa, mínimo, teto,
+Marketplace, sócio global, representante, snapshot e ledger. Orders documenta
+split `FIXED`, múltiplos `receivers`, `account.id`, valor por recebedor e consulta
+posterior por `SPLI_...`. Conceitualmente isso pode representar empresa + até três
+destinos. Contudo, não há prova de produção de que:
+
+- quatro recebedores são aceitos para a mesma cobrança e todos são elegíveis;
+- o Checkout hospedado da primeira fase carrega o split;
+- PIX e cartão parcelado preservam exatamente os valores, arredondamento e taxa;
+- limites/mínimos, prazo de liquidação e reação a recebedor inexistente/inválido
+  atendem aos quatro cenários oficiais;
+- todos os destinatários conseguem `ACCO_...` nos dois ambientes;
+- consulta sandbox pelo host `internal.sandbox.api.pagseguro.com`, sem Bearer, é
+  aceitável para segurança, rastreabilidade e paridade operacional.
+
+O payload exige que a soma dos recebedores seja igual ao cobrado. Isso sugere que
+a empresa vendedora também deve aparecer como recebedora, diferentemente do Asaas,
+onde o não dividido permanece na conta emissora. `PRIMARY`, `SECONDARY`, `liable`,
+custódia e `charge_transfer.percentage` não são equivalentes automáticos a wallet
+ou às regras SmartBus.
+
+### Casos obrigatórios a homologar sem alterar a regra
+
+| Sócio elegível | Representante elegível | Destino da taxa SmartBus | Resultado PagBank |
 |---|---|---|---|
-| Credencial e isolamento | Campos Asaas por tenant | Connect Key; `connectInfo` valida a key e informa sandbox | Capacidade presente; desenho SmartBus ainda precisa ser validado |
-| Criar/correlacionar/consultar | Cobrança + `externalReference` | Orders/Checkouts + `reference_id` e consulta | Compatível em princípio; idempotência precisa ser comprovada |
-| Primeira experiência PagBank | Checkout hospedado Asaas | Payment Link disponível | **Produto decidiu começar por Payment Link** |
-| Métodos do primeiro escopo | Meios atuais Asaas | Pix e cartão disponíveis | **Produto decidiu Pix + cartão** |
-| Confirmação | webhook + verify | notificação + consulta | Parcial; autenticação/replay/dedup precisam de desenho comprovado |
-| Split SmartBus | wallets e cenários oficiais | `splits.receivers` com `account.id` e valor fixo | Potencialmente compatível; equivalência dos recebedores é gate de produção |
-| Sandbox/produção | decisão SmartBus + credenciais isoladas | Connect Key identifica tipo | Pode validar coerência, mas não substitui a fonte de verdade SmartBus |
-| Diagnóstico/reconciliação | estruturas existentes, parte Asaas | consulta de order/split | Reutilizável após adicionar dimensão gateway |
-| Estorno/chargeback | regra SmartBus parcial | comportamento ainda não comprovado para nosso modelo | **CAPABILITY GAP técnico** |
+| sim | sim | Marketplace 1/3; sócio 1/3; representante 1/3 | Não comprovado |
+| sim | não | Marketplace 1/2; sócio 1/2 | Não comprovado |
+| não | sim | Marketplace 2/3; representante 1/3 | Não comprovado |
+| não | não | Marketplace 100% | Não comprovado |
 
-## Decisões de produto confirmadas
+Em todos, o saldo comercial da passagem pertence à empresa. Ausência comprovada
+de sócio/representante aplica a regra SmartBus; erro/ambiguidade do provedor não
+pode ser tratado como ausência. Nenhuma liberação para produção antes dos testes.
 
-### Modelo de coexistência
+## 6. Onboarding, recebedores e credenciais
 
-- O SmartBus passará a trabalhar com múltiplos gateways durante a transição.
-- Asaas não será removido agora e deve continuar funcionando sem regressões.
-- Existe intenção de descontinuar o Asaas futuramente, mas somente após migração segura e validação suficiente dos novos gateways.
-- Cada empresa terá **um gateway ativo por vez** para novas vendas.
-- Não haverá fallback automático entre gateways. Se o gateway escolhido estiver indisponível, o sistema não deve criar silenciosamente uma nova cobrança em outro provedor.
-- A arquitetura deve permitir evolução futura para outros gateways, incluindo Mercado Pago e PayPal, sem antecipar uma plataforma genérica de plugins desnecessária.
+**Onboarding: `CAPABILITY GAP`. Credenciais: `ADAPTAÇÃO NECESSÁRIA`.**
 
-### Empresas atuais e empresas novas
+- Produção oferece uma URL PB Integrações de “autorizar”; sandbox oferece outra.
+  O corpus não documenta callback seguro, `state`, vínculo do tenant, criação de
+  conta, escopos, consentimento, revogação programática ou retorno automático ao
+  SmartBus. Portanto, onboarding guiado end-to-end não está comprovado.
+- Alternativa comprovada apenas em nível básico: obter Connect Key fora do sistema,
+  inseri-la manualmente no backend e validar com `GET connect/connectInfo`.
+  `VALID`, `INVALID`, `UNKNOWN`, `UNAUTHORIZED`, `isSandbox`, `accountId` e e-mail
+  mascarado ajudam validação. `expiresAt` e renovação automática são descritos,
+  mas rotação/revogação e histórico precisam de contrato.
+- `GET connect/accountId?email=...` ou `connectInfo.accountId` obtêm identificador,
+  mas não provam elegibilidade para receber split. E-mail não deve ser usado como
+  prova de ownership.
+- Empresa, Marketplace, sócio e representante precisam de autorização e
+  `account.id` próprios por ambiente. Nenhum deles pode completar dados do ambiente
+  oposto.
+- Desenho seguro posterior: cofre backend por `company_id + gateway + environment
+  + credential_version`; envelope encryption/KMS; acesso service-role mínimo;
+  nunca frontend/log; auditoria de autor, validação, rotação e revogação. A venda
+  deve guardar referência não secreta da versão usada, pois a mesma key cria e
+  consulta o recurso.
+- `isSandbox` valida coerência, mas `sales.payment_environment` continua sendo a
+  fonte SmartBus. Divergência deve falhar fechada, nunca trocar ambiente.
 
-- Empresas que já usam Asaas permanecem no Asaas até que a troca seja feita explicitamente.
-- Nenhuma empresa existente será migrada automaticamente para PagBank.
-- Para novas empresas, o onboarding deverá apresentar escolha de gateway, com **PagBank recomendado/destacado**, sem impedir a escolha de outro gateway disponível.
-- Quando o PagBank estiver homologado, ele poderá ficar disponível para todas as empresas, mas cada empresa deverá configurar/ativar individualmente sua integração.
+## 7. Webhook e fallback
 
-### Permissões e troca de gateway
+**Classificação: `CAPABILITY GAP` para segurança; consulta fallback é compatível.**
 
-- Administrador da própria empresa e administrador SmartBus poderão alterar o gateway, sujeitos às validações e proteções que a implementação definir.
-- A troca de gateway afeta somente novas vendas.
-- Cada venda deve continuar vinculada ao gateway em que nasceu, inclusive se estiver pendente no momento em que a empresa trocar o gateway.
-- Uma cobrança antiga Asaas nunca deve ser recriada automaticamente no PagBank apenas porque a empresa mudou de gateway.
+O material informa POST do pedido atualizado na única `notification_urls`,
+correlação por `reference_id`/`ORDE_...`, resposta rápida 200 e consulta ativa com
+a mesma key. Não documenta assinatura criptográfica do corpo, header autenticado,
+timestamp/nonce, política de retries, backoff, timeout, ordenação ou garantia de
+event ID. Recomenda hash/token na própria URL, limitada a 100 caracteres.
 
-### Primeira versão PagBank
+Logo, é possível preservar **“webhook prioritário + consulta como fallback”**, mas
+somente após desenho aprovado:
 
-- A primeira versão deve priorizar **Payment Link** como caminho mais simples e seguro.
-- Métodos do primeiro escopo: **Pix + cartão**.
-- Evolução posterior para pagamentos mais integrados/diretos pode ser avaliada depois da primeira homologação.
-- Venda manual administrativa fica fora da primeira fase e poderá ser incorporada em etapa posterior.
+1. rota curta e segredo por tenant/ambiente, armazenado apenas no backend;
+2. correlação do ID externo com venda, gateway, tenant e ambiente persistidos;
+3. consulta autenticada do recurso antes de qualquer transição financeira;
+4. validação de valor/moeda/reference/status e transição monotônica;
+5. dedup por hash canônico/ID externo+status+timestamp local enquanto não houver ID
+   de evento confiável, com tolerância a duplicados, atraso e fora de ordem;
+6. convergência em `finalizeConfirmedPayment`, sem segundo emissor de tickets.
 
-### Configuração e onboarding
+Esse desenho reduz spoof/replay, mas não substitui autenticação nativa comprovada;
+por isso continua bloqueado para implementação.
 
-- A configuração deve permanecer na área de pagamentos da empresa, preferencialmente com representação clara dos gateways disponíveis, sem criar uma área paralela desconectada.
-- O objetivo de UX é, se o PagBank permitir, oferecer fluxo guiado para o usuário criar/autorizar/conectar sua conta pelo SmartBus.
-- Também deve existir opção de inserir/configurar a credencial manualmente, de forma semelhante ao fluxo disponível hoje para Asaas.
-- A viabilidade exata de criação/autorização de conta pelo SmartBus ainda precisa ser comprovada tecnicamente na documentação/API PagBank.
+## 8. Idempotência de criação
 
-### Sandbox e Produção
+**Classificação: `CAPABILITY GAP`.**
 
-- Sandbox e Produção devem possuir a mesma lógica e a mesma experiência funcional.
-- Mudam apenas credenciais, endpoints/dados externos e contexto operacional necessário.
-- Nunca misturar pagamentos, webhooks, status, logs ou credenciais entre ambientes.
-- O ambiente efetivamente usado por uma venda deve permanecer rastreável durante todo o ciclo daquela venda.
+No corpus não há header/chave nativa de idempotência, garantia de unicidade de
+`reference_id`, busca por referência nem semântica de retry. Consulta exige ID,
+que pode não chegar após timeout. Trava local evita cliques concorrentes antes da
+requisição, mas não prova se o primeiro POST criou a cobrança. Retentar o POST pode
+duplicar; não retentar pode abandonar uma cobrança real.
 
-### Regras financeiras
+Antes do código, o provedor deve confirmar por escrito chave idempotente, janela,
+replay da mesma resposta, escopo e consulta por referência, ou Produto/Financeiro/
+Segurança devem aprovar outra estratégia comprovadamente segura. `reference_id =
+sale.id` é correlação, não idempotência sem garantia contratual.
 
-- Taxa, mínimo, teto, divisão Marketplace/Sócio/Representante, snapshot, ledger e demais regras financeiras continuam sendo responsabilidades do SmartBus e não mudam por causa do gateway.
-- O PagBank só pode entrar em produção quando for comprovado que o modelo financeiro obrigatório pode ser atendido com segurança.
-- Se o split PagBank não conseguir reproduzir os recebedores e cenários obrigatórios do SmartBus, **não liberar PagBank em produção até resolver a lacuna**.
+## 9. Gateway de origem e evolução mínima de dados (sem migration)
 
-### Cancelamento, desistência e estorno comercial
+Hoje `sales` congela `payment_environment`, mas usa `asaas_payment_id`,
+`asaas_payment_status` e URLs/diagnóstico específicos. Vendas manuais possuem fluxo
+separado de taxa; permanecem fora da primeira fase.
 
-- Após uma venda efetivamente paga, a taxa SmartBus é considerada ganha no ato da venda.
-- Cancelamento, desistência ou devolução negociada entre passageiro e empresa anunciante é responsabilidade da empresa e do passageiro.
-- O SmartBus não deve devolver automaticamente sua taxa em razão dessa negociação.
-- Essa regra comercial não substitui o estudo técnico de eventos compulsórios do gateway, como chargeback, que podem produzir impacto financeiro independente da vontade do SmartBus.
+Alternativas avaliadas:
 
-### Chargeback
+1. **Adicionar colunas PagBank paralelas:** menor alteração imediata, mas duplica
+   lógica e não fixa a ausência de gateway de origem. Não recomendada.
+2. **Colunas mínimas na venda:** `payment_gateway`, `payment_external_id`,
+   `payment_external_status`, `payment_external_url` e referência da credencial,
+   mantendo `asaas_*` legados. É a menor evolução segura para novas vendas; vendas
+   existentes com `asaas_payment_id` teriam origem Asaas em backfill explícito e
+   revisado, nunca inferência runtime silenciosa.
+3. **Tabela de cobranças:** melhor histórico de tentativas e múltiplos IDs, porém
+   maior escopo. Só se a modelagem de retry/reconciliação exigir múltiplos recursos.
 
-- Ainda não existe nova regra automática SmartBus aprovada para chargeback.
-- Primeiro deve ser comprovado como o PagBank trata chargeback, inclusive seu efeito sobre split e recebedores.
-- Até essa análise, não criar dívida, compensação, cobrança automática contra a empresa nem outra regra financeira presumida.
+**Recomendação para decisão futura:** opção 2, com constraint de gateway/ambiente e
+imutabilidade após criação externa; considerar tabela somente se o contrato de
+idempotência exigir. Logs/dedup recebem dimensão `provider`, mas estruturas Asaas
+permanecem até migração controlada. Nenhuma alteração de schema foi feita.
 
-## Alinhamento normativo pendente
+## 10. Matriz de status PagBank → SmartBus
 
-As Diretrizes Oficiais atuais ainda registram o Asaas como gateway oficial. Essa redação ficou desatualizada em relação às decisões de produto acima.
+Mapeamento conservador; preservar status externo bruto. Os exemplos instalados
+comprovam principalmente `PAID`, `WAITING` e recusas em charges/QR codes. Estados
+sem contrato completo ficam sem transição automática.
 
-Antes da implementação funcional avançar para uma arquitetura multigateway definitiva, deverá existir uma tarefa própria para alinhar as Diretrizes Oficiais, preservando o histórico e registrando formalmente o novo modelo.
+| Evento/status PagBank | Significado | Estado SmartBus | Ação SmartBus |
+|---|---|---|---|
+| Checkout `ACTIVE` / Order criado | recurso criado, não pago | `reservado`/pendente atual | guardar ID/link; não emitir ticket |
+| Charge/QR `WAITING` ou pendente/new | aguardando comprador/compensação | `reservado`/pendente | manter locks dentro da política; consultar |
+| Charge `PAID` | pagamento confirmado | `pago` | validar consulta, valor, tenant e ambiente; finalização comum |
+| `DECLINED` (bank/PagBank) | cartão recusado | não pago | guardar motivo sanitizado; permitir ação segura sem recriar às cegas |
+| expiração do Checkout/QR | prazo encerrado | `cancelado` somente se regra atual autorizar | liberar locks de forma idempotente; não emitir ticket |
+| Checkout `INACTIVE` | link inativado | sem transição automática | registrar; distinguir de pagamento cancelado |
+| `CANCELED`/cancelamento pré-pago | cobrança cancelada | `cancelado` se confirmado | validar estado externo e liberar locks |
+| refund total | valor devolvido após pago | fluxo de reversão atual | invalidar operacionalmente conforme regra existente; não prometer split |
+| refund parcial | devolução parcial | sem novo estado automático | incidente/revisão manual; política pendente |
+| chargeback/dispute | contestação compulsória | sem novo estado final automático | marcar risco/incidente; bloquear decisão até política |
+| status desconhecido/futuro | sem semântica aprovada | manter estado | log bruto, consulta e alerta; nunca marcar pago |
 
-Isso é uma pendência documental/normativa; as decisões de produto desta seção já estão confirmadas.
+## 11. Chargeback, cancelamento e estorno
 
-## Pontos técnicos ainda pendentes
+### Chargeback — `DECISÃO AINDA NECESSÁRIA`
 
-Estes pontos devem ser investigados pelo Codex com as duas Skills e evidência atual antes de implementar:
+Split aceita configuração `charge_transfer.percentage` por recebedor e `liable`,
+o que prova configurabilidade, não o efeito operacional completo. Não foi
+confirmado como a disputa nasce, eventos/status, reserva, contestação, débito após
+liquidação, saldo negativo, efeito sobre Marketplace ou diferenças PIX/cartão.
+PIX normalmente não deve ser presumido como chargeback de cartão, mas fraude ou
+devolução não autorizam concluir “risco zero”.
 
-1. **Split:** comprovar como Marketplace, sócio global e representante serão identificados no PagBank (`account.id` ou equivalente) e se os quatro cenários financeiros oficiais do SmartBus funcionam em sandbox e produção.
-2. **Onboarding PagBank:** comprovar se é possível criar/autorizar/conectar conta pelo SmartBus e qual fluxo oficial permite isso; validar também a configuração manual de credencial.
-3. **Credenciais:** definir armazenamento seguro por empresa e ambiente, autorização, rotação, auditoria e acesso mínimo às Connect Keys.
-4. **Webhook:** comprovar autenticação, proteção contra replay, correlação, deduplicação e forma segura de validação.
-5. **Idempotência:** comprovar garantia do endpoint escolhido e definir estratégia de timeout/retry sem duplicar cobrança.
-6. **Estados:** mapear estados PagBank para estados SmartBus sem alterar o contrato de venda/ticket.
-7. **Chargeback/reversões:** comprovar comportamento real do PagBank e impacto sobre split/recebedores antes de propor regra SmartBus.
-8. **Payment Link Pix + cartão:** confirmar fluxo ponta a ponta, retorno, consulta e confirmação para o primeiro escopo aprovado.
-9. **Persistência do gateway de origem:** propor a menor evolução de dados necessária para rastrear gateway/ambiente/IDs externos por venda sem quebrar registros Asaas existentes.
-10. **Regressão Asaas:** definir testes de caracterização antes de generalizar seams atualmente específicos do Asaas.
+Alternativas a decidir após resposta formal: Marketplace absorver, secundário
+absorver, rateio proporcional, custódia/reserva, ou bloqueio do meio/cenário. Cada
+uma muda risco financeiro e não será escolhida nesta auditoria.
 
-## Etapas planejadas
+### Cancelamento/estorno — `DECISÃO AINDA NECESSÁRIA`
 
-- [x] Preparar roteador no `AGENTS.md`, checkpoint e análise inicial.
-- [x] Criar e publicar `feature/pagbank-integration` no GitHub a partir da `main` atual.
-- [x] Fechar decisões de produto sobre coexistência, seleção, rollout, primeiro escopo e regras financeiras.
-- [ ] Alinhar as Diretrizes Oficiais ao modelo multigateway aprovado em tarefa própria.
-- [ ] Executar segunda análise técnica focada nos capability gaps acima e fechar a matriz de capacidades com evidência atual.
-- [ ] Revisar a análise técnica e obter decisão humana apenas onde permanecer verdadeiro bloqueio de produto/financeiro/segurança.
-- [ ] Criar testes de caracterização do Asaas e especificar o contrato mínimo dos seams que serão generalizados.
-- [ ] Propor alternativas mínimas de dados/RLS/secrets e revisar antes de qualquer migration.
-- [ ] Generalizar incrementalmente roteamento backend, observabilidade/dedup e telas existentes, mantendo Asaas coberto.
-- [ ] Implementar PagBank Payment Link com Pix + cartão.
-- [ ] Implementar webhook/verify/finalização PagBank convergindo para o fluxo SmartBus existente.
-- [ ] Validar sandbox: tenant, ambiente, split/ledger, tickets, diagnóstico, idempotência e regressão Asaas.
-- [ ] Homologar PagBank e disponibilizar para as empresas sem migração automática das empresas Asaas existentes.
-- [ ] Planejar produção e futura migração gradual do Asaas somente após evidências suficientes.
+A consulta de split expõe `amount.refunded`, inclusive por recebedor, evidenciando
+que refund pode alcançar parcelas distribuídas. Não há prova suficiente de como
+refund parcial/total é rateado nem se é possível preservar automaticamente a taxa
+SmartBus. Assim, nenhuma operação automática deve ser liberada. A regra aprovada
+permanece: desistência voluntária não devolve automaticamente a taxa; chargeback
+compulsório é análise separada.
 
-## Concluído
+## 12. Sandbox versus produção
 
-- Skills obrigatórias instaladas e consultadas.
-- Arquitetura e acoplamentos atuais mapeados em nível inicial.
-- Branch persistente preparada.
-- Sistema de checkpoint/continuidade preparado.
-- Decisões de produto da primeira fase concluídas.
-- Nenhuma implementação funcional ou migration aplicada.
+**Classificação: `ADAPTAÇÃO NECESSÁRIA`.**
 
-## Em andamento
+| Tema | Sandbox | Produção | Consequência |
+|---|---|---|---|
+| Base Connect | mesmo `ws.pbintegracoes.com/pspro/v7/` | mesma | key decide na camada; SmartBus continua decidindo antes |
+| Credencial | prefixo `CONSANDBOX`, `isSandbox=true` | Connect Key produção | guardar por tenant/ambiente e validar divergência |
+| Painel | pedidos/checkouts não aparecem | podem aparecer | sandbox exige diagnóstico API próprio |
+| Orders/Checkout | endpoints equivalentes no corpus | equivalentes | paridade funcional ainda requer teste |
+| Split GET | host interno PagBank, sem Bearer | proxy Connect, com Bearer | assimetria operacional e de segurança |
+| Webhook | notificações a testar | notificações a homologar | retries/assinatura não comprovados em nenhum |
 
-Preparação para a **segunda análise técnica de capacidade do PagBank**. Não iniciar ainda implementação funcional enquanto os gaps críticos de split, webhook, idempotência, onboarding e chargeback não estiverem suficientemente comprovados.
+Não existe fallback cruzado. Venda histórica usa seu ambiente e sua versão de
+credencial. O sandbox não é prova suficiente de painel, liquidação, chargeback,
+SLA ou comportamento de split em produção.
 
-## Próximo passo
+## 13. Auditoria do Asaas atual
 
-Solicitar ao Codex, trabalhando exclusivamente em `feature/pagbank-integration`, uma investigação técnica focada nos pontos pendentes deste checkpoint.
+| Componente atual | Responsabilidade | Específico Asaas? | Pode ser reutilizado? | Risco de alterar |
+|---|---|---:|---:|---|
+| `Checkout.tsx` | venda, passageiros, locks, ambiente e invocação | Parcial | sim, até o seam de criação | alto |
+| `create-asaas-payment` | relê contexto, taxa, split, cria e persiste | sim no adapter; regras centrais não | engines/resolvers sim | crítico |
+| `payment-context-resolver.ts` | tenant, ambiente, credenciais Asaas | parcial | conceito sim, implementação por provider | alto |
+| `platform-fee-engine.ts` | taxa/mínimo/teto/distribuição | não | integralmente | crítico; não mudar fórmula |
+| `split-recipients-resolver.ts` | sócio/representante e wallets | parcial | elegibilidade sim; IDs não | crítico |
+| `asaas-split-continuity.ts` | payload/fallback específico | sim | não para PagBank | crítico |
+| `asaas-webhook` | autenticação, dedup, estados, reversão | sim na entrada | somente seam para finalização/log | crítico |
+| `verify-payment-status` | consulta fallback | sim | padrão, com adapter | alto |
+| `payment-finalization.ts` | convergência, locks e tickets | pouco; ainda lê campos Asaas | sim após mudança mínima | crítico |
+| `get-asaas-payment-link` | recuperar cobrança/link | sim | padrão por provider | médio/alto |
+| `reconcile-sale-payment` | pago sem ticket | parcial | sim, preservando guards | crítico |
+| `Company.tsx`/wizard | configuração/onboarding | sim | layout/área sim | alto |
+| `SalesDiagnostic.tsx`/observabilidade | suporte, logs, divergências | fortemente | estrutura com `provider` sim | alto |
+| `sales` e dedup/logs | âncora, ambiente, IDs e eventos | parcial/forte | venda/log genérico parcialmente | crítico |
 
-A tarefa deve consultar obrigatoriamente:
+Não tocar inicialmente na engine financeira, resolução normativa, finalização de
+tickets, fluxo de venda manual ou tratamento Asaas. Seams incrementais: escolha do
+provider na empresa; gateway congelado na venda; factory de criação/consulta/link;
+entrada de webhook por provider convergindo na finalização; dimensões provider em
+logs e diagnóstico. Isso permite futuro Mercado Pago/PayPal sem plugin framework.
 
-- `.agents/skills/smartbus-payment-gateway/SKILL.md`;
-- `.agents/skills/pagbank-connect/SKILL.md`;
-- referências aplicáveis das duas Skills;
-- código atual do SmartBus.
+## 14. Matriz final de capacidades
 
-O resultado esperado é uma matriz final de capacidades e gaps, sem implementação funcional nesta etapa.
+| Responsabilidade SmartBus | Asaas atual | PagBank comprovado | Classificação | Adaptação necessária | Evidência | Bloqueio |
+|---|---|---|---|---|---|---|
+| Configuração | `/admin/empresa`, por ambiente | valida Connect Key | ADAPTAÇÃO NECESSÁRIA | seletor e configuração por provider | `connectInfo`; código Company | não |
+| Ambiente | congelado na venda | `isSandbox`, keys separadas | ADAPTAÇÃO NECESSÁRIA | SmartBus governa; validar key | refs 01/02; resolver atual | não |
+| Onboarding | cria/vincula subconta | URL de autorização, fluxo incompleto | CAPABILITY GAP | callback/state/revogação/contas | refs 01/official-links | **sim** |
+| Credenciais | tenant+ambiente no backend | Bearer Connect Key | ADAPTAÇÃO NECESSÁRIA | cofre/versionamento 4 dimensões | refs 01/09 | não isoladamente |
+| Payment Link | invoice hospedada | Checkout `rel=PAY` | COMPATÍVEL | adapter e persistência | ref 10 | não isoladamente |
+| PIX | invoice Asaas | Checkout/Orders | COMPATÍVEL | homologar produto com split | refs 04/10 | split |
+| Cartão | invoice Asaas | Checkout/Orders e parcelas | COMPATÍVEL | manter hospedado na fase 1 | refs 05/10/12 | split |
+| Split | wallets/valores fixos | Orders `FIXED`/`account.id` | CAPABILITY GAP | homologar 4 cenários/meios | ref 15 | **sim** |
+| Marketplace | wallet plataforma | receiver PRIMARY possível | ADAPTAÇÃO NECESSÁRIA | validar conta/liability | ref 15 | split |
+| Sócio | global, wallet por ambiente | receiver adicional possível | ADAPTAÇÃO NECESSÁRIA | onboarding/elegibilidade | ref 15; regra financeira | split |
+| Representante | vínculo empresa + wallet | receiver adicional possível | ADAPTAÇÃO NECESSÁRIA | onboarding/elegibilidade | ref 15; resolver atual | split |
+| Criação | POST Asaas após venda | POST Order/Checkout 201 | COMPATÍVEL | adapter; não trocar produto | refs 04/10 | idempotência |
+| Correlação | `externalReference=sale.id` | `reference_id` | ADAPTAÇÃO NECESSÁRIA | persistir IDs e validar retorno | exemplos | não isoladamente |
+| Consulta | por ID/ref Asaas | por ID com mesma key | COMPATÍVEL | resolver credencial original | refs 01/10 | não |
+| Idempotência | guard local + busca por referência | garantia ausente | CAPABILITY GAP | contrato/estratégia aprovada | ausência no corpus | **sim** |
+| Webhook | token por ambiente | POST sem assinatura comprovada | ADAPTAÇÃO NECESSÁRIA | segredo+consulta+anti-replay | ref 07 | **sim** |
+| Deduplicação | event ID/tabela própria | event ID não comprovado | ADAPTAÇÃO NECESSÁRIA | chave canônica/provider | ref 07; webhook atual | não isoladamente |
+| Confirmação | finalização comum | status pago + consulta | ADAPTAÇÃO NECESSÁRIA | validar e convergir no helper | notificações; finalizer | não |
+| Fallback | verify consulta Asaas | GET Order/Checkout | ADAPTAÇÃO NECESSÁRIA | adapter e mesma key | refs 01/07/10 | não |
+| Tickets | finalizer idempotente | gateway não emite ticket | ADAPTAÇÃO NECESSÁRIA | remover dependência Asaas mínima | finalizer atual | regressão |
+| Status | mapa Asaas conservador | alguns estados/exemplos | ADAPTAÇÃO NECESSÁRIA | mapa explícito/bruto | exemplos notifications | não |
+| Cancelamento | fluxo conservador | inativar checkout/cancelar a confirmar | DECISÃO AINDA NECESSÁRIA | contrato e política | ref 10 | **sim** pós-pago |
+| Estorno | reversão sem refund automático | split expõe `refunded` | DECISÃO AINDA NECESSÁRIA | validar rateio/preservação taxa | ref 15 | **sim** |
+| Chargeback | eventos de risco | configuração no split, efeitos incertos | DECISÃO AINDA NECESSÁRIA | política/liability/custódia | ref 15 | **sim** |
+| Diagnóstico | UI/logs fortemente Asaas | consulta por IDs | ADAPTAÇÃO NECESSÁRIA | provider, key version, status bruto | diagnóstico atual | não |
+| Reconciliação | repair controlado | consulta disponível | ADAPTAÇÃO NECESSÁRIA | adapter e guards comuns | GET order/checkout | não |
+| Multiempresa | contexto por sale/company | várias keys tecnicamente possíveis | ADAPTAÇÃO NECESSÁRIA | cofre, ownership, rate limit/SLA | Connect Key | segurança |
+| Venda manual | taxa em checkout separado | não auditada | NÃO APLICÁVEL À PRIMEIRA FASE | nenhuma agora | decisão aprovada | não |
+| Natureza/SLA Connect | Asaas direto | intermediária sem contrato auditado | DECISÃO AINDA NECESSÁRIA | due diligence/alternativa direta | host/termos indisponíveis | **sim** |
 
-## Testes e validações
+## 15. Riscos de regressão Asaas e arquitetura futura
 
-- Inspeção estática inicial de branch, Skills, rotas, Edge Functions, shared helpers, migrations e chamadas diretas Asaas: concluída.
-- `git diff --check`: aprovado na preparação anterior.
-- `npm test -- --runInBand`: não executou porque as dependências locais não estavam instaladas (`vitest: not found`); `--runInBand` não deve ser usado com Vitest na próxima execução.
-- `npm ci`: anteriormente bloqueado porque `package-lock.json` estava divergente de `package.json` e o Node 20 do ambiente não atendia ao requisito do Capacitor 8. São limitações preexistentes do ambiente de desenvolvimento, não falhas causadas pelo PagBank.
-- Testes funcionais/sandbox/produção: ainda não executados, pois não houve mudança funcional nem credenciais.
+Principais riscos: trocar defaults de ambiente/gateway; backfill incorreto de vendas
+legadas; generalizar `asaas_*` de uma vez; mudar fórmula/split; duplicar emissão de
+tickets; compartilhar secrets entre tenants; fazer webhook PagBank contornar os
+guards Asaas; quebrar venda manual; e filtrar sócio global por empresa.
 
-## Alterações de banco
+Mitigação futura: testes de caracterização antes de mudança, feature flag/piloto,
+rotas Asaas intactas, adapters finos apenas nos seams listados, gateway imutável na
+venda e finalização/regras SmartBus compartilhadas. Não criar arquitetura genérica
+de plugins agora.
 
-Nenhuma aplicada ou criada.
+## 16. Próximo passo recomendado
 
-Possíveis necessidades continuam sendo propostas técnicas para avaliação: rastrear gateway/ambiente/IDs externos por venda ou cobrança, isolar configuração/secrets com RLS e incluir contexto do provedor em logs/dedup.
+Não escrever código. Enviar ao PagBank e à PB Integrações um questionário formal
+com os oito bloqueios do gate, executar uma homologação assistida dos quatro
+cenários de split em Checkout hospedado/PIX/cartão parcelado nos dois ambientes e
+obter evidências de idempotência, webhook, onboarding, refund e chargeback. Depois,
+submeter uma decisão técnica/financeira/segurança sobre Connect versus API direta.
+Somente com respostas aceitas deve-se especificar schema e testes de caracterização
+do Asaas em tarefa própria.
 
-Não existe campo, tabela, default ou backfill aprovado até a revisão técnica de dados/RLS. Qualquer solução deverá preservar vendas Asaas existentes e o gateway de origem das vendas históricas.
+## 17. Histórico resumido
 
-## Riscos e bloqueios
+- **2026-09-01 — análise inicial:** arquitetura, acoplamentos e gaps preliminares
+  registrados; nenhuma mudança funcional.
+- **2026-09-01 — auditoria final:** decisões de produto incorporadas; produtos,
+  intermediária, split, onboarding, credenciais, webhook, idempotência, origem da
+  venda, status, reversões, ambientes, Asaas e matriz de 29 itens auditados. Gate
+  mantido em **NÃO** por lacunas comprovadas de evidência, sem inventar solução.
 
-- **Alinhamento normativo:** Diretrizes Oficiais ainda dizem que Asaas é o gateway oficial e precisam ser atualizadas em tarefa própria.
-- **Split PagBank:** equivalência dos destinatários SmartBus ainda não comprovada; é gate para produção.
-- **Webhook:** autenticidade, replay e dedup precisam ser comprovados.
-- **Idempotência:** criação sem garantia comprovada pode gerar cobrança duplicada.
-- **Onboarding:** criação/conexão de conta pelo SmartBus ainda depende de comprovação de capacidade PagBank.
-- **Chargeback:** comportamento e impacto sobre split ainda não definidos tecnicamente.
-- **Credenciais:** risco de mistura de tenant/ambiente/Connect Key exige desenho seguro.
-- **Regressão Asaas:** generalização ampla ou troca de defaults pode quebrar o gateway atual; mitigar com mudanças pequenas e testes de caracterização.
-- **Arquitetura futura:** Mercado Pago/PayPal são roadmap, não justificativa para overengineering agora.
+## 18. Validações desta sessão
 
-## Histórico resumido
-
-- **2026-09-01:** preparação, leitura das Skills/referências, auditoria inicial e conclusão de viabilidade condicional; sem mudança funcional.
-- **2026-09-01:** checkpoint refinado para separar confirmações, propostas, decisões pendentes, gaps e bloqueios.
-- **2026-09-01:** branch persistente `feature/pagbank-integration` criada no GitHub a partir da `main` atual; bloqueio de persistência remota resolvido.
-- **2026-09-01:** decisões de produto concluídas: coexistência transitória Asaas/PagBank, escolha por empresa, PagBank recomendado para novas empresas, vínculo imutável da venda ao gateway de origem, sem fallback automático, primeira fase com Payment Link + Pix/cartão, venda manual posterior, regras financeiras preservadas e rollout sem migração automática.
+- leitura integral do checkpoint, Skills e referências aplicáveis;
+- inspeção estática dos fluxos Checkout → criação Asaas → webhook/verify →
+  `finalizeConfirmedPayment` → tickets, configuração, diagnóstico e migrations;
+- validação de links externos tentada, com HTTP 403 do ambiente registrada como
+  limitação; nenhuma chamada com credencial foi feita;
+- Markdown e diff verificados; testes funcionais não são aplicáveis porque somente
+  documentação foi alterada.
