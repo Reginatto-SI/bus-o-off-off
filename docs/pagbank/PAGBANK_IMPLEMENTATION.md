@@ -6,7 +6,7 @@ Estudar a inclusão do PagBank como gateway adicional do SmartBus, preservando a
 
 ## Estado atual
 
-**Análise de viabilidade concluída; implementação funcional não iniciada.** A branch `feature/pagbank-integration` existe somente neste ambiente temporário. O clone não possui remote nem referência local de `main`; portanto, a base mais recente da `main` não foi comprovada e uma branch persistente não foi publicada no GitHub. Isso é **bloqueio para iniciar implementação funcional**, até existir armazenamento remoto seguro. Nenhuma credencial, migration, Edge Function ou comportamento de produção foi alterado.
+**Análise de viabilidade concluída; implementação funcional não iniciada.** A branch persistente `feature/pagbank-integration` foi criada no GitHub a partir da `main` atual e está disponível como área oficial de desenvolvimento do PagBank. No momento da criação, `main` e `feature/pagbank-integration` estavam idênticas no commit `52034416d8f9f32c52b6a06035ac662c811b3a4a` (`ahead_by: 0`, `behind_by: 0`). O bloqueio de persistência remota está resolvido. Nenhuma credencial, migration, Edge Function ou comportamento de produção foi alterado.
 
 ## Arquitetura atual de pagamentos
 
@@ -59,8 +59,8 @@ Detalhes e fontes de verdade: Skills obrigatórias e suas referências de arquit
 
 ## Etapas planejadas
 
-- [x] Preparar branch local, roteador no `AGENTS.md`, checkpoint e análise inicial.
-- [ ] Regularizar base remota: validar/publicar a branch a partir da `main` mais recente sem reescrever histórico.
+- [x] Preparar roteador no `AGENTS.md`, checkpoint e análise inicial.
+- [x] Criar e publicar a branch persistente `feature/pagbank-integration` no GitHub a partir da `main` atual, sem reescrever histórico.
 - [ ] Obter decisão de produto sobre o modelo oficial de gateways e, em tarefa própria, alinhar as Diretrizes Oficiais.
 - [ ] Fechar matriz de capacidades com evidência oficial atual e obter decisões de produto/financeiro/segurança.
 - [ ] Criar testes de caracterização do Asaas e especificar contrato mínimo nos seams existentes.
@@ -73,15 +73,15 @@ Detalhes e fontes de verdade: Skills obrigatórias e suas referências de arquit
 ## Concluído
 
 - Skills e referências aplicáveis consultadas; arquitetura, acoplamentos, capacidades, riscos e fases registrados.
-- Branch temporária local e documentos de continuidade preparados. A branch persistente ainda não existe; nenhuma implementação funcional ou migration foi feita.
+- Branch persistente `feature/pagbank-integration` criada no GitHub a partir da `main` atual e validada como idêntica à `main` no momento da criação; documentos de continuidade preparados. Nenhuma implementação funcional ou migration foi feita.
 
 ## Em andamento
 
-Nenhuma etapa funcional. A preparação aguarda uma branch remota segura, a decisão oficial de produto sobre coexistência/seleção de gateways e o fechamento dos gaps da matriz.
+Nenhuma etapa funcional. A branch remota segura já está pronta. A preparação aguarda agora a decisão oficial de produto sobre coexistência/seleção de gateways e o fechamento dos gaps da matriz antes de iniciar código funcional.
 
 ## Próximo passo
 
-**Próxima decisão:** Produto deve definir o modelo oficial de gateways (suporte multigateway, coexistência, padrão, forma de escolha e continuidade das vendas existentes). Em paralelo, em um clone com remote, deve-se criar/publicar com segurança `feature/pagbank-integration` a partir da `main` mais recente. Não iniciar código funcional enquanto ambos os bloqueios permanecerem.
+**Próxima decisão:** Produto deve definir o modelo oficial de gateways (suporte multigateway, coexistência, padrão, forma de escolha e continuidade das vendas existentes). A branch persistente `feature/pagbank-integration` já está criada e pronta para receber as próximas etapas. Não iniciar código funcional até que a decisão de produto e os capability gaps críticos aplicáveis à etapa estejam suficientemente resolvidos.
 
 ## Testes e validações
 
@@ -97,7 +97,6 @@ Nenhuma aplicada ou criada. **Propostas técnicas para avaliação, não decisõ
 
 ## Riscos e bloqueios
 
-- **Bloqueio:** a branch existe apenas no ambiente temporário, sem remote/`main` verificável ou persistência no GitHub; não iniciar implementação funcional nessa condição.
 - **Bloqueio normativo:** as Diretrizes Oficiais ainda definem o Asaas como gateway oficial; o modelo futuro precisa de decisão de produto antes de alterar essa regra em tarefa separada.
 - Regressão Asaas por refatoração ampla ou troca de defaults; mitigar com seams pequenos, caracterização, feature flag e rollback.
 - Mistura de tenant/ambiente/Connect Key; a mesma key que criou o pedido é exigida para consulta e sandbox não aparece no painel.
@@ -112,3 +111,4 @@ Nenhuma aplicada ou criada. **Propostas técnicas para avaliação, não decisõ
 
 - **2026-09-01:** preparação local, leitura das Skills/referências, auditoria inicial e conclusão de viabilidade condicional; sem mudança funcional.
 - **2026-09-01:** checkpoint refinado para separar confirmações, propostas, decisões pendentes, gaps e bloqueios; registrada a incompatibilidade das Diretrizes Oficiais, sem alterá-las.
+- **2026-09-01:** branch persistente `feature/pagbank-integration` criada no GitHub a partir da `main` atual e validada como idêntica à `main` no momento da criação; bloqueio de persistência remota resolvido.
