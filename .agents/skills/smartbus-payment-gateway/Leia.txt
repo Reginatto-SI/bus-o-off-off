@@ -1,0 +1,17 @@
+# SmartBus — Integração de Gateways
+
+Esta Skill é **exclusiva do SmartBus**.
+
+Use sempre que for analisar, planejar, implementar ou revisar integrações de gateways de pagamento, como Asaas, Mercado Pago, PagBank, Stripe ou PayPal.
+
+## Lembretes
+
+- Asaas é a implementação atual de referência, não uma regra universal.
+- Preserve sempre os gateways que já estão funcionando.
+- Sandbox e Produção nunca devem se misturar.
+- Regras financeiras pertencem ao SmartBus e não ao gateway.
+- Nunca presuma equivalência entre APIs: valide primeiro.
+- Novos gateways devem ser implementados de forma incremental.
+- Havendo incompatibilidade, identificar o `CAPABILITY GAP` antes de alterar regras do SmartBus.
+
+**Antes de mexer em pagamentos no SmartBus, use esta Skill.**
