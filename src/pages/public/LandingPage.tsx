@@ -2049,13 +2049,15 @@ export default function LandingPage() {
               </button>
               {/* Endereço institucional: reforça presença física de forma discreta, sem virar argumento comercial. */}
               <address className="not-italic">
-                <p className="text-xs font-semibold uppercase tracking-wide text-white/60">Escritório SmartBus BR</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-white/60">Escritório SmartBus</p>
                 <p className="mt-1 flex items-start gap-2 text-sm leading-relaxed text-white/80">
                   <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                   <span>
                     Rua Professor Melo, 59 — Bairro Amazonas
                     <br />
                     Contagem/MG — CEP 32223-510
+                    <br />
+                    Telefone: (31) 2118-5728
                   </span>
                 </p>
               </address>
