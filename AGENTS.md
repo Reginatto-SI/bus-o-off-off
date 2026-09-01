@@ -29,3 +29,7 @@ Tarefas relacionadas a pagamentos:
    do SmartBus e uma limitação/regra do PagBank,
    não inventar solução: registrar a incompatibilidade
    e solicitar decisão antes de alterar o sistema.
+
+## Implementação PagBank
+
+Antes de qualquer tarefa PagBank, confirme a branch `feature/pagbank-integration` e leia, nesta ordem, `docs/pagbank/PAGBANK_IMPLEMENTATION.md`, `.agents/skills/smartbus-payment-gateway/SKILL.md` e `.agents/skills/pagbank-connect/SKILL.md`, incluindo apenas as referências aplicáveis. Reutilize a arquitetura e os componentes existentes; não crie fluxos paralelos de checkout, confirmação, webhook ou diagnóstico quando os atuais puderem ser generalizados. Preserve integralmente o Asaas, não presuma decisões de produto e atualize o checkpoint ao fim de cada sessão PagBank.
