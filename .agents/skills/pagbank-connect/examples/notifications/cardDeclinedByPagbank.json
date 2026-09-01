@@ -1,0 +1,87 @@
+{
+  "id": "ORDE_036792BD-D578-47F3-8A52-7FF2A3B7E3D2",
+  "reference_id": "685e1ff697267f73795b05e1",
+  "created_at": "2025-06-27T01:38:45.616-03:00",
+  "customer": {
+    "name": "Vitor Chaves dos Santos",
+    "email": "contato.vitorchaves@gmail.com",
+    "tax_id": "01234567890"
+  },
+  "items": [
+    {
+      "reference_id": "GHL-Item",
+      "name": "Compra via GHL",
+      "quantity": 1,
+      "unit_amount": 100
+    }
+  ],
+  "charges": [
+    {
+      "id": "CHAR_97FDD023-E5CC-4658-943D-67EB89BB0861",
+      "reference_id": "685e1ff697267f73795b05e1",
+      "status": "DECLINED",
+      "created_at": "2025-06-27T01:38:45.809-03:00",
+      "description": "Pedido via GHL",
+      "amount": {
+        "value": 100,
+        "currency": "BRL",
+        "summary": {
+          "total": 100,
+          "paid": 0,
+          "refunded": 0
+        }
+      },
+      "payment_response": {
+        "code": "10000",
+        "message": "NAO AUTORIZADO PELO PAGSEGURO"
+      },
+      "payment_method": {
+        "type": "CREDIT_CARD",
+        "installments": 1,
+        "capture": true,
+        "card": {
+          "brand": "visa",
+          "first_digits": "499818",
+          "last_digits": "2857",
+          "exp_month": "4",
+          "exp_year": "2029",
+          "holder": {
+            "name": "RICARDO MARTINS"
+          }
+        },
+        "soft_descriptor": "PagamentoviaPagBank"
+      },
+      "links": [
+        {
+          "rel": "SELF",
+          "href": "https://api.pagseguro.com/charges/CHAR_97FDD023-E5CC-4658-943D-67EB89BB0861",
+          "media": "application/json",
+          "type": "GET"
+        },
+        {
+          "rel": "CHARGE.CANCEL",
+          "href": "https://api.pagseguro.com/charges/CHAR_97FDD023-E5CC-4658-943D-67EB89BB0861/cancel",
+          "media": "application/json",
+          "type": "POST"
+        }
+      ]
+    }
+  ],
+  "notification_urls": [
+    "https://pagg.link/api/f/K5qMi"
+  ],
+  "links": [
+    {
+      "rel": "SELF",
+      "href": "https://api.pagseguro.com/orders/ORDE_036792BD-D578-47F3-8A52-7FF2A3B7E3D2",
+      "media": "application/json",
+      "type": "GET"
+    },
+    {
+      "rel": "PAY",
+      "href": "https://api.pagseguro.com/orders/ORDE_036792BD-D578-47F3-8A52-7FF2A3B7E3D2/pay",
+      "media": "application/json",
+      "type": "POST"
+    }
+  ]
+}

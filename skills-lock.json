@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "pagbank-connect": {
+      "source": "pbintegracoes/pagbank-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/pagbank-connect/SKILL.md",
+      "computedHash": "fc18ff66a02d8b5f193272d5a0c9ce4a04dda353da35f1661069f757559d7d76"
+    }
+  }
+}

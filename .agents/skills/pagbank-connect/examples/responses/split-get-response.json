@@ -1,0 +1,98 @@
+{
+  "id": "SPLI_3B068275-7E32-4ECD-B7C4-B8AC59AE2886",
+  "method": "FIXED",
+  "receivers": [
+    {
+      "payment": {
+        "id": "5FE0E295-7193-4B26-BF1A-A0A84BF1CE65"
+      },
+      "account": {
+        "id": "ACCO_F608816F-8C91-4DAF-B3B8-B8FC251EDCE7"
+      },
+      "amount": {
+        "value": 100,
+        "refunded": 100
+      },
+      "configurations": {
+        "custody": {
+          "apply": false,
+          "status": null,
+          "release": {
+            "scheduled": null,
+            "released_at": null
+          }
+        },
+        "chargeback": {
+          "charge_transfer": {
+            "percentage": 0.0
+          }
+        },
+        "liable": false,
+        "statement": {
+          "amount": {
+            "show_full_value": true
+          },
+          "items": null
+        }
+      },
+      "reason": "Comissão do Marketplace",
+      "type": "PRIMARY"
+    },
+    {
+      "payment": {
+        "id": "6284596D-BA01-4B34-A2AD-503CCB31CFD2"
+      },
+      "account": {
+        "id": "ACCO_9F135987-430E-44F8-8A99-86E7FCD178FB"
+      },
+      "amount": {
+        "value": 100,
+        "refunded": 100
+      },
+      "configurations": {
+        "custody": {
+          "apply": true,
+          "status": "RELEASED",
+          "release": {
+            "scheduled": "2025-11-15T01:15:14.000Z",
+            "released_at": "2025-11-13T22:59:00.781-03:00"
+          }
+        },
+        "chargeback": {
+          "charge_transfer": {
+            "percentage": 100.0
+          }
+        },
+        "liable": true,
+        "statement": {
+          "amount": {
+            "show_full_value": false
+          },
+          "items": null
+        }
+      },
+      "reason": "Venda dos produtos jairheadphone",
+      "type": "SECONDARY"
+    }
+  ],
+  "links": [
+    {
+      "rel": "SELF",
+      "href": "https://api.pagseguro.com/splits/SPLI_3B068275-7E32-4ECD-B7C4-B8AC59AE2886",
+      "media": "application/json",
+      "type": "GET"
+    },
+    {
+      "rel": "CHARGE",
+      "href": "https://api.pagseguro.com/charges/CHAR_5FE0E295-7193-4B26-BF1A-A0A84BF1CE65",
+      "media": "application/json",
+      "type": "GET"
+    },
+    {
+      "rel": "ORDER",
+      "href": "https://api.pagseguro.com/orders/ORDE_FEA9AC5B-E36F-40E0-9543-B10182A60F0C",
+      "media": "application/json",
+      "type": "GET"
+    }
+  ]
+}

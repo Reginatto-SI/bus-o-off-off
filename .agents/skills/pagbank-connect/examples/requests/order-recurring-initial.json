@@ -1,0 +1,49 @@
+{
+  "reference_id": "sub-initial-1001",
+  "customer": {
+    "name": "Cliente Exemplo",
+    "email": "cliente@exemplo.test",
+    "tax_id": "01234567890",
+    "phones": [
+      {
+        "country": "55",
+        "area": "11",
+        "number": "999999999",
+        "type": "MOBILE"
+      }
+    ]
+  },
+  "items": [
+    {
+      "reference_id": "item-1",
+      "name": "Assinatura — primeira cobrança",
+      "quantity": 1,
+      "unit_amount": 4900
+    }
+  ],
+  "notification_urls": [
+    "https://sua-loja.test/webhook/pagbank"
+  ],
+  "charges": [
+    {
+      "reference_id": "charge-1",
+      "description": "Cobrança inicial",
+      "amount": {
+        "value": 4900,
+        "currency": "BRL"
+      },
+      "payment_method": {
+        "type": "CREDIT_CARD",
+        "installments": 1,
+        "capture": true,
+        "card": {
+          "encrypted": "SUBSTITUA_PELO_ENCRYPTED_DA_PUBLIC_KEY",
+          "store": true
+        }
+      },
+      "recurring": {
+        "type": "INITIAL"
+      }
+    }
+  ]
+}

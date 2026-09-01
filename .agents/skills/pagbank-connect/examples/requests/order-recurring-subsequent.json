@@ -1,0 +1,41 @@
+{
+  "_comment": "SUBSEQUENT: card.id da resposta do pedido INITIAL (charges[].payment_method.card.id). Doc: developer.pagbank.com.br/reference/criar-pagar-pedido-com-recorrencia. Elo: brand_reference_id (NRID). Não envie PAN.",
+  "reference_id": "sub-renewal-1002",
+  "customer": {
+    "name": "Cliente Exemplo",
+    "email": "cliente@exemplo.test",
+    "tax_id": "01234567890"
+  },
+  "items": [
+    {
+      "reference_id": "item-1",
+      "name": "Assinatura — renovação",
+      "quantity": 1,
+      "unit_amount": 4900
+    }
+  ],
+  "notification_urls": [
+    "https://sua-loja.test/webhook/pagbank"
+  ],
+  "charges": [
+    {
+      "reference_id": "charge-1",
+      "description": "Renovação",
+      "amount": {
+        "value": 4900,
+        "currency": "BRL"
+      },
+      "payment_method": {
+        "type": "CREDIT_CARD",
+        "installments": 1,
+        "capture": true,
+        "card": {
+          "id": "CARD_ID_DA_COBRANCA_INICIAL"
+        }
+      },
+      "recurring": {
+        "type": "SUBSEQUENT"
+      }
+    }
+  ]
+}
