@@ -1,0 +1,61 @@
+{
+  "reference_id": "pedido-boleto-406",
+  "customer": {
+    "name": "Cliente Exemplo",
+    "email": "cliente@exemplo.test",
+    "tax_id": "01234567890",
+    "phones": [
+      {
+        "country": "55",
+        "area": "11",
+        "number": "999999999",
+        "type": "MOBILE"
+      }
+    ]
+  },
+  "items": [
+    {
+      "reference_id": "item-1",
+      "name": "Produto de teste",
+      "quantity": 1,
+      "unit_amount": 49900
+    }
+  ],
+  "notification_urls": [
+    "https://sua-loja.test/webhook/pagbank"
+  ],
+  "charges": [
+    {
+      "reference_id": "pedido-boleto-406",
+      "amount": {
+        "value": 50400,
+        "currency": "BRL"
+      },
+      "payment_method": {
+        "type": "BOLETO",
+        "boleto": {
+          "due_date": "2026-12-14",
+          "instruction_lines": {
+            "line_1": "Não aceitar após vencimento",
+            "line_2": "Obrigado pela compra."
+          },
+          "holder": {
+            "name": "Cliente Exemplo",
+            "tax_id": "01234567890",
+            "email": "cliente@exemplo.test",
+            "address": {
+              "street": "Rua Exemplo",
+              "number": "100",
+              "locality": "Centro",
+              "city": "São Paulo",
+              "region": "São Paulo",
+              "region_code": "SP",
+              "country": "BRA",
+              "postal_code": "01001000"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,122 @@
+{
+    "id": "ORDE_95E5B39B-5743-4272-93EB-689A8294E916",
+    "reference_id": "6971",
+    "created_at": "2025-03-27T22:18:19.581-03:00",
+    "customer": {
+        "name": "Teste PagBank",
+        "email": "cliente@exemplo.test",
+        "tax_id": "01234567890"
+    },
+    "items": [
+        {
+            "reference_id": "89",
+            "name": "Produto virtual de teste",
+            "quantity": 1,
+            "unit_amount": 5900
+        }
+    ],
+    "shipping": {
+        "address": {
+            "street": "rua qualqer",
+            "number": "...",
+            "complement": "23232",
+            "locality": "...",
+            "city": "Santos",
+            "region_code": "SP",
+            "country": "BRA",
+            "postal_code": "11050237"
+        }
+    },
+    "qr_codes": [
+        {
+            "id": "QRCO_27877316-3168-46F6-BEE0-2F554C9776DF",
+            "expiration_date": "2025-03-28T22:15:14.000-03:00",
+            "amount": {
+                "value": 5900
+            },
+            "text": "00020101021226850014br.gov.bcb.pix2563api-h.pagseguro.com/pix/v2/27877316-3168-46F6-BEE0-2F554C9776DF27600016BR.COM.PAGSEGURO013627877316-3168-46F6-BEE0-2F554C9776DF520479945303986540559.005802BR5907SB Corp6009Sao Paulo62070503***6304AF30",
+            "arrangements": [
+                "PIX"
+            ],
+            "links": [
+                {
+                    "rel": "QRCODE.PNG",
+                    "href": "https://sandbox.api.pagseguro.com/qrcode/QRCO_27877316-3168-46F6-BEE0-2F554C9776DF/png",
+                    "media": "image/png",
+                    "type": "GET"
+                },
+                {
+                    "rel": "QRCODE.BASE64",
+                    "href": "https://sandbox.api.pagseguro.com/qrcode/QRCO_27877316-3168-46F6-BEE0-2F554C9776DF/base64",
+                    "media": "text/plain",
+                    "type": "GET"
+                }
+            ]
+        }
+    ],
+    "charges": [
+        {
+            "id": "CHAR_27877316-3168-46F6-BEE0-2F554C9776DF",
+            "reference_id": "6971",
+            "status": "PAID",
+            "created_at": "2025-03-27T22:18:36.739-03:00",
+            "paid_at": "2025-03-27T22:18:38.835-03:00",
+            "amount": {
+                "value": 5900,
+                "currency": "BRL",
+                "summary": {
+                    "total": 5900,
+                    "paid": 5900,
+                    "refunded": 0
+                }
+            },
+            "payment_response": {
+                "code": "20000",
+                "message": "SUCESSO"
+            },
+            "payment_method": {
+                "type": "PIX",
+                "pix": {
+                    "notification_id": "NTF_9C5225C4-7E7A-4074-9CB4-8EBD00FE0C3C",
+                    "end_to_end_id": "2d298bcb756a46a1b0ec5bc9b1303755",
+                    "holder": {
+                        "name": "API-PIX Payer Mock",
+                        "tax_id": "***931180**"
+                    }
+                }
+            },
+            "links": [
+                {
+                    "rel": "SELF",
+                    "href": "https://internal.sandbox.api.pagseguro.com/charges/CHAR_27877316-3168-46F6-BEE0-2F554C9776DF",
+                    "media": "application/json",
+                    "type": "GET"
+                },
+                {
+                    "rel": "CHARGE.CANCEL",
+                    "href": "https://internal.sandbox.api.pagseguro.com/charges/CHAR_27877316-3168-46F6-BEE0-2F554C9776DF/cancel",
+                    "media": "application/json",
+                    "type": "POST"
+                }
+            ],
+            "metadata": {}
+        }
+    ],
+    "notification_urls": [
+        "https://woocommerce.test/?wc-api=rm_ps_notif&hash=66b46"
+    ],
+    "links": [
+        {
+            "rel": "SELF",
+            "href": "https://sandbox.api.pagseguro.com/orders/ORDE_95E5B39B-5743-4272-93EB-689A8294E916",
+            "media": "application/json",
+            "type": "GET"
+        },
+        {
+            "rel": "PAY",
+            "href": "https://sandbox.api.pagseguro.com/orders/ORDE_95E5B39B-5743-4272-93EB-689A8294E916/pay",
+            "media": "application/json",
+            "type": "POST"
+        }
+    ]
+}

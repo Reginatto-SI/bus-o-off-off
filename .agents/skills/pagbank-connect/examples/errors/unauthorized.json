@@ -1,0 +1,8 @@
+{
+  "error_messages": [
+    {
+      "code": "UNAUTHORIZED",
+      "description": "Connect Key inválida. Verifique header de autorização."
+    }
+  ]
+}

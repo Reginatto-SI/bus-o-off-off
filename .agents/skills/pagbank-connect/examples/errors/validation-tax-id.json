@@ -1,0 +1,9 @@
+{
+  "error_messages": [
+    {
+      "code": "40002",
+      "description": "must be a valid CPF or CNPJ",
+      "parameter_name": "customer.tax_id"
+    }
+  ]
+}

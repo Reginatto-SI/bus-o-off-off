@@ -1,0 +1,32 @@
+{
+  "reference_id": "checkout-1001",
+  "customer": {
+    "name": "Cliente Exemplo",
+    "email": "cliente@exemplo.test",
+    "tax_id": "01234567890",
+    "phone": {
+      "country": "55",
+      "area": "11",
+      "number": "999999999",
+      "type": "MOBILE"
+    }
+  },
+  "items": [
+    {
+      "reference_id": "item-1",
+      "name": "Produto de teste",
+      "quantity": 1,
+      "unit_amount": 5900
+    }
+  ],
+  "notification_urls": [
+    "https://sua-loja.test/webhook/pagbank"
+  ],
+  "payment_methods": [
+    { "type": "CREDIT_CARD" },
+    { "type": "PIX" }
+  ],
+  "customer_modifiable": true,
+  "redirect_url": "https://sua-loja.test/obrigado",
+  "expiration_date": "2026-12-31T23:59:59+00:00"
+}

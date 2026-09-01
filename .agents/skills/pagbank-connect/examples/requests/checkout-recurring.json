@@ -1,0 +1,28 @@
+{
+  "reference_id": "assinatura-1001",
+  "customer_modifiable": true,
+  "items": [
+    {
+      "reference_id": "item-1",
+      "name": "Assinatura mensal",
+      "description": "Plano mensal",
+      "quantity": 1,
+      "unit_amount": 4900
+    }
+  ],
+  "recurrence_plan": {
+    "name": "Plano mensal",
+    "interval": {
+      "unit": "MONTH",
+      "length": 1
+    },
+    "billing_cycles": 12
+  },
+  "payment_methods": [
+    { "type": "CREDIT_CARD" }
+  ],
+  "notification_urls": [
+    "https://sua-loja.test/webhook/pagbank"
+  ],
+  "expiration_date": "2026-12-31T23:59:59+00:00"
+}

@@ -1,0 +1,115 @@
+{
+    "id": "ORDE_557F50C8-9538-43FE-A041-E789D298D0F3",
+    "reference_id": "THX134",
+    "created_at": "2025-03-27T22:23:41.483-03:00",
+    "customer": {
+        "name": "Ricardo Martins",
+        "email": "cliente@exemplo.test",
+        "tax_id": "31664481877",
+        "phones": [
+            {
+                "type": "MOBILE",
+                "country": "55",
+                "area": "13",
+                "number": "991057766"
+            }
+        ]
+    },
+    "items": [
+        {
+            "reference_id": "testeRic",
+            "name": "Teste do Ricardo",
+            "quantity": 1,
+            "unit_amount": 100
+        }
+    ],
+    "shipping": {
+        "address": {
+            "street": "Rua Guedes Coelho",
+            "number": "84",
+            "complement": "apto 93",
+            "locality": "Encruzilhada",
+            "city": "Santos",
+            "region_code": "SP",
+            "country": "BRA",
+            "postal_code": "11050230"
+        }
+    },
+    "charges": [
+        {
+            "id": "CHAR_58DB6DD9-8782-41F8-B337-63C80F1FE9A6",
+            "reference_id": "testeRicPedido",
+            "status": "PAID",
+            "created_at": "2025-03-27T22:23:41.940-03:00",
+            "paid_at": "2025-03-27T22:23:44.000-03:00",
+            "description": "Pedido de teste cartao real",
+            "amount": {
+                "value": 100,
+                "currency": "BRL",
+                "summary": {
+                    "total": 100,
+                    "paid": 100,
+                    "refunded": 0
+                }
+            },
+            "payment_response": {
+                "code": "20000",
+                "message": "SUCESSO",
+                "reference": "032416400102",
+                "raw_data": {
+                    "authorization_code": "145803",
+                    "nsu": "032416400102",
+                    "reason_code": "00"
+                }
+            },
+            "payment_method": {
+                "type": "CREDIT_CARD",
+                "installments": 1,
+                "capture": true,
+                "card": {
+                    "brand": "visa",
+                    "first_digits": "453962",
+                    "last_digits": "2097",
+                    "exp_month": "12",
+                    "exp_year": "2031",
+                    "holder": {
+                        "name": "Nome Sobrenome"
+                    }
+                },
+                "soft_descriptor": "FoobarDaSilvaDDEF"
+            },
+            "links": [
+                {
+                    "rel": "SELF",
+                    "href": "https://sandbox.api.pagseguro.com/charges/CHAR_58DB6DD9-8782-41F8-B337-63C80F1FE9A6",
+                    "media": "application/json",
+                    "type": "GET"
+                },
+                {
+                    "rel": "CHARGE.CANCEL",
+                    "href": "https://sandbox.api.pagseguro.com/charges/CHAR_58DB6DD9-8782-41F8-B337-63C80F1FE9A6/cancel",
+                    "media": "application/json",
+                    "type": "POST"
+                }
+            ],
+            "metadata": {}
+        }
+    ],
+    "notification_urls": [
+        "https://meusite.com/notificacoes"
+    ],
+    "links": [
+        {
+            "rel": "SELF",
+            "href": "https://sandbox.api.pagseguro.com/orders/ORDE_557F50C8-9538-43FE-A041-E789D298D0F3",
+            "media": "application/json",
+            "type": "GET"
+        },
+        {
+            "rel": "PAY",
+            "href": "https://sandbox.api.pagseguro.com/orders/ORDE_557F50C8-9538-43FE-A041-E789D298D0F3/pay",
+            "media": "application/json",
+            "type": "POST"
+        }
+    ]
+}
