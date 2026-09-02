@@ -1,0 +1,4 @@
+interface:
+  display_name: "PagBank Official API"
+  short_description: "Integração direta e segura com o PagBank"
+  default_prompt: "Use $pagbank-official-api para planejar ou revisar a integração direta do PagBank no SmartBus."

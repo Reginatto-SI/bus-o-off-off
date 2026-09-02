@@ -3,26 +3,20 @@ Tarefas relacionadas a pagamentos:
 1. Consulte sempre:
    .agents/skills/smartbus-payment-gateway/SKILL.md
 
-2. Quando envolver PagBank, consulte também:
-   .agents/skills/pagbank-connect/SKILL.md
+2. Quando envolver integração direta com a API oficial do PagBank, consulte também:
+   .agents/skills/pagbank-official-api/SKILL.md
 
-3. Smart Bus Payment Gateway define:
-   - regras do produto;
-   - arquitetura existente;
-   - telas;
-   - fluxo do SmartBus;
-   - comportamento esperado.
+3. Consulte `.agents/skills/pagbank-connect/SKILL.md` somente quando a tarefa envolver:
+   - PB Integrações/PagBank Connect;
+   - comparação entre a solução intermediada e a API oficial;
+   - manutenção ou auditoria da alternativa intermediada.
 
-4. PagBank Connect define:
-   - capacidades da solução PB Integrações/PagBank Connect;
-   - autenticação;
-   - endpoints;
-   - payloads;
-   - webhooks;
-   - requisitos técnicos específicos dessa integração.
+4. Autoridade de cada Skill:
+   - Smart Bus Payment Gateway define as regras do produto, a arquitetura existente, os fluxos e o comportamento esperado do SmartBus;
+   - PagBank Official API define as capacidades e restrições técnicas da integração direta oficial;
+   - PagBank Connect documenta somente a solução intermediada da PB Integrações.
 
-5. Não tratar a Skill PagBank Connect como representação completa da API oficial do PagBank. Quando a tarefa comparar PB Integrações com PagBank direto, validar separadamente a documentação oficial atual do PagBank.
-
+5. Não misturar endpoints, Connect Key, payloads ou comportamentos da PB Integrações com a implementação direta da API oficial do PagBank.
 6. Nunca substituir uma regra existente do SmartBus apenas porque a documentação de um gateway permite outra implementação.
 
 7. Se existir incompatibilidade entre uma necessidade do SmartBus e uma limitação/regra do gateway, não inventar solução: registrar a incompatibilidade e solicitar decisão antes de alterar o sistema.
@@ -34,8 +28,9 @@ Antes de qualquer tarefa PagBank, leia, nesta ordem:
 1. `docs/pagbank/BRANCH_CONTEXT.md`;
 2. `docs/pagbank/PAGBANK_IMPLEMENTATION.md`;
 3. `.agents/skills/smartbus-payment-gateway/SKILL.md`;
-4. `.agents/skills/pagbank-connect/SKILL.md`;
-5. apenas as referências aplicáveis à tarefa atual.
+4. `.agents/skills/pagbank-official-api/SKILL.md`;
+5. apenas as referências aplicáveis à tarefa atual;
+6. `.agents/skills/pagbank-connect/SKILL.md` somente se a tarefa envolver PB Integrações ou comparação entre arquiteturas.
 
 Reutilize a arquitetura e os componentes existentes. Não crie fluxos paralelos de checkout, confirmação, webhook ou diagnóstico quando os atuais puderem ser generalizados. Preserve integralmente o Asaas, não presuma decisões de produto e atualize o checkpoint ao fim de cada sessão PagBank quando houver avanço real.
 
