@@ -154,7 +154,7 @@ A experiência desejada é:
 2. permitir também configuração manual de credencial quando tecnicamente adequada;
 3. validar conta, tenant e ambiente antes de ativar o gateway.
 
-A possibilidade e o melhor fluxo ainda precisam ser comprovados na comparação API oficial PagBank × PB Integrações.
+A comparação confirmou o Connect Authorization oficial como fluxo preferencial; configuração manual permanece apenas como contingência tecnicamente justificada.
 
 ## 10. Arquitetura atual do Asaas — proteção obrigatória
 
@@ -188,41 +188,13 @@ Ela mostrou capacidades úteis, mas também deixou lacunas de evidência em pont
 
 Essas lacunas são da evidência disponível para a solução intermediada e **não devem ser automaticamente tratadas como limitações da API oficial PagBank**.
 
-## 12. Próxima etapa — comparação arquitetural
+## 12. Resultado da comparação arquitetural
 
-Antes de escrever código, executar uma auditoria comparativa entre:
+Auditoria concluída em 2 de setembro de 2026: **RECOMENDAR PAGBANK DIRETO**, usando a API oficial de Pedidos e Pagamentos (`Order`) para PIX e cartão.
 
-### Opção A
+Razões operacionais: idempotência, OAuth/Connect Authorization, validação oficial de webhook, consulta direta à fonte financeira, menor exposição de dados, menos pontos de falha e menor lock-in. A PB Integrações permaneceu em segundo lugar por não comprovar idempotência e autenticidade fim a fim, SLA/continuidade, tratamento de dados e ciclo multiempresa da Connect Key.
 
-`SmartBus → API Oficial PagBank`
-
-### Opção B
-
-`SmartBus → PB Integrações / PagBank Connect → PagBank`
-
-A comparação deve validar, com evidência atual:
-
-- segurança;
-- autenticação;
-- multiempresa;
-- onboarding;
-- PIX;
-- cartão de crédito;
-- split;
-- idempotência;
-- webhook;
-- consulta/fallback;
-- status;
-- chargeback;
-- estorno;
-- Sandbox/Produção;
-- diagnóstico;
-- SLA e suporte;
-- custos comprovados;
-- tratamento de dados/LGPD;
-- lock-in;
-- manutenção;
-- aderência a futuros gateways.
+A auditoria completa e sua matriz de evidências estão em [`PAGBANK_DIRECT_VS_PB_INTEGRACOES.md`](./PAGBANK_DIRECT_VS_PB_INTEGRACOES.md).
 
 ### Regra da pesquisa
 
@@ -230,29 +202,35 @@ A comparação deve validar, com evidência atual:
 
 A análise deve considerar pagamento via APIs do gateway para PIX e cartão de crédito, com os endpoints necessários para criação, confirmação, consulta, split, segurança e operação.
 
-## 13. Gates técnicos ainda abertos
+## 13. Decisões confirmadas e capability gaps
 
-Antes de começar implementação funcional, precisamos fechar:
+Confirmado:
 
-1. API oficial direta ou PB Integrações;
-2. produto/endpoints adequados para PIX + cartão sem Payment Link;
-3. split completo nos quatro cenários SmartBus;
-4. onboarding e elegibilidade de recebedores;
-5. idempotência de criação;
-6. autenticidade, replay e deduplicação de webhook;
-7. armazenamento seguro de credenciais por empresa/ambiente;
-8. gateway e IDs externos persistidos na venda;
-9. matriz de status PagBank → SmartBus;
-10. comportamento de estorno/chargeback;
-11. testes de regressão do Asaas.
+1. arquitetura direta oficial e produto `Order`;
+2. PIX, cartão transparente, parcelamento, 3DS, consulta e split existem na API oficial;
+3. idempotency key e validação oficial de autenticidade de notificação existem;
+4. onboarding oficial usa authorization code, scopes, access/refresh token e revogação;
+5. gateway por empresa e gateway/ambiente imutáveis por venda continuam obrigatórios;
+6. **Payment Link e checkout hospedado não fazem parte do escopo.**
 
-## 14. Gate atual
+Capability gaps restantes:
 
-### PODE INICIAR IMPLEMENTAÇÃO FUNCIONAL?
+- máximo de recebedores e aceite de empresa + Marketplace + sócio + representante no mesmo split;
+- habilitação/elegibilidade de todas as contas e paridade PIX/cartão parcelado;
+- detalhes contratuais de idempotência, webhook, tokens, chargeback, estorno e tarifas;
+- desenho mínimo de credenciais, IDs, status e dedup por gateway/tenant/ambiente.
 
-**NÃO.**
+## 14. Gates atuais
 
-Motivo: a decisão de produto está suficientemente clara, porém a arquitetura PagBank direta × PB Integrações e os gates financeiros/segurança ainda precisam ser fechados.
+### PODE COMEÇAR A PREPARAR A IMPLEMENTAÇÃO?
+
+**SIM, COM RESTRIÇÕES.**
+
+Bloqueios para código funcional de criação: confirmação oficial de acesso a Order/Connect/split em sandbox e do máximo/formato de quatro recebedores. Enquanto isso, podem avançar desenho aditivo, testes de caracterização do Asaas e contratos do adapter.
+
+Bloqueios para produção: homologar os quatro splits com valores exatos, PIX/cartão/parcelas/3DS, retry idempotente, webhook+fallback, OAuth e isolamento; contratar/habilitar marketplace/recebedores; fechar tarifas, SLA/suporte, LGPD, chargeback/refund; executar piloto, reconciliação e regressão integral do Asaas.
+
+Próximo passo: obter respostas formais PagBank para os gaps bloqueantes e então preparar o plano técnico incremental da integração direta.
 
 ## 15. Branch e Pull Requests
 
@@ -269,3 +247,4 @@ Motivo: a decisão de produto está suficientemente clara, porém a arquitetura 
 - **2026-09-01:** auditoria técnica inicial da PB Integrações/PagBank Connect; gate mantido em NÃO por lacunas de evidência.
 - **2026-09-01:** identificada a necessidade de comparar PB Integrações com API oficial direta do PagBank.
 - **2026-09-01:** **Payment Link/checkout hospedado removido do escopo oficial. Primeira fase definida como integração via API para PIX + cartão de crédito, mantendo split obrigatório e regras financeiras SmartBus.**
+- **2026-09-02:** comparação definitiva concluída; PagBank oficial direto recomendado; `Order` selecionado; gate alterado para **SIM, COM RESTRIÇÕES**; produção segue bloqueada por split/homologação/contrato.
