@@ -198,6 +198,8 @@ serve(async (req) => {
         email,
         referral_code: generatedReferralCode,
         platform_fee_percent: 6,
+        // Escolha explícita registrada: PagBank só será oferecido após homologação.
+        payment_gateway: "asaas",
         socio_split_percent: 0,
       })
       .select("id")

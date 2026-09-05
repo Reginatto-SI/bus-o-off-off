@@ -228,12 +228,15 @@ export async function finalizeConfirmedPayment(params: {
     payment_environment?: string | null;
   };
   confirmedAt: string;
+  /** Status externo bruto. Para Asaas é persistido em `asaas_payment_status`; para PagBank fica em `payment_attempts`. */
   asaasStatus: string;
-  source: "asaas-webhook" | "verify-payment-status" | "reconcile-sale-payment";
+  source: "asaas-webhook" | "verify-payment-status" | "reconcile-sale-payment" | "pagbank-webhook";
   paymentId?: string | null;
   eventType?: string | null;
   allowStatusUpdate?: boolean;
   writeSaleLog?: boolean;
+  /** Aditivo multi-gateway. Ausente = asaas (comportamento histórico inalterado). */
+  gateway?: "asaas" | "pagbank";
 }): Promise<PaymentFinalizationResult> {
   const {
     supabaseAdmin,
@@ -246,6 +249,9 @@ export async function finalizeConfirmedPayment(params: {
   } = params;
   const allowStatusUpdate = params.allowStatusUpdate ?? true;
   const writeSaleLog = params.writeSaleLog ?? true;
+  const gateway = params.gateway ?? "asaas";
+  // Colunas asaas_* nunca recebem status de outro gateway.
+  const externalStatusPatch = gateway === "asaas" ? { asaas_payment_status: asaasStatus } : {};
   // Proteção mínima contra retry em loop indireto dentro da mesma execução.
   let ticketRetryAttemptedInThisRun = false;
 
@@ -267,7 +273,7 @@ export async function finalizeConfirmedPayment(params: {
       .from("sales")
       .update({
         status: "pago",
-        asaas_payment_status: asaasStatus,
+        ...externalStatusPatch,
         payment_confirmed_at: confirmedAt,
       })
       .eq("id", sale.id)
@@ -301,10 +307,12 @@ export async function finalizeConfirmedPayment(params: {
       transitionedToPaid = true;
     }
   } else {
-    await supabaseAdmin
-      .from("sales")
-      .update({ asaas_payment_status: asaasStatus })
-      .eq("id", sale.id);
+    if (gateway === "asaas") {
+      await supabaseAdmin
+        .from("sales")
+        .update({ asaas_payment_status: asaasStatus })
+        .eq("id", sale.id);
+    }
   }
 
   // Centralização Etapa 2/3: qualquer reconciliação passa por esta mesma rotina,

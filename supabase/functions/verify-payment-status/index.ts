@@ -9,6 +9,7 @@ import {
   resolvePaymentContext,
 } from "../_shared/payment-context-resolver.ts";
 import { finalizeConfirmedPayment } from "../_shared/payment-finalization.ts";
+import { isPagbankError, syncPagbankSaleStatus } from "../_shared/pagbank/status-sync.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -97,7 +98,7 @@ serve(async (req) => {
 
     const { data: sale, error: saleError } = await supabaseAdmin
       .from("sales")
-      .select("id, status, asaas_payment_id, asaas_payment_status, company_id, unit_price, quantity, gross_amount, payment_confirmed_at, platform_fee_paid_at, payment_environment, representative_id, split_snapshot_platform_fee_total, split_snapshot_socio_fee_amount, split_snapshot_platform_net_amount, split_snapshot_source, split_snapshot_captured_at, platform_fee_payment_id, platform_fee_status, sale_origin")
+      .select("id, status, asaas_payment_id, asaas_payment_status, company_id, unit_price, quantity, gross_amount, payment_confirmed_at, platform_fee_paid_at, payment_environment, representative_id, split_snapshot_platform_fee_total, split_snapshot_socio_fee_amount, split_snapshot_platform_net_amount, split_snapshot_source, split_snapshot_captured_at, platform_fee_payment_id, platform_fee_status, sale_origin, payment_gateway, payment_connection_id")
       .eq("id", saleIdFromRequest)
       .single();
 
@@ -210,6 +211,7 @@ serve(async (req) => {
         paymentId: sale.asaas_payment_id,
         allowStatusUpdate: false,
         writeSaleLog: false,
+        gateway: sale.payment_gateway === "pagbank" ? "pagbank" : "asaas",
       });
 
       if (!finalization.ok) {
@@ -260,6 +262,46 @@ serve(async (req) => {
         responseJson: { paymentStatus: "cancelado" },
       });
       return jsonResponse({ paymentStatus: "cancelado" }, 200);
+    }
+
+    // Ramo PagBank (aditivo): gateway congelado na venda decide; Asaas segue abaixo inalterado.
+    if (sale.payment_gateway === "pagbank") {
+      try {
+        const sync = await syncPagbankSaleStatus(supabaseAdmin, { sale, source: "verify-payment-status", eventType: "verify_payment_status" });
+        if (sync.state === "paid") {
+          if (!sync.finalizationOk) {
+            return jsonResponse({
+              error: "Venda paga sem passagem gerada",
+              error_code: "paid_sale_without_tickets",
+              paymentStatus: "inconsistente_sem_passagem",
+              gateway: "pagbank",
+            }, sync.httpStatus);
+          }
+          return jsonResponse({ paymentStatus: "pago", gateway: "pagbank", paymentConfirmedAt: new Date().toISOString() }, 200);
+        }
+        if (sync.state === "pending") {
+          return jsonResponse({
+            paymentStatus: sale.status,
+            gateway: "pagbank",
+            gatewayStatus: sync.rawStatus,
+            pix: sync.attempt ? {
+              qr_text: sync.attempt.pix_qr_text,
+              qr_image_url: sync.attempt.pix_qr_image_url,
+              expires_at: sync.attempt.pix_expires_at,
+              amount_cents: sync.attempt.amount_cents,
+            } : null,
+          }, 200);
+        }
+        if (sync.state === "query_failed") {
+          return jsonResponse({ paymentStatus: sale.status, gateway: "pagbank", warning: sync.code }, 200);
+        }
+        return jsonResponse({ paymentStatus: sale.status, gateway: "pagbank", warning: "no_payment_attempt" }, 200);
+      } catch (pagbankError) {
+        if (isPagbankError(pagbankError)) {
+          return jsonResponse({ paymentStatus: sale.status, gateway: "pagbank", warning: pagbankError.code }, 200);
+        }
+        throw pagbankError;
+      }
     }
 
     const { data: company } = await supabaseAdmin

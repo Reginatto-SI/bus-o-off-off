@@ -2,7 +2,32 @@
 
 > Branch oficial: `feature/pagbank-integration`.
 
-## Estado operacional — 2026-09-05
+## Estado operacional — 2026-09-05 (sessão 2: primeira jornada PIX implementada)
+
+- Implementação aditiva concluída para Sandbox, Asaas preservado (206 testes prévios verdes
+  + 10 novos em `src/lib/pagbankCore.test.ts`; `tsgo` limpo):
+  - **Banco:** `companies.payment_gateway` (backfill `asaas`), `sales.payment_gateway/
+    payment_connection_id/external_account_id` congelados por trigger
+    (`freeze_sale_payment_context`, gateway sempre copiado da empresa no INSERT — cliente
+    não escolhe), tabelas `payment_gateway_connections`, `payment_attempts`,
+    `payment_webhook_events`, `pagbank_connect_states`; `pagbank_account_id_*` em sócio e
+    representantes; PagBank em Produção bloqueado por constraint.
+  - **Backend:** `_shared/pagbank/{core,client,crypto,credentials,split-plan,split-recipients,
+    status-sync}.ts`; Edge Functions `create-pagbank-payment`, `pagbank-webhook`,
+    `pagbank-connection` (status/set_gateway/save_sandbox_token/connect_start/disconnect),
+    `pagbank-connect-callback`; ramo PagBank em `verify-payment-status`; guarda
+    `gateway_mismatch` em `create-asaas-payment`; `finalizeConfirmedPayment` recebe
+    `gateway` opcional (default `asaas`, comportamento inalterado).
+  - **Frontend:** checkout roteia por gateway (PagBank = só PIX, sem aba externa);
+    `/confirmacao` exibe `PagbankPixPanel` (QR, copia-e-cola, expiração); aba Pagamentos
+    ganhou `PagbankConnectionCard` (seleção Asaas/PagBank + conexão, sem secrets).
+  - **Secrets:** somente `PAGBANK_TOKEN_ENCRYPTION_KEY` existe; demais listados em
+    [`PAGBANK_OPERACAO_SANDBOX.md`](./PAGBANK_OPERACAO_SANDBOX.md).
+- **Ainda não testado contra o Sandbox real** (sem credenciais). Ver seção 7 do runbook.
+- Linter de segurança: apenas findings preexistentes + 2 tabelas privadas sem policy
+  (deny-all intencional, acesso só via service role).
+
+## Estado operacional — 2026-09-05 (sessão 1)
 
 - Primeiro PR funcional de caracterização Asaas concluído em
   [`ASAAS_CHARACTERIZATION_BASELINE.md`](./ASAAS_CHARACTERIZATION_BASELINE.md):
@@ -80,6 +105,9 @@ URLs públicas e OAuth.
   piloto, reconciliação, observabilidade e regressão integral Asaas.
 
 ## Próximo passo recomendado
+
+Obter credenciais Sandbox (token manual ou client id/secret) e executar a jornada ponta a
+ponta; homologar split PIX, webhook e recuperação por `reference_id`. Histórico anterior:
 
 Próximo PR permitido: seam mínimo e aditivo de testabilidade da finalização, com
 porta estreita de persistência/efeitos para caracterizar concorrência, ticket,

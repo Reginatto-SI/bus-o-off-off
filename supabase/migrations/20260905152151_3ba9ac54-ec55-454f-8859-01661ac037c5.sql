@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.freeze_sale_payment_context() FROM PUBLIC, anon, authenticated;

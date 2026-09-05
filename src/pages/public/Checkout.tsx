@@ -310,8 +310,12 @@ export default function Checkout() {
   const [companyPixStatus, setCompanyPixStatus] = useState<{
     productionReady: boolean;
     sandboxReady: boolean;
+    pagbankReady?: boolean;
   } | null>(null);
   const [companyPlatformFeePercent, setCompanyPlatformFeePercent] = useState(0);
+  // Gateway ativo da empresa para NOVAS vendas (congelado na venda pelo banco no insert).
+  const [companyPaymentGateway, setCompanyPaymentGateway] = useState<"asaas" | "pagbank">("asaas");
+  const isPagbankGateway = companyPaymentGateway === "pagbank";
   // Fonte única de verdade: o ambiente operacional é configuração da empresa do evento.
   const [companyPaymentEnvironment, setCompanyPaymentEnvironment] = useState<
     string | null
@@ -327,12 +331,15 @@ export default function Checkout() {
     environment: runtimePaymentEnvironment,
     source: runtimePaymentEnvironmentSource,
   } = useRuntimePaymentEnvironment(companyPaymentEnvironment);
-  const isPixReadyForCurrentEnvironment =
-    runtimePaymentEnvironment === "production"
+  const isPixReadyForCurrentEnvironment = isPagbankGateway
+    ? Boolean(companyPixStatus?.pagbankReady)
+    : runtimePaymentEnvironment === "production"
       ? Boolean(companyPixStatus?.productionReady)
       : runtimePaymentEnvironment === "sandbox"
         ? Boolean(companyPixStatus?.sandboxReady)
         : false;
+  // PagBank nesta fase: somente PIX (cartão fora do escopo).
+  const isCreditCardAvailable = !isPagbankGateway;
   const hasConfiguredPlatformFee =
     Number.isFinite(companyPlatformFeePercent) && companyPlatformFeePercent > 0;
 
@@ -373,11 +380,15 @@ export default function Checkout() {
   );
 
   useEffect(() => {
+    if (isPagbankGateway) {
+      if (paymentMethod !== "pix") setPaymentMethod("pix");
+      return;
+    }
     if (paymentMethod === "pix" && runtimePaymentEnvironment && !isPixReadyForCurrentEnvironment) {
       // Comentário de suporte: evita que o comprador descubra indisponibilidade do Pix apenas no fim.
       setPaymentMethod("credit_card");
     }
-  }, [paymentMethod, runtimePaymentEnvironment, isPixReadyForCurrentEnvironment]);
+  }, [paymentMethod, runtimePaymentEnvironment, isPixReadyForCurrentEnvironment, isPagbankGateway]);
 
 
   useEffect(() => {
@@ -721,7 +732,7 @@ export default function Checkout() {
           // A fonte oficial do cálculo financeiro é o snapshot gerado no backend.
           const { data: companyData, error: companyError } = await supabase
             .from("companies")
-            .select("payment_environment, platform_fee_percent, asaas_pix_ready_production, asaas_pix_ready_sandbox")
+            .select("payment_environment, platform_fee_percent, asaas_pix_ready_production, asaas_pix_ready_sandbox, payment_gateway")
             .eq("id", eventData.company_id)
             .single();
 
@@ -737,9 +748,24 @@ export default function Checkout() {
             (companyData as { payment_environment?: string | null })
               .payment_environment ?? null,
           );
+          const gateway = (companyData as { payment_gateway?: string | null }).payment_gateway === "pagbank" ? "pagbank" : "asaas";
+          setCompanyPaymentGateway(gateway);
+          let pagbankReady = false;
+          if (gateway === "pagbank") {
+            // Prontidão PIX PagBank vem da conexão corrente da empresa (leitura pública restrita a flags).
+            const { data: pagbankConn } = await supabase
+              .from("payment_gateway_connections")
+              .select("pix_ready, status")
+              .eq("company_id", eventData.company_id)
+              .eq("gateway", "pagbank")
+              .eq("is_current", true)
+              .maybeSingle();
+            pagbankReady = Boolean(pagbankConn?.pix_ready && pagbankConn?.status === "connected");
+          }
           setCompanyPixStatus({
             productionReady: Boolean(companyData.asaas_pix_ready_production),
             sandboxReady: Boolean(companyData.asaas_pix_ready_sandbox),
+            pagbankReady,
           });
 
           // Fetch event fees
@@ -1301,7 +1327,12 @@ export default function Checkout() {
       return;
     }
 
-    if (paymentMethod === "pix" && runtimePaymentEnvironment && !isPixReadyForCurrentEnvironment) {
+    if (isPagbankGateway && !isPixReadyForCurrentEnvironment) {
+      toast.error("Pagamentos desta empresa estão temporariamente indisponíveis. Entre em contato com o organizador do evento.");
+      return;
+    }
+
+    if (!isPagbankGateway && paymentMethod === "pix" && runtimePaymentEnvironment && !isPixReadyForCurrentEnvironment) {
       toast.error(
         "Pix indisponível para esta empresa no momento. Escolha cartão de crédito para concluir a compra.",
       );
@@ -1317,7 +1348,8 @@ export default function Checkout() {
     // Comentário de suporte: em navegador comum abrimos a aba de pagamento ainda
     // no clique do usuário para evitar bloqueio de pop-up após as etapas
     // assíncronas do checkout. Em app instalado, deixamos o wrapper tratar a nova janela.
-    const preOpenedPaymentTab = isInstalledAppContext ? null : window.open("", "_blank");
+    // PagBank: QR PIX é exibido no próprio SmartBus; nenhuma aba externa é aberta.
+    const preOpenedPaymentTab = isInstalledAppContext || isPagbankGateway ? null : window.open("", "_blank");
     if (preOpenedPaymentTab) {
       renderPaymentPreparingTab(preOpenedPaymentTab);
     }
@@ -1752,6 +1784,61 @@ export default function Checkout() {
       await supabase.from("sales").delete().eq("id", sale.id);
       toast.error("Erro ao registrar dados dos passageiros. Tente novamente.");
       preOpenedPaymentTab?.close();
+      setSubmitting(false);
+      setPaymentCheckoutStatus("idle");
+      return;
+    }
+
+    // === Step 4 (PagBank): gera o PIX no backend e segue para a confirmação com QR ===
+    if (isPagbankGateway) {
+      try {
+        const { data: pagbankData, error: pagbankError } = await supabase.functions.invoke("create-pagbank-payment", {
+          body: { sale_id: sale.id, payment_method: "pix", terms_acceptance: termsAcceptancePayload },
+        });
+        let pagbankErrorBody = pagbankData;
+        if (pagbankError && !pagbankErrorBody) {
+          try {
+            pagbankErrorBody = await (pagbankError as CheckoutErrorWithContext).context?.json?.();
+          } catch {
+            /* ignore */
+          }
+        }
+        const pagbankErrorCode = pagbankErrorBody?.error_code;
+        if (!pagbankError && pagbankData?.pix?.qr_text) {
+          setSubmitting(false);
+          setPaymentCheckoutStatus("idle");
+          navigate(`/confirmacao/${sale.id}?retorno=pagbank`);
+          return;
+        }
+        if (pagbankErrorCode === "pagbank_indeterminate" || pagbankErrorCode === "pagbank_idempotency_conflict") {
+          // Cobrança pode existir: nunca apagar a venda. A confirmação recupera/consulta.
+          setSubmitting(false);
+          setPaymentCheckoutStatus("idle");
+          navigate(`/confirmacao/${sale.id}?retorno=pagbank`);
+          return;
+        }
+        console.error("[checkout] create_pagbank_payment_failed", {
+          saleId: sale.id, eventId: event.id, companyId: event.company_id, errorCode: pagbankErrorCode ?? null,
+        });
+        preserveCheckoutFailureTrace({
+          saleId: sale.id,
+          stage: "create_pagbank_payment_response_error",
+          errorCode: typeof pagbankErrorCode === "string" ? pagbankErrorCode : null,
+          errorMessage: typeof pagbankErrorBody?.message === "string" ? pagbankErrorBody.message : "Erro ao gerar o PIX. Tente novamente.",
+        });
+        await supabase.from("seat_locks").delete().eq("sale_id", sale.id);
+        await supabase.from("sale_passengers").delete().eq("sale_id", sale.id);
+        await supabase.from("sales").delete().eq("id", sale.id);
+        toast.error(
+          typeof pagbankErrorBody?.message === "string" && pagbankErrorBody.message.trim()
+            ? pagbankErrorBody.message
+            : "Não foi possível gerar o PIX agora. Tente novamente.",
+        );
+      } catch (pagbankException) {
+        console.error("[checkout] create_pagbank_payment_exception", { saleId: sale.id, error: pagbankException });
+        // Resultado desconhecido: preserva a venda; confirmação tenta recuperar.
+        navigate(`/confirmacao/${sale.id}?retorno=pagbank`);
+      }
       setSubmitting(false);
       setPaymentCheckoutStatus("idle");
       return;
@@ -2469,15 +2556,17 @@ export default function Checkout() {
                 </div>
               </label>
 
-              <label className="flex items-start gap-3 p-4 rounded-lg border bg-card cursor-pointer hover:bg-muted/30 transition-colors has-[:checked]:border-primary has-[:checked]:ring-2 has-[:checked]:ring-primary/20">
-                <RadioGroupItem value="credit_card" className="mt-1" />
-                <div className="space-y-1">
-                  <p className="font-semibold">Cartão de crédito</p>
-                  <p className="text-sm text-muted-foreground">
-                    Pagamento seguro com cartão de crédito.
-                  </p>
-                </div>
-              </label>
+              {isCreditCardAvailable && (
+                <label className="flex items-start gap-3 p-4 rounded-lg border bg-card cursor-pointer hover:bg-muted/30 transition-colors has-[:checked]:border-primary has-[:checked]:ring-2 has-[:checked]:ring-primary/20">
+                  <RadioGroupItem value="credit_card" className="mt-1" />
+                  <div className="space-y-1">
+                    <p className="font-semibold">Cartão de crédito</p>
+                    <p className="text-sm text-muted-foreground">
+                      Pagamento seguro com cartão de crédito.
+                    </p>
+                  </div>
+                </label>
+              )}
             </RadioGroup>
             {!isPixReadyForCurrentEnvironment && runtimePaymentEnvironment && (
               <p className="text-xs text-amber-700">

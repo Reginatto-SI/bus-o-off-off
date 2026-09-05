@@ -23,6 +23,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AsaasOnboardingWizard, AsaasOnboardingCompanyData } from '@/components/admin/AsaasOnboardingWizard';
 import { AsaasDiagnosticPanel } from '@/components/admin/AsaasDiagnosticPanel';
+import { PagbankConnectionCard } from '@/components/admin/PagbankConnectionCard';
 import { CompanyTermsTab } from '@/components/admin/CompanyTermsTab';
 import { toast } from 'sonner';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
@@ -2104,6 +2105,10 @@ export default function CompanyPage() {
 
                   <TabsContent value="pagamentos" className="mt-0">
                     <div className="space-y-6">
+                      {activeCompanyId && (
+                        <PagbankConnectionCard companyId={activeCompanyId} canEdit={isGerente || isDeveloper} />
+                      )}
+
 
                       {/* Comissionamento da Plataforma — Developer Only */}
                       {isDeveloper && (() => {

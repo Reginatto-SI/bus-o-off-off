@@ -126,7 +126,7 @@ export async function logSaleIntegrationEvent(params: {
   environmentDecisionSource?: string | null;
   environmentHostDetected?: string | null;
   // Contrato alinhado ao runtime oficial atual: apenas Asaas e fluxo manual administrativo.
-  provider: "asaas" | "manual";
+  provider: "asaas" | "manual" | "pagbank";
   direction: "incoming_webhook" | "outgoing_request" | "manual_sync";
   eventType?: string | null;
   paymentId?: string | null;
