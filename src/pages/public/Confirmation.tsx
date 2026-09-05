@@ -21,6 +21,7 @@ import type { SaleStatus } from '@/types/database';
 import { getConfirmationResponsibilityText } from '@/lib/intermediationPolicy';
 import { resolveTicketPurchaseConfirmedAt, resolveTicketPurchaseOriginLabel } from '@/lib/ticketPurchaseMetadata';
 import { isInstalledAppPaymentContext, logAsaasInvoiceOpen } from '@/lib/asaasInvoiceUrl';
+import { PagbankPixPanel } from '@/components/public/PagbankPixPanel';
 
 interface CompanyInfo {
   name: string;
@@ -48,6 +49,7 @@ export default function Confirmation() {
   const { toast } = useToast();
   const paymentSuccess = searchParams.get('payment') === 'success';
   const isAsaasReturn = searchParams.get('retorno') === 'asaas';
+  const isPagbankReturn = searchParams.get('retorno') === 'pagbank';
   const [sale, setSale] = useState<Sale | null>(null);
   const [tickets, setTickets] = useState<TicketRecord[]>([]);
   const [seatDataMap, setSeatDataMap] = useState<Record<string, { category: string; floor: number }>>({});
@@ -341,7 +343,7 @@ export default function Confirmation() {
 
     let attempts = 0;
     // Retorno do Asaas: polling mais agressivo (2s) para capturar o pago o quanto antes.
-    const pollIntervalMs = isAsaasReturn ? 2000 : 3000;
+    const pollIntervalMs = isAsaasReturn || isPagbankReturn ? 2000 : 3000;
     const maxAttempts = Math.ceil((6 * 60 * 1000) / pollIntervalMs);
 
     const interval = setInterval(async () => {
@@ -387,7 +389,7 @@ export default function Confirmation() {
     }, pollIntervalMs);
 
     return () => clearInterval(interval);
-  }, [id, sale?.status, paymentSuccess, isAsaasReturn]);
+  }, [id, sale?.status, paymentSuccess, isAsaasReturn, isPagbankReturn]);
 
 
   const companyDisplayName = company?.trade_name || company?.name || '';
@@ -555,10 +557,12 @@ export default function Confirmation() {
 
   const isPaid = sale.status === 'pago';
   const isPendingPayment = sale.status === 'pendente_pagamento';
-  const isAwaitingPayment = isPendingPayment || (sale.status === 'reservado' && (paymentSuccess || isAsaasReturn));
+  const isAwaitingPayment = isPendingPayment || (sale.status === 'reservado' && (paymentSuccess || isAsaasReturn || isPagbankReturn));
+  // Gateway congelado na venda decide a experiência de pagamento (PagBank = PIX dentro do SmartBus).
+  const isPagbankSale = (sale as { payment_gateway?: string | null }).payment_gateway === 'pagbank';
   const isInstalledAppContext = isInstalledAppPaymentContext();
   // Exibimos a ação somente quando existe cobrança Asaas vinculada e venda ainda aguardando pagamento.
-  const canReopenAsaasInvoice = isAwaitingPayment && Boolean(sale.asaas_payment_id);
+  const canReopenAsaasInvoice = isAwaitingPayment && !isPagbankSale && Boolean(sale.asaas_payment_id);
 
 
   const paymentPendingActions = (
@@ -685,6 +689,15 @@ export default function Confirmation() {
                 </>
               )}
             </>
+          ) : isAwaitingPayment && !pollingTimedOut && isPagbankSale ? (
+            <>
+              <h1 className="text-2xl font-bold text-foreground mb-2">Falta só o pagamento</h1>
+              <p className="text-muted-foreground">
+                Assim que o PIX for confirmado, sua passagem digital aparecerá automaticamente aqui.
+              </p>
+              <PagbankPixPanel saleId={sale.id} />
+              {paymentPendingActions}
+            </>
           ) : isAwaitingPayment && !pollingTimedOut ? (
             <>
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-50 mb-4">
@@ -716,7 +729,7 @@ export default function Confirmation() {
               )}
               {paymentPendingActions}
             </>
-          ) : (isPendingPayment || paymentSuccess || isAsaasReturn) && pollingTimedOut ? (
+          ) : (isPendingPayment || paymentSuccess || isAsaasReturn || isPagbankReturn) && pollingTimedOut ? (
             <>
               {/* Retorno do Asaas é apenas contexto de UX; o estado financeiro continua vindo do polling/verify. */}
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-100 mb-4">

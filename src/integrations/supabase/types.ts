@@ -505,6 +505,7 @@ export type Database = {
           name: string
           notes: string | null
           payment_environment: string
+          payment_gateway: string
           phone: string | null
           platform_fee_percent: number
           postal_code: string | null
@@ -570,6 +571,7 @@ export type Database = {
           name: string
           notes?: string | null
           payment_environment?: string
+          payment_gateway?: string
           phone?: string | null
           platform_fee_percent?: number
           postal_code?: string | null
@@ -635,6 +637,7 @@ export type Database = {
           name?: string
           notes?: string | null
           payment_environment?: string
+          payment_gateway?: string
           phone?: string | null
           platform_fee_percent?: number
           postal_code?: string | null
@@ -1635,6 +1638,299 @@ export type Database = {
           },
         ]
       }
+      pagbank_connect_states: {
+        Row: {
+          company_id: string
+          created_at: string
+          environment: string
+          expires_at: string
+          state: string
+          used_at: string | null
+          user_id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          environment: string
+          expires_at: string
+          state: string
+          used_at?: string | null
+          user_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          environment?: string
+          expires_at?: string
+          state?: string
+          used_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pagbank_connect_states_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_attempts: {
+        Row: {
+          amount_cents: number | null
+          attempt_count: number
+          company_id: string
+          connection_id: string | null
+          created_at: string
+          environment: string
+          error_code: string | null
+          error_message_sanitized: string | null
+          external_charge_id: string | null
+          external_order_id: string | null
+          external_reference: string | null
+          external_status_raw: string | null
+          gateway: string
+          id: string
+          idempotency_key: string
+          last_queried_at: string | null
+          normalized_status: string | null
+          operation: string
+          payload_hash: string | null
+          pix_expires_at: string | null
+          pix_qr_image_url: string | null
+          pix_qr_text: string | null
+          sale_id: string
+          state: string
+          updated_at: string
+        }
+        Insert: {
+          amount_cents?: number | null
+          attempt_count?: number
+          company_id: string
+          connection_id?: string | null
+          created_at?: string
+          environment: string
+          error_code?: string | null
+          error_message_sanitized?: string | null
+          external_charge_id?: string | null
+          external_order_id?: string | null
+          external_reference?: string | null
+          external_status_raw?: string | null
+          gateway: string
+          id?: string
+          idempotency_key: string
+          last_queried_at?: string | null
+          normalized_status?: string | null
+          operation: string
+          payload_hash?: string | null
+          pix_expires_at?: string | null
+          pix_qr_image_url?: string | null
+          pix_qr_text?: string | null
+          sale_id: string
+          state?: string
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number | null
+          attempt_count?: number
+          company_id?: string
+          connection_id?: string | null
+          created_at?: string
+          environment?: string
+          error_code?: string | null
+          error_message_sanitized?: string | null
+          external_charge_id?: string | null
+          external_order_id?: string | null
+          external_reference?: string | null
+          external_status_raw?: string | null
+          gateway?: string
+          id?: string
+          idempotency_key?: string
+          last_queried_at?: string | null
+          normalized_status?: string | null
+          operation?: string
+          payload_hash?: string | null
+          pix_expires_at?: string | null
+          pix_qr_image_url?: string | null
+          pix_qr_text?: string | null
+          sale_id?: string
+          state?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_attempts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_attempts_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "payment_gateway_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_attempts_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: false
+            referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_gateway_connections: {
+        Row: {
+          access_token_enc: string | null
+          company_id: string
+          connected_at: string | null
+          created_at: string
+          credential_generation: number
+          credential_mode: string | null
+          environment: string
+          external_account_email: string | null
+          external_account_id: string | null
+          gateway: string
+          id: string
+          is_current: boolean
+          last_error: string | null
+          last_validated_at: string | null
+          pix_ready: boolean
+          refresh_token_enc: string | null
+          revoked_at: string | null
+          scopes: string[] | null
+          status: string
+          token_expires_at: string | null
+          updated_at: string
+          webhook_token_enc: string | null
+        }
+        Insert: {
+          access_token_enc?: string | null
+          company_id: string
+          connected_at?: string | null
+          created_at?: string
+          credential_generation?: number
+          credential_mode?: string | null
+          environment: string
+          external_account_email?: string | null
+          external_account_id?: string | null
+          gateway: string
+          id?: string
+          is_current?: boolean
+          last_error?: string | null
+          last_validated_at?: string | null
+          pix_ready?: boolean
+          refresh_token_enc?: string | null
+          revoked_at?: string | null
+          scopes?: string[] | null
+          status?: string
+          token_expires_at?: string | null
+          updated_at?: string
+          webhook_token_enc?: string | null
+        }
+        Update: {
+          access_token_enc?: string | null
+          company_id?: string
+          connected_at?: string | null
+          created_at?: string
+          credential_generation?: number
+          credential_mode?: string | null
+          environment?: string
+          external_account_email?: string | null
+          external_account_id?: string | null
+          gateway?: string
+          id?: string
+          is_current?: boolean
+          last_error?: string | null
+          last_validated_at?: string | null
+          pix_ready?: boolean
+          refresh_token_enc?: string | null
+          revoked_at?: string | null
+          scopes?: string[] | null
+          status?: string
+          token_expires_at?: string | null
+          updated_at?: string
+          webhook_token_enc?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_gateway_connections_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_webhook_events: {
+        Row: {
+          company_id: string | null
+          duplicate_count: number
+          environment: string
+          event_key: string
+          external_account_id: string
+          first_received_at: string
+          gateway: string
+          id: string
+          last_seen_at: string
+          processing_result: string | null
+          raw_body_hash: string | null
+          raw_status: string | null
+          sale_id: string | null
+          signature_valid: boolean | null
+        }
+        Insert: {
+          company_id?: string | null
+          duplicate_count?: number
+          environment: string
+          event_key: string
+          external_account_id?: string
+          first_received_at?: string
+          gateway: string
+          id?: string
+          last_seen_at?: string
+          processing_result?: string | null
+          raw_body_hash?: string | null
+          raw_status?: string | null
+          sale_id?: string | null
+          signature_valid?: boolean | null
+        }
+        Update: {
+          company_id?: string | null
+          duplicate_count?: number
+          environment?: string
+          event_key?: string
+          external_account_id?: string
+          first_received_at?: string
+          gateway?: string
+          id?: string
+          last_seen_at?: string
+          processing_result?: string | null
+          raw_body_hash?: string | null
+          raw_status?: string | null
+          sale_id?: string | null
+          signature_valid?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_webhook_events_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_webhook_events_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: false
+            referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           cep: string | null
@@ -1841,6 +2137,8 @@ export type Database = {
           email: string | null
           id: string
           name: string
+          pagbank_account_id_production: string | null
+          pagbank_account_id_sandbox: string | null
           phone: string | null
           referral_link: string | null
           representative_code: string
@@ -1858,6 +2156,8 @@ export type Database = {
           email?: string | null
           id?: string
           name: string
+          pagbank_account_id_production?: string | null
+          pagbank_account_id_sandbox?: string | null
           phone?: string | null
           referral_link?: string | null
           representative_code: string
@@ -1875,6 +2175,8 @@ export type Database = {
           email?: string | null
           id?: string
           name?: string
+          pagbank_account_id_production?: string | null
+          pagbank_account_id_sandbox?: string | null
           phone?: string | null
           referral_link?: string | null
           representative_code?: string
@@ -2360,12 +2662,15 @@ export type Database = {
           customer_name: string
           customer_phone: string | null
           event_id: string
+          external_account_id: string | null
           gross_amount: number | null
           id: string
           intermediation_responsibility_accepted: boolean
           intermediation_responsibility_accepted_at: string | null
           payment_confirmed_at: string | null
+          payment_connection_id: string | null
           payment_environment: string
+          payment_gateway: string
           payment_method: string | null
           platform_fee_amount: number | null
           platform_fee_paid_at: string | null
@@ -2409,12 +2714,15 @@ export type Database = {
           customer_name: string
           customer_phone?: string | null
           event_id: string
+          external_account_id?: string | null
           gross_amount?: number | null
           id?: string
           intermediation_responsibility_accepted?: boolean
           intermediation_responsibility_accepted_at?: string | null
           payment_confirmed_at?: string | null
+          payment_connection_id?: string | null
           payment_environment: string
+          payment_gateway?: string
           payment_method?: string | null
           platform_fee_amount?: number | null
           platform_fee_paid_at?: string | null
@@ -2458,12 +2766,15 @@ export type Database = {
           customer_name?: string
           customer_phone?: string | null
           event_id?: string
+          external_account_id?: string | null
           gross_amount?: number | null
           id?: string
           intermediation_responsibility_accepted?: boolean
           intermediation_responsibility_accepted_at?: string | null
           payment_confirmed_at?: string | null
+          payment_connection_id?: string | null
           payment_environment?: string
+          payment_gateway?: string
           payment_method?: string | null
           platform_fee_amount?: number | null
           platform_fee_paid_at?: string | null
@@ -2511,6 +2822,13 @@ export type Database = {
             columns: ["event_id"]
             isOneToOne: false
             referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_payment_connection_id_fkey"
+            columns: ["payment_connection_id"]
+            isOneToOne: false
+            referencedRelation: "payment_gateway_connections"
             referencedColumns: ["id"]
           },
           {
@@ -2835,6 +3153,8 @@ export type Database = {
           id: string
           name: string
           notes: string | null
+          pagbank_account_id_production: string | null
+          pagbank_account_id_sandbox: string | null
           status: string
           updated_at: string
         }
@@ -2848,6 +3168,8 @@ export type Database = {
           id?: string
           name: string
           notes?: string | null
+          pagbank_account_id_production?: string | null
+          pagbank_account_id_sandbox?: string | null
           status?: string
           updated_at?: string
         }
@@ -2861,6 +3183,8 @@ export type Database = {
           id?: string
           name?: string
           notes?: string | null
+          pagbank_account_id_production?: string | null
+          pagbank_account_id_sandbox?: string | null
           status?: string
           updated_at?: string
         }
@@ -3626,6 +3950,8 @@ export type Database = {
           email: string | null
           id: string
           name: string
+          pagbank_account_id_production: string | null
+          pagbank_account_id_sandbox: string | null
           phone: string | null
           referral_link: string | null
           representative_code: string
@@ -3989,6 +4315,8 @@ export type Database = {
           email: string | null
           id: string
           name: string
+          pagbank_account_id_production: string | null
+          pagbank_account_id_sandbox: string | null
           phone: string | null
           referral_link: string | null
           representative_code: string

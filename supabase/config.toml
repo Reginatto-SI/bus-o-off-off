@@ -27,3 +27,11 @@ project_id = "cdrcyjrvurrphnceromd"
     verify_jwt = false
   [functions.verify-payment-status]
     verify_jwt = false
+  [functions.create-pagbank-payment]
+    verify_jwt = false
+  [functions.pagbank-webhook]
+    verify_jwt = false
+  [functions.pagbank-connect-callback]
+    verify_jwt = false
+  [functions.pagbank-connection]
+    verify_jwt = false
