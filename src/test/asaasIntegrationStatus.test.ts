@@ -65,7 +65,7 @@ function buildCompany(overrides: Partial<Company>): Company {
 }
 
 describe('getAsaasIntegrationSnapshot', () => {
-  it('marca conectado para vínculo via API direta apenas com API Key no ambiente ativo', () => {
+  it('marca parcialmente configurado quando há somente API Key no ambiente ativo', () => {
     const company = buildCompany({
       asaas_api_key_production: 'key_prod_123',
       asaas_wallet_id_production: null,
@@ -75,8 +75,10 @@ describe('getAsaasIntegrationSnapshot', () => {
 
     const snapshot = getAsaasIntegrationSnapshot(company, 'production');
 
-    expect(snapshot.status).toBe('connected');
-    expect(snapshot.currentIsConnected).toBe(true);
+    // A cobrança usa a API key, mas o status operacional também exige wallet para split e diagnóstico.
+    expect(snapshot.status).toBe('partially_configured');
+    expect(snapshot.currentIsConnected).toBe(false);
+    expect(snapshot.reasons).toContain('configuração do ambiente operacional está incompleta');
   });
 
   it('mantém inconsistente quando onboarding está true mas faltam credenciais operacionais', () => {

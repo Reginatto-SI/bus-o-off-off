@@ -88,6 +88,31 @@ describe('divisão ocorre depois da taxa comercial absoluta', () => {
       representativeAmount: representative,
     });
   });
+
+  it.each([
+    [true, true, 1.67, 1.66, 1.66],
+    [true, false, 2.5, 2.49, 0],
+    [false, true, 3.33, 0, 1.66],
+    [false, false, 4.99, 0, 0],
+  ])('conserva exatamente 499 centavos e atribui o resíduo à plataforma para sócio=%s representante=%s', (
+    socioEligible,
+    representativeEligible,
+    platform,
+    socio,
+    representative,
+  ) => {
+    // A soma em centavos protege o destino determinístico do resíduo sem tolerância de ponto flutuante.
+    const result = distributePlatformFee({ totalFee: 4.99, socioEligible, representativeEligible });
+    const amountsInCents = [result.platformAmount, result.socioAmount, result.representativeAmount]
+      .map((amount) => Math.round(amount * 100));
+
+    expect(result).toMatchObject({
+      platformAmount: platform,
+      socioAmount: socio,
+      representativeAmount: representative,
+    });
+    expect(amountsInCents.reduce((total, amount) => total + amount, 0)).toBe(499);
+  });
 });
 
 describe('wallet global por ambiente', () => {
