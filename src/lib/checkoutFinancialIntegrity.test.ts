@@ -168,4 +168,26 @@ describe('checkout financial integrity with ticket type packages', () => {
     expect(result.expectedGrossFromSnapshot).toBe(210);
     expect(result.isValid).toBe(true);
   });
+
+  it('mantém snapshot coerente para múltiplos passageiros com valores em centavos', () => {
+    const snapshot = buildCheckoutFinancialIntegritySnapshot({
+      saleTripId: tripId,
+      grossAmount: 180.21,
+      passengerSnapshots: [
+        passenger({ final_price: 100.01, ticket_type_price: 100.01 }),
+        passenger({ final_price: 75.19, ticket_type_price: 75.19 }),
+      ],
+      eventFees: [],
+      passPlatformFeeToCustomer: true,
+      progressivePlatformFeeTotal: 5.01,
+    });
+
+    // Todas as comparações usam os valores produzidos pelo helper, sem arredondamento tolerante no teste.
+    expect(snapshot).toMatchObject({
+      passengerFinalSum: 175.2,
+      feesTotal: 5.01,
+      expectedGrossFromSnapshot: 180.21,
+      saleFeesFromGross: 5.01,
+    });
+  });
 });
