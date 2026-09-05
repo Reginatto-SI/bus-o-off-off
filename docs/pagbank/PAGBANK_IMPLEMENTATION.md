@@ -4,10 +4,19 @@
 
 ## Estado operacional — 2026-09-05
 
+- Primeiro PR funcional de caracterização Asaas concluído em
+  [`ASAAS_CHARACTERIZATION_BASELINE.md`](./ASAAS_CHARACTERIZATION_BASELINE.md):
+  motor/split, centavos e resíduo, snapshot multi-item, precedência de ambiente,
+  isolamento de credenciais e token de webhook estão cobertos em helpers.
+- A baseline final está verde; a execução inicial expôs duas expectativas antigas
+  e contraditórias de readiness Asaas, alinhadas nos testes ao contrato atual de
+  API key + wallet. Create/webhook/verify/finalização concorrente e isolamento
+  tenant ponta a ponta continuam parciais ou bloqueados pelos handlers Deno
+  monolíticos.
 - Auditoria arquitetural do código atual concluída em
   [`PAGBANK_ARCHITECTURE_AND_SEAMS.md`](./PAGBANK_ARCHITECTURE_AND_SEAMS.md).
-- Implementação funcional do PagBank ainda não iniciada; nenhum código, migration,
-  RLS, Edge Function, teste, credencial ou comportamento Asaas foi alterado.
+- Implementação funcional do PagBank ainda não iniciada; nenhum código de produção,
+  migration, RLS, Edge Function, credencial ou comportamento Asaas foi alterado.
 - Direção preservada: integração direta oficial pela API Order, PIX e cartão,
   coexistindo com Asaas e sem migração/fallback automático.
 - **Payment Link e checkout hospedado não fazem parte do escopo.**
@@ -72,10 +81,11 @@ URLs públicas e OAuth.
 
 ## Próximo passo recomendado
 
-Primeiro PR funcional: **somente testes de caracterização do Asaas** para
-create/verify/webhook/finalização, split, ambiente, retry, ticket único, vendas
-antigas e isolamento multiempresa. Depois, schema aditivo e seam que inicialmente
-encaminha o Asaas sem alterar seu comportamento.
+Próximo PR permitido: seam mínimo e aditivo de testabilidade da finalização, com
+porta estreita de persistência/efeitos para caracterizar concorrência, ticket,
+ledger e locks sem alterar o comportamento Asaas. Somente depois dessa proteção,
+avaliar schema aditivo e seam que inicialmente encaminhe o Asaas sem mudança
+funcional.
 
 ## Histórico resumido
 
@@ -85,3 +95,5 @@ encaminha o Asaas sem alterar seu comportamento.
   permitido com restrições, produção mantida bloqueada.
 - **2026-09-05:** auditoria arquitetural completa; seams mínimos, ambiente/domínio,
   evolução aditiva, caracterização e gates documentados.
+- **2026-09-05:** baseline Asaas executável concluída; 205 testes verdes e lacunas
+  de Edge/finalização concorrente registradas sem alterar produção.
