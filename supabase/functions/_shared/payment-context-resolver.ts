@@ -259,8 +259,16 @@ export function resolvePaymentContext(params: {
     requestedEnvironment === "production" ||
     requestedEnvironment === "sandbox"
   ) {
-    environment = requestedEnvironment;
+    // Ambiente explícito do cliente também é rebaixado pela origem: um
+    // parâmetro do frontend nunca autoriza Produção sozinho.
+    const origin = classifyRequestOrigin(params.request ?? null);
+    const effective = resolveEffectivePaymentEnvironment({
+      configured: requestedEnvironment,
+      originClass: origin.originClass,
+    });
+    environment = effective.environment ?? requestedEnvironment;
     environmentSource = "request";
+    hostDetected = origin.host || null;
   } else {
     /**
      * Regra de segurança do projeto:

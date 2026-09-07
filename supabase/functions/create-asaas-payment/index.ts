@@ -320,6 +320,7 @@ serve(async (req) => {
           ? { payment_environment: lockedSaleEnvironment }
           : undefined,
         company,
+        request: req,
       });
     } catch (contextError) {
       await logSaleOperationalEvent({
