@@ -1,25 +1,24 @@
-# Contexto oficial da iniciativa PagBank
+# Contexto atual da iniciativa PagBank
 
-Este arquivo é um marcador operacional para tarefas executadas no Codex Cloud.
+Atualizado em 2026-09-07 por autorização explícita do responsável pelo SmartBus.
 
-- Repositório: `Reginatto-SI/bus-o-off-off`
-- Branch persistente oficial: `feature/pagbank-integration`
-- Destino obrigatório de PRs/Drafts intermediários: `feature/pagbank-integration`
-- `main` é permitida somente como destino do PR final, após homologação, regressão do Asaas e autorização explícita do usuário.
+- Repositório: `Reginatto-SI/bus-o-off-off`.
+- Base atual de desenvolvimento e integração: `main`.
+- Branches temporárias, quando utilizadas, partem de `main`; PRs apontam para `main`.
+- A obrigatoriedade de `feature/pagbank-integration` foi revogada. Não exigir essa branch nem bloquear trabalho por sua ausência.
+- Respeitar permissões e proteções do GitHub, preservar alterações concorrentes e limitar cada mudança ao escopo autorizado.
+- O nome local `work` no Codex Cloud e a ausência de remoto não são, isoladamente, bloqueios. Verificar o contexto e o checkpoint disponíveis.
+- Documentos antigos que exigem a branch PagBank são históricos quanto a esse fluxo.
 
-## Compatibilidade com Codex Cloud
+## Escopo e segurança
 
-O Codex Cloud pode carregar o conteúdo da branch selecionada em uma branch local temporária chamada `work`, sem `origin` configurado e sem a referência Git local `feature/pagbank-integration`.
+A implementação funcional PIX Sandbox já existe; o estado e as pendências estão em
+`PAGBANK_IMPLEMENTATION.md`. Não confundir implementação com homologação concluída.
 
-Nessa situação, o nome local `work` ou a ausência de `remote` não devem, isoladamente, bloquear uma tarefa PagBank.
+PagBank em Produção permanece bloqueado. A mudança de branch não autoriza pagamentos reais,
+migração automática de empresas, alteração de regras financeiras ou uso de credenciais reais.
 
-A validação deve seguir as regras do `AGENTS.md` e confirmar conjuntamente este marcador, o checkpoint `docs/pagbank/PAGBANK_IMPLEMENTATION.md` e as instruções PagBank vigentes.
+Preservar Asaas, isolamento multiempresa, ambiente de origem das vendas e armazenamento seguro.
+Payment Link e checkout hospedado continuam fora do escopo.
 
-## Escopo atual
-
-- PagBank ainda não está em implementação funcional.
-- Payment Link, link de pagamento e checkout hospedado PagBank estão fora do escopo atual.
-- O escopo inicial é integração via API com PIX e cartão de crédito.
-- Asaas deve permanecer preservado durante toda a implantação e estabilização do PagBank.
-
-Este arquivo não substitui o checkpoint nem as Skills; ele apenas identifica o contexto correto da iniciativa quando o ambiente temporário do Codex Cloud não expõe o nome real da branch.
+Leia também o `AGENTS.md`, o checkpoint e as Skills aplicáveis.
