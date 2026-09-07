@@ -43,7 +43,7 @@ export function AdminHeader() {
     nextIsActive: boolean;
   } | null>(null);
   const canAccessAdminNotifications = userRole === 'gerente' || userRole === 'operador' || userRole === 'developer';
-  const { isSandbox } = useRuntimePaymentEnvironment();
+  const { isSandbox, isDowngradedByOrigin } = useRuntimePaymentEnvironment();
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useAdminNotifications({
     activeCompanyId: activeCompany?.id ?? null,
     canAccessAdminNotifications,
@@ -352,7 +352,13 @@ export function AdminHeader() {
           Não há regra paralela no frontend; o valor vem da mesma lógica de decisão do backend.
         */}
         {isSandbox && (
-          <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-50">
+          <Badge
+            variant="outline"
+            className="border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-50"
+            title={isDowngradedByOrigin
+              ? 'Empresa configurada como Produção, mas este endereço é de teste: os pagamentos operam em Sandbox.'
+              : 'Ambiente de pagamento em Sandbox.'}
+          >
             Sandbox
           </Badge>
         )}
