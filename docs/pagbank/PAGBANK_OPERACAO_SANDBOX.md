@@ -31,7 +31,9 @@ Sem `PAGBANK_MARKETPLACE_ACCOUNT_ID_SANDBOX`, a criação do PIX falha com
    - *Autorizar no PagBank* (Connect OAuth) — requer client id/secret;
    - *Token Sandbox manual* — cole token + `account_id` (recebedor). O token é validado
      (`GET /public-keys`) e salvo cifrado. Nunca é exibido novamente.
-3. Com a conexão `connected` e `PIX pronto`, selecionar **PagBank** como gateway das novas vendas.
+3. Com a conexão `connected` e corrente, selecionar **PagBank** como gateway das novas vendas.
+   `pix_ready`/`split_ready` são **evidência** de capacidade já comprovada por cobrança real,
+   nunca pré-requisito da primeira cobrança (isso criaria bloqueio circular).
 4. Sócio global e representante elegíveis precisam de `pagbank_account_id_sandbox` preenchido
    (`socios_split`, `representatives`), senão a cobrança é bloqueada.
 
@@ -111,3 +113,17 @@ números reais, nem valores de teste neste repositório.
 5. Token de autenticação do webhook configurado na conta Sandbox.
 6. `client_id`, `client_secret` e redirect URI da aplicação Connect.
 7. Confirmação, pelo PagBank, de que PIX e split estão habilitados na conta.
+
+## 12. Order externo já criado (nunca duplicar nem perder a venda)
+
+- Se a criação falhar com `pagbank_indeterminate`, `pagbank_idempotency_conflict`,
+  `pagbank_split_not_confirmed`, `pagbank_pix_artifact_missing` ou
+  `pagbank_order_needs_reconciliation`, a venda, os passageiros, os bloqueios de
+  assento e a tentativa são **preservados**. O comprador vai para a confirmação,
+  que consulta o Order por `reference_id`.
+- Uma tentativa que já registrou `external_order_id` nunca autoriza um segundo
+  Order: nova chamada devolve `pagbank_order_needs_reconciliation`.
+- Rollback da venda só ocorre quando a rejeição é comprovadamente anterior à
+  criação (ex.: validação recusada, autenticação inválida) e sem `order_id`.
+- Reconciliação/cancelamento do Order externo é operação manual no PagBank; o
+  código não cancela cobrança automaticamente.
