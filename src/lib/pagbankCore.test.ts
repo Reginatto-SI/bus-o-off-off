@@ -7,6 +7,7 @@ import {
   buildPagbankWebhookEventKey,
   extractPagbankPixArtifacts,
   normalizePagbankStatus,
+  reconcilePagbankSplit,
   sha256Hex,
   verifyPagbankWebhookSignature,
 } from '../../supabase/functions/_shared/pagbank/core';
@@ -110,5 +111,68 @@ describe('PagBank — split FIXED a partir do motor SmartBus', () => {
     const plan = buildPagbankFixedSplitPlan({ grossAmount: 50, distribution, accounts });
     expect(plan.payload).toBeNull();
     expect(plan.companyNetCents).toBe(5000);
+  });
+});
+
+describe('conciliação de split PagBank', () => {
+  const expected = [
+    { accountId: 'ACC_MKT', amountCents: 500 },
+    { accountId: 'ACC_REP', amountCents: 250 },
+  ];
+
+  it('confirma quando o PagBank devolve os mesmos recebedores e valores', () => {
+    const order = {
+      charges: [{
+        splits: { method: 'FIXED', receivers: [
+          { account: { id: 'ACC_REP' }, amount: { value: 250 } },
+          { account: { id: 'ACC_MKT' }, amount: { value: 500 } },
+        ] },
+      }],
+    };
+    expect(reconcilePagbankSplit(order, expected)).toEqual({ ok: true, reason: 'confirmed' });
+  });
+
+  it('reprova quando o split não volta na resposta', () => {
+    const result = reconcilePagbankSplit({ charges: [{ id: 'CHAR_1' }] }, expected);
+    expect(result.ok).toBe(false);
+    expect(result).toMatchObject({ reason: 'missing' });
+  });
+
+  it('reprova quando o valor divergir', () => {
+    const order = {
+      charges: [{ splits: { receivers: [
+        { account: { id: 'ACC_MKT' }, amount: { value: 400 } },
+        { account: { id: 'ACC_REP' }, amount: { value: 250 } },
+      ] } }],
+    };
+    expect(reconcilePagbankSplit(order, expected)).toMatchObject({ ok: false, reason: 'amount_mismatch' });
+  });
+
+  it('reprova quando um recebedor divergir', () => {
+    const order = {
+      charges: [{ splits: { receivers: [
+        { account: { id: 'ACC_OUTRO' }, amount: { value: 500 } },
+        { account: { id: 'ACC_REP' }, amount: { value: 250 } },
+      ] } }],
+    };
+    expect(reconcilePagbankSplit(order, expected)).toMatchObject({ ok: false, reason: 'receiver_mismatch' });
+  });
+
+  it('não exige split quando a venda não tem divisão', () => {
+    expect(reconcilePagbankSplit({ charges: [{ id: 'CHAR_1' }] }, [])).toEqual({ ok: true, reason: 'not_expected' });
+  });
+});
+
+describe('artefatos PIX no formato oficial charges[]', () => {
+  it('extrai QR e status de charges[].payment_method.pix', () => {
+    const art = extractPagbankPixArtifacts({
+      id: 'ORDE_1',
+      charges: [{
+        id: 'CHAR_1',
+        status: 'WAITING',
+        payment_method: { type: 'PIX', pix: { qr_code: { text: '000201-pix' }, expiration_date: '2026-09-07T12:00:00-03:00' } },
+      }],
+    });
+    expect(art).toMatchObject({ orderId: 'ORDE_1', chargeId: 'CHAR_1', qrText: '000201-pix', rawStatus: 'WAITING' });
   });
 });
