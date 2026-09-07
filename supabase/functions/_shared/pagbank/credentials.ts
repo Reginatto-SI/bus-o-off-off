@@ -29,10 +29,13 @@ export type PagbankConnectionRow = {
   last_error: string | null;
   connected_at: string | null;
   is_current: boolean;
+  split_ready: boolean;
+  capabilities_verified_at: string | null;
+  superseded_by_rotation: boolean;
 };
 
 export const CONNECTION_SELECT =
-  "id, company_id, gateway, environment, status, credential_mode, external_account_id, external_account_email, access_token_enc, refresh_token_enc, webhook_token_enc, token_expires_at, scopes, credential_generation, pix_ready, last_validated_at, last_error, connected_at, is_current";
+  "id, company_id, gateway, environment, status, credential_mode, external_account_id, external_account_email, access_token_enc, refresh_token_enc, webhook_token_enc, token_expires_at, scopes, credential_generation, pix_ready, last_validated_at, last_error, connected_at, is_current, split_ready, capabilities_verified_at, superseded_by_rotation";
 
 export function pagbankSecretNames(environment: PagbankEnvironment) {
   const suffix = environment.toUpperCase();
