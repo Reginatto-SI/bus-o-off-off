@@ -395,10 +395,63 @@ Deno.serve(async (req) => {
 
     const art = extractPagbankPixArtifacts(res.data);
     const normalized = normalizePagbankStatus(art.rawStatus ?? "WAITING");
+
+    // Conciliação obrigatória: se o SmartBus esperava divisão, o PagBank precisa
+    // ter registrado exatamente os mesmos recebedores e valores. Divergência não
+    // pode virar cobrança normal (dinheiro sem taxa/repasse).
+    const splitCheck = reconcilePagbankSplit(
+      res.data,
+      splitPlan.receivers.map((r) => ({ accountId: r.accountId, amountCents: r.amountCents })),
+    );
+    if (!splitCheck.ok) {
+      await supabaseAdmin.from("payment_attempts").update({
+        state: "failed", external_order_id: art.orderId, external_charge_id: art.chargeId,
+        external_status_raw: art.rawStatus, normalized_status: normalized,
+        error_code: "pagbank_split_not_confirmed", error_message_sanitized: `split_${splitCheck.reason}`,
+      }).eq("id", attemptId).eq("company_id", sale.company_id);
+      await logCriticalPaymentIssue({
+        supabaseAdmin, source: SOURCE, errorCode: "pagbank_split_not_confirmed", saleId: sale.id, companyId: sale.company_id,
+        paymentEnvironment: environment, paymentId: art.orderId,
+        detail: `reason=${splitCheck.reason}; expected=${splitPlan.receivers.length}; echoed=${splitCheck.echoed.length}`,
+      });
+      throw new PagbankError(
+        "pagbank_split_not_confirmed",
+        "O PagBank não confirmou a divisão financeira desta cobrança. A cobrança não será usada.",
+        409,
+        { reason: splitCheck.reason, order_id: art.orderId },
+      );
+    }
+
+    if (!art.qrText) {
+      await supabaseAdmin.from("payment_attempts").update({
+        state: "failed", external_order_id: art.orderId, external_charge_id: art.chargeId,
+        external_status_raw: art.rawStatus, normalized_status: normalized,
+        error_code: "pagbank_pix_artifact_missing",
+      }).eq("id", attemptId).eq("company_id", sale.company_id);
+      await logCriticalPaymentIssue({
+        supabaseAdmin, source: SOURCE, errorCode: "pagbank_pix_artifact_missing", saleId: sale.id, companyId: sale.company_id,
+        paymentEnvironment: environment, paymentId: art.orderId, detail: "Order criado sem código PIX copia-e-cola.",
+      });
+      throw new PagbankError(
+        "pagbank_pix_artifact_missing",
+        "O PagBank não devolveu o código PIX desta cobrança. Tente novamente em instantes.",
+        502,
+        { order_id: art.orderId },
+      );
+    }
+
     const { data: finalAttempt } = await supabaseAdmin.from("payment_attempts").update({
       state: "succeeded", external_order_id: art.orderId, external_charge_id: art.chargeId, external_status_raw: art.rawStatus ?? "WAITING",
       normalized_status: normalized, pix_qr_text: art.qrText, pix_qr_image_url: art.qrImageUrl, pix_expires_at: art.expiresAt ?? expiresAt.toISOString(),
     }).eq("id", attemptId).eq("company_id", sale.company_id).select("*").single();
+
+    // Capacidades comprovadas por cobrança real (nunca por chamada genérica).
+    await supabaseAdmin.from("payment_gateway_connections").update({
+      pix_ready: true,
+      split_ready: splitPlan.receivers.length > 0 ? true : credential.connection.split_ready,
+      capabilities_verified_at: new Date().toISOString(),
+      last_error: null,
+    }).eq("id", credential.connection.id).eq("company_id", sale.company_id);
 
     // Snapshot financeiro da venda (mesmas colunas do Asaas, sem tocar asaas_*).
     const { error: saleUpdateError } = await supabaseAdmin.from("sales").update({
