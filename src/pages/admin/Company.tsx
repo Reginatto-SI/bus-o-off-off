@@ -213,7 +213,11 @@ const getCompanyDisplayNameForPersistence = ({
 export default function CompanyPage() {
   const { activeCompanyId, user, isGerente, isOperador, isDeveloper, updateActiveCompany } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { environment: runtimePaymentEnvironment, source: runtimePaymentSource } = useRuntimePaymentEnvironment();
+  const {
+    environment: runtimePaymentEnvironment,
+    source: runtimePaymentSource,
+    isDowngradedByOrigin: runtimePaymentDowngraded,
+  } = useRuntimePaymentEnvironment();
   
   const [company, setCompany] = useState<Company | null>(null);
   const [financialSocios, setFinancialSocios] = useState<Array<{
