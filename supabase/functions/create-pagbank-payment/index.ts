@@ -203,6 +203,24 @@ Deno.serve(async (req) => {
       }
       // Comprovadamente inexistente: reutiliza a MESMA chave e payload abaixo (attempt_count+1).
     }
+    // Tentativa falha que JÁ carrega Order externo (ex.: split não confirmado ou
+    // QR ausente) nunca autoriza um segundo Order: exige consulta/reconciliação.
+    if (existing && existing.external_order_id && existing.state !== "succeeded") {
+      await logSaleIntegrationEvent({
+        supabaseAdmin, saleId: sale.id, companyId: sale.company_id, paymentEnvironment: environment, environmentDecisionSource: "sale",
+        provider: "pagbank", direction: "outgoing_request", eventType: "create_pix", externalReference: sale.id,
+        paymentId: existing.external_order_id, processingStatus: "warning", resultCategory: "warning",
+        incidentCode: "pagbank_order_needs_reconciliation",
+        message: "Order PagBank já existe para esta venda; criação bloqueada até reconciliação.",
+        payloadJson: { previous_state: existing.state, previous_error: existing.error_code ?? null },
+      });
+      throw new PagbankError(
+        "pagbank_order_needs_reconciliation",
+        "Já existe uma cobrança PagBank para esta compra em verificação. Não geramos outra cobrança.",
+        409,
+        { order_id: existing.external_order_id, previous_error: existing.error_code ?? null },
+      );
+    }
     if (existing && existing.state === "pending") {
       const ageMs = Date.now() - Date.parse(existing.created_at);
       if (ageMs < 45_000) {

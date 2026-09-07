@@ -55,6 +55,10 @@ import {
   getCheckoutResponsibilityAcceptanceLabel,
 } from "@/lib/intermediationPolicy";
 import { isInstalledAppPaymentContext, logAsaasInvoiceOpen } from "@/lib/asaasInvoiceUrl";
+import {
+  pagbankFailureAllowsSaleRollback,
+  resolvePagbankCheckoutAvailability,
+} from "@/lib/pagbankCheckoutAvailability";
 
 // ---- CPF validation helpers ----
 function isValidCpf(cpf: string): boolean {
@@ -752,15 +756,20 @@ export default function Checkout() {
           setCompanyPaymentGateway(gateway);
           let pagbankReady = false;
           if (gateway === "pagbank") {
-            // Prontidão PIX PagBank vem da conexão corrente da empresa (leitura pública restrita a flags).
+            // Aptidão para TENTAR a cobrança: conexão corrente e conectada.
+            // `pix_ready`/`split_ready` são evidência posterior, não pré-requisito.
             const { data: pagbankConn } = await supabase
               .from("payment_gateway_connections")
-              .select("pix_ready, status")
+              .select("pix_ready, split_ready, status, is_current")
               .eq("company_id", eventData.company_id)
               .eq("gateway", "pagbank")
               .eq("is_current", true)
               .maybeSingle();
-            pagbankReady = Boolean(pagbankConn?.pix_ready && pagbankConn?.status === "connected");
+            pagbankReady = resolvePagbankCheckoutAvailability({
+              environment: (companyData as { payment_environment?: string | null }).payment_environment ?? null,
+              connection: pagbankConn ?? null,
+              platformFeePercent: Number(companyData.platform_fee_percent ?? 0),
+            }).allowed;
           }
           setCompanyPixStatus({
             productionReady: Boolean(companyData.asaas_pix_ready_production),
@@ -1810,8 +1819,20 @@ export default function Checkout() {
           navigate(`/confirmacao/${sale.id}?retorno=pagbank`);
           return;
         }
-        if (pagbankErrorCode === "pagbank_indeterminate" || pagbankErrorCode === "pagbank_idempotency_conflict") {
-          // Cobrança pode existir: nunca apagar a venda. A confirmação recupera/consulta.
+        const pagbankOrderId =
+          (pagbankErrorBody?.detail as { order_id?: string | null } | undefined)?.order_id ?? null;
+        if (!pagbankFailureAllowsSaleRollback({ errorCode: pagbankErrorCode, orderId: pagbankOrderId })) {
+          // Cobrança pode existir no PagBank: nunca apagar a venda nem os
+          // passageiros. A confirmação consulta/reconcilia por reference_id.
+          console.error("[checkout] pagbank_order_may_exist", {
+            saleId: sale.id, errorCode: pagbankErrorCode ?? null, hasOrderId: Boolean(pagbankOrderId),
+          });
+          preserveCheckoutFailureTrace({
+            saleId: sale.id,
+            stage: "create_pagbank_payment_order_may_exist",
+            errorCode: typeof pagbankErrorCode === "string" ? pagbankErrorCode : null,
+            errorMessage: typeof pagbankErrorBody?.message === "string" ? pagbankErrorBody.message : "Pagamento em verificação.",
+          });
           setSubmitting(false);
           setPaymentCheckoutStatus("idle");
           navigate(`/confirmacao/${sale.id}?retorno=pagbank`);
