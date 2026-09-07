@@ -126,7 +126,7 @@ Deno.serve(async (req) => {
       const token = typeof body?.token === "string" ? body.token.trim() : "";
       const accountId = typeof body?.account_id === "string" ? body.account_id.trim() : "";
       if (token.length < 20) return json({ error: "Token Sandbox inválido." }, 400);
-      if (!accountId) return json({ error: "Informe o ID da conta PagBank (recebedor) do Sandbox." }, 400);
+      if (!/^ACCO_[A-Za-z0-9-]+$/.test(accountId)) return json({ error: "Informe o ID da conta Sandbox da empresa vendedora (ACCO_…). Não informe e-mail ou token neste campo.", error_code: "pagbank_account_id_invalid" }, 400);
 
       // Prova apenas de autenticação: NÃO comprova PIX nem split. Essas
       // capacidades só são marcadas após a primeira cobrança aceita.
