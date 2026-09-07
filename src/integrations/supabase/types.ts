@@ -1785,6 +1785,7 @@ export type Database = {
       payment_gateway_connections: {
         Row: {
           access_token_enc: string | null
+          capabilities_verified_at: string | null
           company_id: string
           connected_at: string | null
           created_at: string
@@ -1802,13 +1803,16 @@ export type Database = {
           refresh_token_enc: string | null
           revoked_at: string | null
           scopes: string[] | null
+          split_ready: boolean
           status: string
+          superseded_by_rotation: boolean
           token_expires_at: string | null
           updated_at: string
           webhook_token_enc: string | null
         }
         Insert: {
           access_token_enc?: string | null
+          capabilities_verified_at?: string | null
           company_id: string
           connected_at?: string | null
           created_at?: string
@@ -1826,13 +1830,16 @@ export type Database = {
           refresh_token_enc?: string | null
           revoked_at?: string | null
           scopes?: string[] | null
+          split_ready?: boolean
           status?: string
+          superseded_by_rotation?: boolean
           token_expires_at?: string | null
           updated_at?: string
           webhook_token_enc?: string | null
         }
         Update: {
           access_token_enc?: string | null
+          capabilities_verified_at?: string | null
           company_id?: string
           connected_at?: string | null
           created_at?: string
@@ -1850,7 +1857,9 @@ export type Database = {
           refresh_token_enc?: string | null
           revoked_at?: string | null
           scopes?: string[] | null
+          split_ready?: boolean
           status?: string
+          superseded_by_rotation?: boolean
           token_expires_at?: string | null
           updated_at?: string
           webhook_token_enc?: string | null
@@ -1868,6 +1877,7 @@ export type Database = {
       payment_webhook_events: {
         Row: {
           company_id: string | null
+          completed_at: string | null
           duplicate_count: number
           environment: string
           event_key: string
@@ -1876,6 +1886,7 @@ export type Database = {
           gateway: string
           id: string
           last_seen_at: string
+          processing_attempts: number
           processing_result: string | null
           raw_body_hash: string | null
           raw_status: string | null
@@ -1884,6 +1895,7 @@ export type Database = {
         }
         Insert: {
           company_id?: string | null
+          completed_at?: string | null
           duplicate_count?: number
           environment: string
           event_key: string
@@ -1892,6 +1904,7 @@ export type Database = {
           gateway: string
           id?: string
           last_seen_at?: string
+          processing_attempts?: number
           processing_result?: string | null
           raw_body_hash?: string | null
           raw_status?: string | null
@@ -1900,6 +1913,7 @@ export type Database = {
         }
         Update: {
           company_id?: string | null
+          completed_at?: string | null
           duplicate_count?: number
           environment?: string
           event_key?: string
@@ -1908,6 +1922,7 @@ export type Database = {
           gateway?: string
           id?: string
           last_seen_at?: string
+          processing_attempts?: number
           processing_result?: string | null
           raw_body_hash?: string | null
           raw_status?: string | null
