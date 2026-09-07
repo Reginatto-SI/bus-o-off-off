@@ -43,6 +43,8 @@ export type PagbankErrorCode =
   | "pagbank_tenant_mismatch"
   | "pagbank_split_recipient_missing"
   | "pagbank_split_sum_mismatch"
+  | "pagbank_split_not_confirmed"
+  | "pagbank_pix_artifact_missing"
   | "pagbank_transient_error";
 
 export class PagbankError extends Error {
@@ -119,18 +121,29 @@ export type PagbankPixArtifacts = {
 
 /**
  * Extrai IDs, status e artefatos PIX de um objeto Order (criação, consulta ou webhook).
- * Tolerante a variações documentadas: `qr_codes[]` e `charges[]`.
+ * Tolerante às duas formas documentadas: `qr_codes[]` (pedido com QR Code) e
+ * `charges[].payment_method.pix` (pedido com divisão de pagamento com PIX).
  */
 export function extractPagbankPixArtifacts(order: any): PagbankPixArtifacts {
   const qr = Array.isArray(order?.qr_codes) ? order.qr_codes[0] : null;
   const charge = Array.isArray(order?.charges) ? order.charges[0] : null;
-  const links: any[] = Array.isArray(qr?.links) ? qr.links : [];
+  const chargePix = charge?.payment_method?.pix ?? null;
+  const chargeQr = chargePix?.qr_code ?? chargePix ?? null;
+  const links: any[] = Array.isArray(qr?.links)
+    ? qr.links
+    : Array.isArray(chargeQr?.links)
+      ? chargeQr.links
+      : Array.isArray(charge?.links)
+        ? charge.links
+        : [];
   const imageLink = links.find((l) => typeof l?.media === "string" && l.media.startsWith("image/"));
   const qrText = typeof qr?.text === "string"
     ? qr.text
-    : typeof charge?.payment_method?.pix?.qr_code?.text === "string"
-      ? charge.payment_method.pix.qr_code.text
-      : null;
+    : typeof chargeQr?.text === "string"
+      ? chargeQr.text
+      : typeof chargePix?.emv === "string"
+        ? chargePix.emv
+        : null;
   const rawStatus = typeof charge?.status === "string"
     ? charge.status
     : typeof order?.status === "string"
@@ -139,17 +152,63 @@ export function extractPagbankPixArtifacts(order: any): PagbankPixArtifacts {
   return {
     orderId: typeof order?.id === "string" ? order.id : null,
     chargeId: typeof charge?.id === "string" ? charge.id : null,
-    qrCodeId: typeof qr?.id === "string" ? qr.id : null,
+    qrCodeId: typeof qr?.id === "string" ? qr.id : typeof chargeQr?.id === "string" ? chargeQr.id : null,
     qrText,
     qrImageUrl: typeof imageLink?.href === "string" ? imageLink.href : null,
     expiresAt: typeof qr?.expiration_date === "string"
       ? qr.expiration_date
-      : typeof charge?.payment_method?.pix?.expiration_date === "string"
-        ? charge.payment_method.pix.expiration_date
+      : typeof chargePix?.expiration_date === "string"
+        ? chargePix.expiration_date
         : null,
     rawStatus,
   };
 }
+
+export type PagbankSplitEcho = Array<{ accountId: string | null; amountCents: number | null }>;
+
+/** Lê a divisão efetivamente registrada pelo PagBank na resposta do pedido. */
+export function extractPagbankSplitReceivers(order: any): PagbankSplitEcho {
+  const buckets: any[] = [
+    ...(Array.isArray(order?.charges) ? order.charges : []),
+    ...(Array.isArray(order?.qr_codes) ? order.qr_codes : []),
+  ];
+  const out: PagbankSplitEcho = [];
+  for (const bucket of buckets) {
+    const receivers = bucket?.splits?.receivers;
+    if (!Array.isArray(receivers)) continue;
+    for (const r of receivers) {
+      out.push({
+        accountId: typeof r?.account?.id === "string" ? r.account.id : null,
+        amountCents: typeof r?.amount?.value === "number" ? r.amount.value : null,
+      });
+    }
+  }
+  return out;
+}
+
+export type PagbankSplitReconciliation =
+  | { ok: true; reason: "not_expected" | "confirmed" }
+  | { ok: false; reason: "missing" | "receiver_mismatch" | "amount_mismatch"; echoed: PagbankSplitEcho };
+
+/**
+ * Confere a divisão enviada contra a divisão retornada. Nunca aceitar cobrança em
+ * que o SmartBus esperava split e o PagBank não registrou a divisão.
+ */
+export function reconcilePagbankSplit(
+  order: any,
+  expected: Array<{ accountId: string; amountCents: number }>,
+): PagbankSplitReconciliation {
+  if (expected.length === 0) return { ok: true, reason: "not_expected" };
+  const echoed = extractPagbankSplitReceivers(order);
+  if (echoed.length === 0) return { ok: false, reason: "missing", echoed };
+  for (const want of expected) {
+    const match = echoed.find((e) => e.accountId === want.accountId);
+    if (!match) return { ok: false, reason: "receiver_mismatch", echoed };
+    if (match.amountCents !== want.amountCents) return { ok: false, reason: "amount_mismatch", echoed };
+  }
+  return { ok: true, reason: "confirmed" };
+}
+
 
 /** Identificador do evento para dedup: charge id + status (PagBank não envia event id próprio no Order). */
 export function buildPagbankWebhookEventKey(order: any): string | null {

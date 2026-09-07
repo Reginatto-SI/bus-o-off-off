@@ -70,8 +70,8 @@ Deno.serve(async (req) => {
     refresh_token_enc: typeof tokenBody.refresh_token === "string" ? await encryptSecret(tokenBody.refresh_token) : null,
     token_expires_at: typeof tokenBody.expires_in === "number" ? new Date(Date.now() + tokenBody.expires_in * 1000).toISOString() : null,
     scopes: typeof tokenBody.scope === "string" ? tokenBody.scope.split(/\s+/) : PAGBANK_CONNECT_SCOPES,
-    // pix_ready só após conta identificada; sem account_id o split não pode ser montado.
-    pix_ready: Boolean(accountId), last_validated_at: now, connected_at: now, is_current: true, credential_generation: 1,
+    // Capacidades (PIX/split) só são comprovadas por cobrança real aceita.
+    pix_ready: false, last_validated_at: now, connected_at: now, is_current: true, credential_generation: 1,
     last_error: accountId ? null : "account_id_missing_in_token_response",
   });
   if (error) return adminRedirect("error", "persist_failed");

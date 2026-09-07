@@ -2,8 +2,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Resolve elegibilidade SmartBus (mesma regra do Asaas: sócio global e
 // representante vinculado à empresa) e as contas PagBank do ambiente.
-// Diferença deliberada em relação ao Asaas: recebedor elegível SEM conta
-// PagBank não degrada — o chamador deve bloquear a cobrança.
+// Regra financeira SmartBus (PRD): conta ausente no ambiente = participante
+// AUSENTE naquele cenário; a parcela é redistribuída pelos quatro cenários e a
+// venda segue. Só ambiguidade cadastral ou falha de consulta bloqueiam, porque
+// nesses casos a ausência não está comprovada.
 
 import { logPaymentTrace } from "../payment-observability.ts";
 import type { PagbankEnvironment } from "./core.ts";
@@ -77,7 +79,14 @@ export async function resolvePagbankSplitRecipients(params: {
       const accountId = pick(configured[0], params.environment, "pagbank_account_id");
       result.socio = accountId
         ? { eligible: true, accountId, reason: "included" }
-        : { eligible: true, accountId: null, reason: "account_missing" };
+        : { eligible: false, accountId: null, reason: "account_missing" };
+      if (!accountId) {
+        logPaymentTrace("warn", params.source, "pagbank_split_socio_account_missing", {
+          sale_id: params.saleId,
+          company_id: params.companyId,
+          payment_environment: params.environment,
+        });
+      }
     } else if (configured.length > 1) {
       result.socio = { eligible: false, accountId: null, reason: "ambiguous" };
     }
@@ -115,6 +124,14 @@ export async function resolvePagbankSplitRecipients(params: {
   const accountId = pick(rep, params.environment, "pagbank_account_id");
   result.representative = accountId
     ? { eligible: true, accountId, representativeId: rep.id, reason: "included" }
-    : { eligible: true, accountId: null, representativeId: rep.id, reason: "account_missing" };
+    : { eligible: false, accountId: null, representativeId: rep.id, reason: "account_missing" };
+  if (!accountId) {
+    logPaymentTrace("warn", params.source, "pagbank_split_representative_account_missing", {
+      sale_id: params.saleId,
+      company_id: params.companyId,
+      payment_environment: params.environment,
+      representative_id: rep.id,
+    });
+  }
   return result;
 }

@@ -43,7 +43,7 @@ export async function syncPagbankSaleStatus(supabaseAdmin: any, params: {
     return { state: "no_attempt", paymentStatus: sale.status };
   }
 
-  const credential = await resolvePagbankCredentialForSale(supabaseAdmin, { sale });
+  const credential = await resolvePagbankCredentialForSale(supabaseAdmin, { sale, purpose: "query" });
   const res = await getPagbankOrder({
     environment: credential.environment,
     accessToken: credential.accessToken,

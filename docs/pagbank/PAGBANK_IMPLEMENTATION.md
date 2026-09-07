@@ -2,6 +2,41 @@
 
 > Branch oficial: `feature/pagbank-integration`.
 
+## Estado operacional — 2026-09-07 (sessão 3: Alternativa A — estabilizar PIX)
+
+Decisão: **estabilizar a jornada PIX antes de iniciar cartão**. Cartão sobre uma
+base cujo split não era conciliado multiplicaria risco financeiro.
+
+Corrigido (aditivo, Asaas intacto; 222 testes verdes, `tsgo` limpo):
+
+1. **Payload oficial** — com divisão, o Order passa a usar
+   `charges[].payment_method.type = "PIX"` + `charges[].splits` (formato
+   documentado); sem divisão, segue `qr_codes[]`. Extração de QR tolera as duas
+   formas.
+2. **Conciliação obrigatória do split** — `reconcilePagbankSplit` compara
+   recebedores e centavos enviados com os ecoados pelo PagBank; divergência
+   falha a cobrança (`pagbank_split_not_confirmed`) em vez de virar cobrança sem
+   repasse. Order sem QR gera `pagbank_pix_artifact_missing`.
+3. **Validação honesta** — `probePagbankAuth` prova só autenticação;
+   `pix_ready`/`split_ready` passam a resultado de cobrança real
+   (`capabilities_verified_at`), não pré-requisito da primeira venda.
+4. **Regra financeira do PRD** — conta PagBank ausente = participante ausente,
+   com redistribuição pelos quatro cenários; bloqueiam apenas ambiguidade
+   cadastral e falha de consulta (ausência não comprovada).
+5. **Identidade lógica × credencial** — consulta/reconciliação usam
+   `purpose: "query"` e aceitam conexão não corrente da mesma conta
+   (`superseded_by_rotation`); criação continua exigindo conexão corrente.
+6. **Webhook reprocessável** — dedup só ignora evento com `completed_at`;
+   evento anterior incompleto é reprocessado (`processing_attempts`).
+
+Migration aditiva: `payment_gateway_connections.split_ready`,
+`capabilities_verified_at`, `superseded_by_rotation`;
+`payment_webhook_events.completed_at`, `processing_attempts`.
+
+Pendente: execução real em Sandbox (credenciais), homologação de split PIX e
+webhook. Produção segue bloqueada. Dados necessários em
+[`PAGBANK_OPERACAO_SANDBOX.md`](./PAGBANK_OPERACAO_SANDBOX.md) seção 11.
+
 ## Estado operacional — 2026-09-05 (sessão 2: primeira jornada PIX implementada)
 
 - Implementação aditiva concluída para Sandbox, Asaas preservado (206 testes prévios verdes

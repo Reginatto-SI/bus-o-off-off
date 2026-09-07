@@ -29,10 +29,13 @@ export type PagbankConnectionRow = {
   last_error: string | null;
   connected_at: string | null;
   is_current: boolean;
+  split_ready: boolean;
+  capabilities_verified_at: string | null;
+  superseded_by_rotation: boolean;
 };
 
 export const CONNECTION_SELECT =
-  "id, company_id, gateway, environment, status, credential_mode, external_account_id, external_account_email, access_token_enc, refresh_token_enc, webhook_token_enc, token_expires_at, scopes, credential_generation, pix_ready, last_validated_at, last_error, connected_at, is_current";
+  "id, company_id, gateway, environment, status, credential_mode, external_account_id, external_account_email, access_token_enc, refresh_token_enc, webhook_token_enc, token_expires_at, scopes, credential_generation, pix_ready, last_validated_at, last_error, connected_at, is_current, split_ready, capabilities_verified_at, superseded_by_rotation";
 
 export function pagbankSecretNames(environment: PagbankEnvironment) {
   const suffix = environment.toUpperCase();
@@ -100,12 +103,16 @@ export type ResolvedPagbankCredential = {
   environment: PagbankEnvironment;
 };
 
+/** `create` exige conexão corrente e conectada; `query` preserva vendas antigas. */
+export type PagbankCredentialPurpose = "create" | "query";
+
 /**
  * Resolve o access token válido da conexão da venda. Renova via refresh token
  * quando expirado (Connect). Falha fechada: nunca usa outra conexão/empresa.
  */
 export async function resolvePagbankCredentialForSale(supabaseAdmin: SupabaseAdminClient, params: {
   sale: { id: string; company_id: string; payment_environment: string; payment_connection_id: string | null };
+  purpose?: PagbankCredentialPurpose;
 }): Promise<ResolvedPagbankCredential> {
   const environment = assertPagbankEnvironmentAllowed(params.sale.payment_environment);
   if (!params.sale.payment_connection_id) {
@@ -122,21 +129,34 @@ export async function resolvePagbankCredentialForSale(supabaseAdmin: SupabaseAdm
       sale_id: params.sale.id,
     });
   }
-  return resolveCredentialFromConnection(supabaseAdmin, connection);
+  return resolveCredentialFromConnection(supabaseAdmin, connection, params.purpose ?? "create");
 }
 
 export async function resolveCredentialFromConnection(
   supabaseAdmin: SupabaseAdminClient,
   connection: PagbankConnectionRow,
+  purpose: PagbankCredentialPurpose = "create",
 ): Promise<ResolvedPagbankCredential> {
-  if (connection.status !== "connected") {
+  // Identidade lógica × credencial:
+  // - nova cobrança exige a conexão corrente e conectada;
+  // - consulta/reconciliação de venda antiga continua usando a conexão congelada
+  //   nela, mesmo já substituída por rotação de token da mesma conta.
+  if (purpose === "create" && (connection.status !== "connected" || !connection.is_current)) {
     throw new PagbankError("pagbank_connection_not_operational", "A conta PagBank desta empresa não está conectada.", 409, {
       connection_status: connection.status,
+      is_current: connection.is_current,
     });
   }
   let accessToken = await decryptSecret(connection.access_token_enc);
   if (!accessToken) {
-    throw new PagbankError("pagbank_connection_not_operational", "Credencial PagBank indisponível. Reconecte a conta.", 409);
+    throw new PagbankError(
+      "pagbank_connection_not_operational",
+      purpose === "query"
+        ? "A credencial usada nesta venda não está mais disponível. É necessária ação operacional para reconciliá-la."
+        : "Credencial PagBank indisponível. Reconecte a conta.",
+      409,
+      { purpose, connection_status: connection.status },
+    );
   }
 
   const expiresAt = connection.token_expires_at ? Date.parse(connection.token_expires_at) : null;

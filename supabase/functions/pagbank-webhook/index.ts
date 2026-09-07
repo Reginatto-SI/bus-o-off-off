@@ -94,36 +94,53 @@ Deno.serve(async (req) => {
       const dedupFilter = (q: any) =>
         q.eq("event_key", eventKey).eq("gateway", "pagbank").eq("environment", environment).eq("external_account_id", externalAccountId);
       const { data: existingEvent } = await dedupFilter(
-        supabaseAdmin.from("payment_webhook_events").select("id, duplicate_count"),
+        supabaseAdmin.from("payment_webhook_events").select("id, duplicate_count, processing_attempts, completed_at"),
       ).maybeSingle();
-      if (existingEvent) {
+      // Duplicata só é ignorada quando o processamento ANTERIOR foi concluído.
+      // Evento repetido cujo processamento falhou/ficou pendente é reprocessado:
+      // a finalização é idempotente, mas o registro do evento não pode "engolir"
+      // uma confirmação que nunca chegou a virar ticket.
+      if (existingEvent?.completed_at) {
         await supabaseAdmin.from("payment_webhook_events")
           .update({ last_seen_at: new Date().toISOString(), duplicate_count: (existingEvent.duplicate_count ?? 0) + 1 })
           .eq("id", existingEvent.id);
+        await logSaleIntegrationEvent({
+          supabaseAdmin, saleId: sale.id, companyId: sale.company_id, paymentEnvironment: environment, environmentDecisionSource: "sale",
+          provider: "pagbank", direction: "incoming_webhook", eventType: "webhook_duplicate", paymentId: art.orderId, externalReference: sale.id,
+          httpStatus: 200, processingStatus: "duplicate", resultCategory: "duplicate", message: "Webhook PagBank duplicado ignorado.",
+          payloadJson: { event_key: eventKey },
+        });
+        return respond(200, { received: true, duplicate: true });
       }
-      await logSaleIntegrationEvent({
-        supabaseAdmin, saleId: sale.id, companyId: sale.company_id, paymentEnvironment: environment, environmentDecisionSource: "sale",
-        provider: "pagbank", direction: "incoming_webhook", eventType: "webhook_duplicate", paymentId: art.orderId, externalReference: sale.id,
-        httpStatus: 200, processingStatus: "duplicate", resultCategory: "duplicate", message: "Webhook PagBank duplicado ignorado.",
-        payloadJson: { event_key: eventKey },
-      });
-      return respond(200, { received: true, duplicate: true });
+      if (existingEvent) {
+        await supabaseAdmin.from("payment_webhook_events").update({
+          last_seen_at: new Date().toISOString(),
+          duplicate_count: (existingEvent.duplicate_count ?? 0) + 1,
+          processing_attempts: (existingEvent.processing_attempts ?? 1) + 1,
+          processing_result: "reprocessing",
+        }).eq("id", existingEvent.id);
+        logPaymentTrace("info", SOURCE, "reprocessing_incomplete_event", { sale_id: sale.id, event_key: eventKey });
+      }
+    } else {
+      logPaymentTrace("error", SOURCE, "dedup_insert_failed", { sale_id: sale.id, message: dedupError.message });
+      return respond(500, { error: "dedup_failed" });
     }
-    logPaymentTrace("error", SOURCE, "dedup_insert_failed", { sale_id: sale.id, message: dedupError.message });
-    return respond(500, { error: "dedup_failed" });
   }
 
   // 4) Confirmação autoritativa por consulta + finalização comum.
   let processingResult = "pending";
+  let completed = false;
   try {
     const sync = await syncPagbankSaleStatus(supabaseAdmin, { sale, source: SOURCE, eventType: `webhook:${art.rawStatus ?? "unknown"}` });
     processingResult = sync.state === "paid" ? (sync.finalizationOk ? "finalized" : "finalization_inconsistent") : sync.state;
+    // Concluído = consulta autoritativa respondeu e (se pago) a finalização deu certo.
+    completed = sync.state === "paid" ? sync.finalizationOk === true : true;
   } catch (error) {
     processingResult = isPagbankError(error) ? error.code : "internal_error";
     logPaymentTrace("error", SOURCE, "sync_failed", { sale_id: sale.id, result: processingResult });
   }
   await supabaseAdmin.from("payment_webhook_events")
-    .update({ processing_result: processingResult })
+    .update({ processing_result: processingResult, completed_at: completed ? new Date().toISOString() : null })
     .eq("event_key", eventKey).eq("gateway", "pagbank").eq("environment", environment).eq("external_account_id", externalAccountId);
 
   // Responder 200 evita retentativas infinitas; inconsistências ficam registradas para reconciliação.

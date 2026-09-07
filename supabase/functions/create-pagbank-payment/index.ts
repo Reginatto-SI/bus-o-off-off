@@ -30,6 +30,7 @@ import {
   buildPagbankIdempotencyKey,
   extractPagbankPixArtifacts,
   normalizePagbankStatus,
+  reconcilePagbankSplit,
 } from "../_shared/pagbank/core.ts";
 import { findPagbankOrdersByReference, getPagbankOrder, pagbankRequest, toPagbankError } from "../_shared/pagbank/client.ts";
 import { pagbankSecretNames, resolvePagbankCredentialForSale } from "../_shared/pagbank/credentials.ts";
@@ -138,9 +139,9 @@ Deno.serve(async (req) => {
         sale.external_account_id !== credential.connection.external_account_id) {
       throw new PagbankError("pagbank_tenant_mismatch", "Conta PagBank da venda diverge da conexão.", 409);
     }
-    if (!credential.connection.pix_ready) {
-      throw new PagbankError("pagbank_connection_not_operational", "PIX PagBank não está habilitado para esta empresa.", 409);
-    }
+    // `pix_ready`/`split_ready` são resultado de homologação (primeira cobrança
+    // aceita), não pré-requisito. A operacionalidade exigida aqui é a conexão
+    // corrente e conectada, já validada em resolvePagbankCredentialForSale.
 
     if (existing && existing.state === "succeeded" && existing.external_order_id) {
       // Retorna o mesmo QR; atualiza status por consulta (barato e seguro).
@@ -265,14 +266,14 @@ Deno.serve(async (req) => {
       supabaseAdmin, source: SOURCE, saleId: sale.id, companyId: sale.company_id, environment,
       splitEnabled: platformFeeEngine.totalFee > 0, representativeId: sale.representative_id ?? null,
     });
-    // Recebedor elegível sem conta bloqueia (sem degradação silenciosa).
+    // Regra financeira SmartBus (PRD): conta ausente = participante ausente e a
+    // parcela é redistribuída pelos quatro cenários. Só bloqueiam os casos em que
+    // a ausência NÃO está comprovada: ambiguidade cadastral ou falha de consulta.
     const blockedRecipients: string[] = [];
-    if (recipients.socio.eligible && !recipients.socio.accountId) blockedRecipients.push("socio");
-    if (recipients.representative.eligible && !recipients.representative.accountId) blockedRecipients.push("representative");
     if (recipients.socio.reason === "ambiguous" || recipients.socio.reason === "query_failed") blockedRecipients.push(`socio:${recipients.socio.reason}`);
     if (recipients.representative.reason === "query_failed") blockedRecipients.push("representative:query_failed");
     if (platformFeeEngine.totalFee > 0 && blockedRecipients.length > 0) {
-      throw new PagbankError("pagbank_split_recipient_missing", "A divisão financeira não pôde ser montada para esta empresa.", 409, { missing: blockedRecipients });
+      throw new PagbankError("pagbank_split_recipient_missing", "A divisão financeira não pôde ser montada com segurança para esta empresa.", 409, { missing: blockedRecipients });
     }
     const distribution = distributePlatformFee({
       totalFee: platformFeeEngine.totalFee,
@@ -306,13 +307,8 @@ Deno.serve(async (req) => {
     if (phone.length >= 10) {
       customer.phones = [{ country: "55", area: phone.slice(0, 2), number: phone.slice(2), type: "MOBILE" }];
     }
-    const qrCode: Record<string, unknown> = {
-      amount: { value: splitPlan.totalCents },
-      expiration_date: expiresAt.toISOString(),
-    };
-    if (splitPlan.payload) qrCode.splits = splitPlan.payload;
     const webhookUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/pagbank-webhook`;
-    const orderPayload = {
+    const baseOrder: Record<string, unknown> = {
       reference_id: sale.id,
       customer,
       items: [{
@@ -321,12 +317,30 @@ Deno.serve(async (req) => {
         quantity: 1,
         unit_amount: splitPlan.totalCents,
       }],
-      qr_codes: [qrCode],
       notification_urls: [webhookUrl],
     };
+    // Com divisão: formato oficial "Pedido com divisão de pagamento com PIX"
+    // (charges[].payment_method.type = PIX + charges[].splits).
+    // Sem divisão: pedido com QR Code simples.
+    const orderPayload = splitPlan.payload
+      ? {
+        ...baseOrder,
+        charges: [{
+          reference_id: sale.id,
+          description: `Passagem ${String(sale.event?.name ?? "").slice(0, 40)}`.trim(),
+          amount: { value: splitPlan.totalCents, currency: "BRL" },
+          payment_method: { type: "PIX", pix: { expiration_date: expiresAt.toISOString() } },
+          splits: splitPlan.payload,
+        }],
+      }
+      : {
+        ...baseOrder,
+        qr_codes: [{ amount: { value: splitPlan.totalCents }, expiration_date: expiresAt.toISOString() }],
+      };
     const payloadHash = await (async () => {
-      const bytes = new TextEncoder().encode(JSON.stringify({ ...orderPayload, qr_codes: [{ ...qrCode, expiration_date: undefined }] }));
-      const h = await crypto.subtle.digest("SHA-256", bytes);
+      // Hash estável: a expiração muda a cada tentativa e não define a operação.
+      const stable = JSON.stringify(orderPayload).replace(/"expiration_date":"[^"]*"/g, '"expiration_date":"*"');
+      const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(stable));
       return Array.from(new Uint8Array(h)).map((b) => b.toString(16).padStart(2, "0")).join("");
     })();
 
@@ -382,10 +396,63 @@ Deno.serve(async (req) => {
 
     const art = extractPagbankPixArtifacts(res.data);
     const normalized = normalizePagbankStatus(art.rawStatus ?? "WAITING");
+
+    // Conciliação obrigatória: se o SmartBus esperava divisão, o PagBank precisa
+    // ter registrado exatamente os mesmos recebedores e valores. Divergência não
+    // pode virar cobrança normal (dinheiro sem taxa/repasse).
+    const splitCheck = reconcilePagbankSplit(
+      res.data,
+      splitPlan.receivers.map((r) => ({ accountId: r.accountId, amountCents: r.amountCents })),
+    );
+    if (!splitCheck.ok) {
+      await supabaseAdmin.from("payment_attempts").update({
+        state: "failed", external_order_id: art.orderId, external_charge_id: art.chargeId,
+        external_status_raw: art.rawStatus, normalized_status: normalized,
+        error_code: "pagbank_split_not_confirmed", error_message_sanitized: `split_${splitCheck.reason}`,
+      }).eq("id", attemptId).eq("company_id", sale.company_id);
+      await logCriticalPaymentIssue({
+        supabaseAdmin, source: SOURCE, errorCode: "pagbank_split_not_confirmed", saleId: sale.id, companyId: sale.company_id,
+        paymentEnvironment: environment, paymentId: art.orderId,
+        detail: `reason=${splitCheck.reason}; expected=${splitPlan.receivers.length}; echoed=${splitCheck.echoed.length}`,
+      });
+      throw new PagbankError(
+        "pagbank_split_not_confirmed",
+        "O PagBank não confirmou a divisão financeira desta cobrança. A cobrança não será usada.",
+        409,
+        { reason: splitCheck.reason, order_id: art.orderId },
+      );
+    }
+
+    if (!art.qrText) {
+      await supabaseAdmin.from("payment_attempts").update({
+        state: "failed", external_order_id: art.orderId, external_charge_id: art.chargeId,
+        external_status_raw: art.rawStatus, normalized_status: normalized,
+        error_code: "pagbank_pix_artifact_missing",
+      }).eq("id", attemptId).eq("company_id", sale.company_id);
+      await logCriticalPaymentIssue({
+        supabaseAdmin, source: SOURCE, errorCode: "pagbank_pix_artifact_missing", saleId: sale.id, companyId: sale.company_id,
+        paymentEnvironment: environment, paymentId: art.orderId, detail: "Order criado sem código PIX copia-e-cola.",
+      });
+      throw new PagbankError(
+        "pagbank_pix_artifact_missing",
+        "O PagBank não devolveu o código PIX desta cobrança. Tente novamente em instantes.",
+        502,
+        { order_id: art.orderId },
+      );
+    }
+
     const { data: finalAttempt } = await supabaseAdmin.from("payment_attempts").update({
       state: "succeeded", external_order_id: art.orderId, external_charge_id: art.chargeId, external_status_raw: art.rawStatus ?? "WAITING",
       normalized_status: normalized, pix_qr_text: art.qrText, pix_qr_image_url: art.qrImageUrl, pix_expires_at: art.expiresAt ?? expiresAt.toISOString(),
     }).eq("id", attemptId).eq("company_id", sale.company_id).select("*").single();
+
+    // Capacidades comprovadas por cobrança real (nunca por chamada genérica).
+    await supabaseAdmin.from("payment_gateway_connections").update({
+      pix_ready: true,
+      split_ready: splitPlan.receivers.length > 0 ? true : credential.connection.split_ready,
+      capabilities_verified_at: new Date().toISOString(),
+      last_error: null,
+    }).eq("id", credential.connection.id).eq("company_id", sale.company_id);
 
     // Snapshot financeiro da venda (mesmas colunas do Asaas, sem tocar asaas_*).
     const { error: saleUpdateError } = await supabaseAdmin.from("sales").update({

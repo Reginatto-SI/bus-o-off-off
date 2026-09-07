@@ -74,3 +74,40 @@ Checkout público → insert sales (trigger congela gateway/ambiente/conexão/co
 - `GET /public-keys` como probe de token;
 - token de assinatura de webhook em cenário Connect multiempresa;
 - primário do split, tarifas e liquidação; refund/chargeback fora do escopo.
+
+## 8. Comprovação de capacidades (não é mais presumida)
+
+- Salvar o token Sandbox prova **apenas autenticação** (`GET /public-keys/card`).
+  Não prova PIX, não prova split.
+- `pix_ready` e `split_ready` da conexão passam a `true` somente após a primeira
+  cobrança real aceita pelo PagBank, com o split conferido na resposta.
+- Se a resposta do PagBank não trouxer os mesmos recebedores e valores enviados,
+  a cobrança é marcada como falha (`pagbank_split_not_confirmed`) e não é
+  entregue ao comprador. Divisão não confirmada nunca vira cobrança comum.
+- Order sem código PIX na resposta gera `pagbank_pix_artifact_missing` (sem QR
+  falso na tela do comprador).
+
+## 9. Rotação de token da mesma conta
+
+Salvar um novo token Sandbox para o **mesmo** `account_id` mantém a conexão
+anterior consultável (`superseded_by_rotation`), preservando consulta e
+reconciliação de vendas antigas. Trocar de conta cria identidade lógica nova e
+revoga a anterior; vendas antigas continuam vinculadas à conexão original.
+
+## 10. Cartões de teste (fase futura)
+
+Cartão ainda **não** está implementado. Quando entrar em homologação, usar
+exclusivamente os dados de teste publicados pelo PagBank em
+<https://developer.pagbank.com.br/docs/cartoes-de-teste>. Nunca registrar
+números reais, nem valores de teste neste repositório.
+
+## 11. Dados ainda necessários (nomes, nunca valores)
+
+1. Token Sandbox rotacionado (qualquer credencial já compartilhada fora do cofre
+   deve ser considerada exposta e substituída).
+2. `account_id` Sandbox da empresa vendedora.
+3. `account_id` Sandbox da conta Marketplace (SmartBus).
+4. `account_id` Sandbox do sócio global e dos representantes que participarão.
+5. Token de autenticação do webhook configurado na conta Sandbox.
+6. `client_id`, `client_secret` e redirect URI da aplicação Connect.
+7. Confirmação, pelo PagBank, de que PIX e split estão habilitados na conta.

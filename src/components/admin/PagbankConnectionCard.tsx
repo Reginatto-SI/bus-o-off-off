@@ -22,6 +22,8 @@ type ConnectionStatus = {
     credential_mode: string | null;
     account_masked: string | null;
     pix_ready: boolean;
+    split_ready?: boolean;
+    capabilities_verified_at?: string | null;
     last_validated_at: string | null;
     last_error: string | null;
     connected_at: string | null;
@@ -161,8 +163,13 @@ export function PagbankConnectionCard({ companyId, canEdit }: { companyId: strin
                     <Badge variant="secondary">Não conectada</Badge>
                   )}
                   {isConnected && (
-                    <Badge variant={connection?.pix_ready ? 'default' : 'destructive'}>
-                      {connection?.pix_ready ? 'PIX pronto' : 'PIX indisponível'}
+                    <Badge variant={connection?.pix_ready ? 'default' : 'secondary'}>
+                      {connection?.pix_ready ? 'PIX comprovado' : 'PIX ainda não comprovado'}
+                    </Badge>
+                  )}
+                  {isConnected && (
+                    <Badge variant={connection?.split_ready ? 'default' : 'secondary'}>
+                      {connection?.split_ready ? 'Divisão comprovada' : 'Divisão ainda não comprovada'}
                     </Badge>
                   )}
                 </div>
@@ -220,7 +227,7 @@ export function PagbankConnectionCard({ companyId, canEdit }: { companyId: strin
                       <Label htmlFor="pagbank-sandbox-account" className="text-xs">ID da conta (recebedor)</Label>
                       <Input id="pagbank-sandbox-account" autoComplete="off" value={sandboxAccountId} onChange={(e) => setSandboxAccountId(e.target.value)} placeholder="ACCO_..." />
                     </div>
-                    <Button type="button" size="sm" variant="secondary" onClick={() => void run('save_sandbox_token', { token: sandboxToken, account_id: sandboxAccountId }, 'Token Sandbox validado e salvo.')} disabled={busy !== null || sandboxToken.trim().length < 20 || !sandboxAccountId.trim() || !envIsSandbox}>
+                    <Button type="button" size="sm" variant="secondary" onClick={() => void run('save_sandbox_token', { token: sandboxToken, account_id: sandboxAccountId }, 'Token Sandbox aceito e salvo. PIX e divisão só ficam comprovados após a primeira cobrança.')} disabled={busy !== null || sandboxToken.trim().length < 20 || !sandboxAccountId.trim() || !envIsSandbox}>
                       {busy === 'save_sandbox_token' ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
                       Validar e salvar
                     </Button>
