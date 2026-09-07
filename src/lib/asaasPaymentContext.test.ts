@@ -83,7 +83,9 @@ describe('contexto financeiro Asaas congelado por venda', () => {
     const context = resolvePaymentContext({
       mode: 'verify',
       requestedEnvironment: 'production',
-      request: new Request('https://www.smartbus.com.br/checkout'),
+      request: new Request('https://runtime.example/checkout', {
+        headers: { origin: 'https://www.smartbus.com.br' },
+      }),
     });
 
     // Em origem oficial de Produção, o request explícito é preservado.
@@ -95,7 +97,9 @@ describe('contexto financeiro Asaas congelado por venda', () => {
     const context = resolvePaymentContext({
       mode: 'verify',
       requestedEnvironment: 'production',
-      request: new Request('https://id-preview--x.lovable.app/checkout'),
+      request: new Request('https://runtime.example/checkout', {
+        headers: { origin: 'https://id-preview--x.lovable.app' },
+      }),
     });
 
     // Preview, editor e origens desconhecidas nunca autorizam Produção.
