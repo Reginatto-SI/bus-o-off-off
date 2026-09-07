@@ -1,88 +1,37 @@
 /**
- * Contrato operacional vigente (Step 1):
- * 1) o checkout público decide explicitamente o ambiente e envia ao backend
- * 2) create-asaas-payment persiste/consome sales.payment_environment
- * 3) verify/webhook/platform-fee leem da venda (não recalculam host)
+ * Utilidades Asaas de ambiente + compatibilidade legada de resolução por host.
  *
- * Step 2:
- * - host deixa de ser fonte primária para o fluxo de pagamento Asaas;
- * - este arquivo permanece apenas com utilidades legadas/de suporte operacional.
+ * A decisão de ambiente é centralizada em `payment-environment-policy.ts`:
+ * a origem só REBAIXA para sandbox; nunca promove Produção.
  */
-/**
- * Resolução legada de ambiente de pagamento Asaas por host.
- *
- * Regra mantida apenas para suporte visual/compatibilidade:
- * - smartbusbr.com.br / www.smartbusbr.com.br → production
- * - Qualquer outro host → sandbox
- *
- * O fluxo de cobrança não deve depender primariamente desta heurística.
- */
+import {
+  classifyRequestOrigin,
+  OFFICIAL_PRODUCTION_HOSTS,
+} from "./payment-environment-policy.ts";
 
 export type PaymentEnvironment = "production" | "sandbox";
 
-const PRODUCTION_HOSTS = new Set([
-  "smartbusbr.com.br",
-  "www.smartbusbr.com.br",
-]);
-
-function normalizeHost(rawValue: string): string {
-  const trimmed = rawValue.trim().toLowerCase();
-  const firstValue = trimmed.split(",")[0]?.trim() ?? "";
-  if (!firstValue) return "";
-
-  if (firstValue.includes("://")) {
-    try {
-      return new URL(firstValue).hostname.toLowerCase();
-    } catch {
-      // fallback abaixo
-    }
-  }
-
-  return firstValue.replace(/:\d+$/, "");
-}
+export { OFFICIAL_PRODUCTION_HOSTS };
 
 /**
- * Extrai o host real do cliente a partir dos headers da requisição.
- * Prioriza origin/referer (que contêm o domínio do cliente),
- * pois o header "host" em Edge Functions é sempre o runtime.
- */
-function extractRequestHost(req: Request): string {
-  const headerCandidates = [
-    req.headers.get("origin"),
-    req.headers.get("referer"),
-    req.headers.get("x-forwarded-host"),
-    req.headers.get("host"),
-  ];
-
-  for (const candidate of headerCandidates) {
-    if (!candidate) continue;
-    const normalized = normalizeHost(candidate);
-    if (normalized && normalized !== "edge-runtime.supabase.com")
-      return normalized;
-  }
-
-  return "unknown";
-}
-
-/**
- * Resolve o ambiente de pagamento com base no host da requisição.
- * Mantida apenas para fallback controlado/compatibilidade fora do caminho principal.
+ * Compatibilidade legada (apoio a suporte/diagnóstico). Não é fonte primária
+ * do fluxo de pagamento: usa a lista oficial única de domínios de Produção.
  */
 export function resolveEnvironmentFromHost(req: Request): {
   env: PaymentEnvironment;
   host: string;
 } {
-  const host = extractRequestHost(req);
-  const env: PaymentEnvironment = PRODUCTION_HOSTS.has(host)
-    ? "production"
-    : "sandbox";
+  const { host, originClass } = classifyRequestOrigin(req);
+  const env: PaymentEnvironment =
+    originClass === "official_production" ? "production" : "sandbox";
 
   console.log("[runtime-env] Ambiente resolvido por host", {
-    host_detected: host,
+    host_detected: host || "unknown",
+    origin_class: originClass,
     environment_selected: env,
   });
 
-  return { env, host };
+  return { env, host: host || "unknown" };
 }
 
 export function getAsaasBaseUrl(env: PaymentEnvironment): string {
