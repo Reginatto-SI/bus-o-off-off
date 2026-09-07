@@ -138,9 +138,9 @@ Deno.serve(async (req) => {
         sale.external_account_id !== credential.connection.external_account_id) {
       throw new PagbankError("pagbank_tenant_mismatch", "Conta PagBank da venda diverge da conexão.", 409);
     }
-    if (!credential.connection.pix_ready) {
-      throw new PagbankError("pagbank_connection_not_operational", "PIX PagBank não está habilitado para esta empresa.", 409);
-    }
+    // `pix_ready`/`split_ready` são resultado de homologação (primeira cobrança
+    // aceita), não pré-requisito. A operacionalidade exigida aqui é a conexão
+    // corrente e conectada, já validada em resolvePagbankCredentialForSale.
 
     if (existing && existing.state === "succeeded" && existing.external_order_id) {
       // Retorna o mesmo QR; atualiza status por consulta (barato e seguro).
