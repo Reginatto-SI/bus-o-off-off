@@ -1819,8 +1819,20 @@ export default function Checkout() {
           navigate(`/confirmacao/${sale.id}?retorno=pagbank`);
           return;
         }
-        if (pagbankErrorCode === "pagbank_indeterminate" || pagbankErrorCode === "pagbank_idempotency_conflict") {
-          // Cobrança pode existir: nunca apagar a venda. A confirmação recupera/consulta.
+        const pagbankOrderId =
+          (pagbankErrorBody?.detail as { order_id?: string | null } | undefined)?.order_id ?? null;
+        if (!pagbankFailureAllowsSaleRollback({ errorCode: pagbankErrorCode, orderId: pagbankOrderId })) {
+          // Cobrança pode existir no PagBank: nunca apagar a venda nem os
+          // passageiros. A confirmação consulta/reconcilia por reference_id.
+          console.error("[checkout] pagbank_order_may_exist", {
+            saleId: sale.id, errorCode: pagbankErrorCode ?? null, hasOrderId: Boolean(pagbankOrderId),
+          });
+          preserveCheckoutFailureTrace({
+            saleId: sale.id,
+            stage: "create_pagbank_payment_order_may_exist",
+            errorCode: typeof pagbankErrorCode === "string" ? pagbankErrorCode : null,
+            errorMessage: typeof pagbankErrorBody?.message === "string" ? pagbankErrorBody.message : "Pagamento em verificação.",
+          });
           setSubmitting(false);
           setPaymentCheckoutStatus("idle");
           navigate(`/confirmacao/${sale.id}?retorno=pagbank`);
