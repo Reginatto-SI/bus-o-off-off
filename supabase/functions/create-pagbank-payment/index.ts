@@ -30,6 +30,7 @@ import {
   buildPagbankIdempotencyKey,
   extractPagbankPixArtifacts,
   normalizePagbankStatus,
+  reconcilePagbankSplit,
 } from "../_shared/pagbank/core.ts";
 import { findPagbankOrdersByReference, getPagbankOrder, pagbankRequest, toPagbankError } from "../_shared/pagbank/client.ts";
 import { pagbankSecretNames, resolvePagbankCredentialForSale } from "../_shared/pagbank/credentials.ts";
