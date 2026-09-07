@@ -7,6 +7,10 @@ import {
   
   type PaymentEnvironment,
 } from "./runtime-env.ts";
+import {
+  classifyRequestOrigin,
+  resolveEffectivePaymentEnvironment,
+} from "./payment-environment-policy.ts";
 
 export type PaymentContextMode =
   | "create"
@@ -230,7 +234,7 @@ export function resolvePaymentContext(params: {
 
   let environment: PaymentEnvironment;
   let environmentSource: "sale" | "company" | "request";
-  const hostDetected: string | null = null;
+  let hostDetected: string | null = null;
 
   if (hasSaleEnvironment) {
     // Venda já persistida carrega o ambiente em que a cobrança foi criada.
@@ -238,17 +242,33 @@ export function resolvePaymentContext(params: {
     environmentSource = "sale";
   } else if (hasCompanyEnvironment) {
     /**
-     * Fonte única de verdade do projeto: o ambiente é configuração da empresa.
-     * Domínio/hostname não decidem mais nada no caminho de pagamento.
+     * Sem venda persistida: o ambiente parte da configuração da empresa e pode
+     * ser REBAIXADO para sandbox quando a origem não é um domínio oficial de
+     * Produção (preview, editor, localhost, origem desconhecida).
+     * A origem nunca promove Produção.
      */
-    environment = companyEnvRaw;
+    const origin = classifyRequestOrigin(params.request ?? null);
+    const effective = resolveEffectivePaymentEnvironment({
+      configured: companyEnvRaw,
+      originClass: origin.originClass,
+    });
+    environment = effective.environment ?? companyEnvRaw;
     environmentSource = "company";
+    hostDetected = origin.host || null;
   } else if (
     requestedEnvironment === "production" ||
     requestedEnvironment === "sandbox"
   ) {
-    environment = requestedEnvironment;
+    // Ambiente explícito do cliente também é rebaixado pela origem: um
+    // parâmetro do frontend nunca autoriza Produção sozinho.
+    const origin = classifyRequestOrigin(params.request ?? null);
+    const effective = resolveEffectivePaymentEnvironment({
+      configured: requestedEnvironment,
+      originClass: origin.originClass,
+    });
+    environment = effective.environment ?? requestedEnvironment;
     environmentSource = "request";
+    hostDetected = origin.host || null;
   } else {
     /**
      * Regra de segurança do projeto:

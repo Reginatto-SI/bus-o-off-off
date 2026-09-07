@@ -83,13 +83,28 @@ describe('contexto financeiro Asaas congelado por venda', () => {
     const context = resolvePaymentContext({
       mode: 'verify',
       requestedEnvironment: 'production',
-      request: new Request('https://sandbox.example/checkout'),
+      request: new Request('https://runtime.example/checkout', {
+        headers: { origin: 'https://www.smartbus.com.br' },
+      }),
     });
 
-    // O hostname deliberadamente divergente comprova que somente o request explícito decide o fallback.
+    // Em origem oficial de Produção, o request explícito é preservado.
     expect(context.environment).toBe('production');
     expect(context.decisionTrace.environmentSource).toBe('request');
-    expect(context.decisionTrace.hostDetected).toBeNull();
+  });
+
+  it('rebaixa para sandbox quando a origem não é oficial de Produção', () => {
+    const context = resolvePaymentContext({
+      mode: 'verify',
+      requestedEnvironment: 'production',
+      request: new Request('https://runtime.example/checkout', {
+        headers: { origin: 'https://id-preview--x.lovable.app' },
+      }),
+    });
+
+    // Preview, editor e origens desconhecidas nunca autorizam Produção.
+    expect(context.environment).toBe('sandbox');
+    expect(context.decisionTrace.environmentSource).toBe('request');
   });
 
   it('falha fechado quando nenhum contexto seleciona um ambiente', () => {

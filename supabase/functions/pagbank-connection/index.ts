@@ -15,6 +15,7 @@ import {
 } from "../_shared/pagbank/core.ts";
 import { probePagbankAuth } from "../_shared/pagbank/client.ts";
 import { encryptSecret, isEncryptionConfigured } from "../_shared/pagbank/crypto.ts";
+import { classifyRequestOrigin, resolveEffectivePaymentEnvironment } from "../_shared/payment-environment-policy.ts";
 import { loadCurrentConnection, missingPagbankSecrets, pagbankSecretNames } from "../_shared/pagbank/credentials.ts";
 
 const corsHeaders = {
@@ -69,13 +70,24 @@ Deno.serve(async (req) => {
     if (!company) return json({ error: "company_not_found" }, 404);
 
     const environment = "sandbox" as const; // Produção PagBank bloqueada nesta fase.
+
+    // Ambiente EFETIVO da sessão: a configuração da empresa pode ser rebaixada
+    // para sandbox quando a origem é preview/editor/localhost.
+    const origin = classifyRequestOrigin(req);
+    const effectiveCompanyEnvironment = resolveEffectivePaymentEnvironment({
+      configured: company.payment_environment === "production" || company.payment_environment === "sandbox"
+        ? company.payment_environment
+        : null,
+      originClass: origin.originClass,
+    }).environment;
     const missing = missingPagbankSecrets(environment);
 
     if (action === "status") {
       const connection = await loadCurrentConnection(supabaseAdmin, { companyId, environment });
       return json({
         company_gateway: company.payment_gateway,
-        company_environment: company.payment_environment,
+        company_environment: effectiveCompanyEnvironment,
+        company_configured_environment: company.payment_environment,
         allowed_environments: PAGBANK_ALLOWED_ENVIRONMENTS,
         connection: publicConnection(connection),
         platform_ready: {
@@ -92,7 +104,7 @@ Deno.serve(async (req) => {
       const gateway = body?.gateway === "pagbank" ? "pagbank" : body?.gateway === "asaas" ? "asaas" : null;
       if (!gateway) return json({ error: "gateway inválido" }, 400);
       if (gateway === "pagbank") {
-        if (company.payment_environment !== "sandbox") {
+        if (effectiveCompanyEnvironment !== "sandbox") {
           return json({ error: "PagBank está disponível apenas em Sandbox nesta fase. Ajuste o ambiente da empresa para Sandbox antes.", error_code: "pagbank_environment_not_allowed" }, 409);
         }
         const connection = await loadCurrentConnection(supabaseAdmin, { companyId, environment });

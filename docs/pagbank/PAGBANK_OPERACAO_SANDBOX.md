@@ -127,3 +127,36 @@ números reais, nem valores de teste neste repositório.
   criação (ex.: validação recusada, autenticação inválida) e sem `order_id`.
 - Reconciliação/cancelamento do Order externo é operação manual no PagBank; o
   código não cancela cobrança automaticamente.
+
+## Ambiente efetivo (política central)
+
+Fonte única: `src/lib/paymentEnvironmentPolicy.ts` (frontend) e
+`supabase/functions/_shared/payment-environment-policy.ts` (backend). Nenhuma
+outra lista de domínios deve existir.
+
+Camadas, nesta ordem:
+
+1. **Venda existente** — `sales.payment_environment` é imutável. Consulta,
+   webhook, reconciliação e finalização sempre usam o ambiente da venda. Troca
+   de domínio, preview ou configuração da empresa não altera vendas criadas.
+2. **Empresa** — `companies.payment_environment` é a intenção configurada.
+3. **Origem** — só um domínio oficial de Produção mantém Produção:
+   `smartbus.com.br`, `www.smartbus.com.br`, `smartbusbr.com.br`,
+   `www.smartbusbr.com.br`, `smartbusbr.lovable.app`. Preview do Lovable,
+   editor, `localhost` e qualquer origem desconhecida **rebaixam** o ambiente
+   efetivo para Sandbox. A origem nunca promove Produção, e nenhum hostname ou
+   parâmetro enviado pelo cliente autoriza Produção.
+
+No preview, o selo `Sandbox` aparece no cabeçalho e o token Sandbox PagBank
+pode ser cadastrado e validado mesmo com a empresa configurada como Produção.
+PagBank em Produção continua bloqueado nesta fase.
+
+## Bloqueio conhecido: aplicativo Android / WebView
+
+`capacitor.config.ts` aponta `server.url` para um endereço
+`*.lovableproject.com`, que a política classifica como desenvolvimento. Logo, o
+aplicativo nativo publicado operaria em Sandbox. Não foi criada exceção nativa,
+porque não existe hoje um sinal confiável (não falsificável pelo cliente) que
+identifique um build nativo de Produção. Saída segura, em tarefa própria:
+apontar `server.url` para o domínio oficial de Produção antes de liberar
+pagamentos de Produção no aplicativo.

@@ -213,7 +213,11 @@ const getCompanyDisplayNameForPersistence = ({
 export default function CompanyPage() {
   const { activeCompanyId, user, isGerente, isOperador, isDeveloper, updateActiveCompany } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { environment: runtimePaymentEnvironment, source: runtimePaymentSource } = useRuntimePaymentEnvironment();
+  const {
+    environment: runtimePaymentEnvironment,
+    source: runtimePaymentSource,
+    isDowngradedByOrigin: runtimePaymentDowngraded,
+  } = useRuntimePaymentEnvironment();
   
   const [company, setCompany] = useState<Company | null>(null);
   const [financialSocios, setFinancialSocios] = useState<Array<{
@@ -2258,6 +2262,12 @@ export default function CompanyPage() {
                         <p>
                           <strong>Resultado:</strong> {lastAsaasCheckResultLabel}
                         </p>
+                        {runtimePaymentDowngraded && (
+                          <p className="text-amber-700">
+                            Esta empresa está configurada como Produção, mas você está em um endereço de teste
+                            (pré-visualização, editor ou computador local). Por segurança, tudo aqui funciona em Sandbox.
+                          </p>
+                        )}
                         {lastAsaasCheckErrorReason && (
                           <p className="text-destructive">
                             <strong>Motivo:</strong> {lastAsaasCheckErrorReason}
