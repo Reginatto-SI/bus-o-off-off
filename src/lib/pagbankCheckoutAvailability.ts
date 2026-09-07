@@ -52,3 +52,29 @@ export function resolvePagbankCheckoutAvailability(params: {
   }
   return { allowed: true, reason: "ok", ...base };
 }
+
+/**
+ * Espelho no frontend da política de rollback do backend
+ * (`supabase/functions/_shared/pagbank/attempt-policy.ts`).
+ * O checkout só pode apagar a venda quando é certo que o PagBank não criou
+ * nenhum Order. Em qualquer sinal de cobrança externa, a venda é preservada
+ * para consulta/reconciliação.
+ */
+export const PAGBANK_ORDER_MAY_EXIST_CODES: readonly string[] = [
+  "pagbank_indeterminate",
+  "pagbank_idempotency_conflict",
+  "pagbank_split_not_confirmed",
+  "pagbank_pix_artifact_missing",
+  "pagbank_order_needs_reconciliation",
+];
+
+export function pagbankFailureAllowsSaleRollback(params: {
+  errorCode?: string | null;
+  orderId?: string | null;
+  chargeId?: string | null;
+}): boolean {
+  if (params.orderId || params.chargeId) return false;
+  const code = params.errorCode ?? "";
+  if (!code) return false;
+  return !PAGBANK_ORDER_MAY_EXIST_CODES.includes(code);
+}
