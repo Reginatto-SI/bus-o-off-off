@@ -55,8 +55,10 @@ import {
   getCheckoutResponsibilityAcceptanceLabel,
 } from "@/lib/intermediationPolicy";
 import { isInstalledAppPaymentContext, logAsaasInvoiceOpen } from "@/lib/asaasInvoiceUrl";
-import { resolvePagbankCheckoutAvailability } from "@/lib/pagbankCheckoutAvailability";
-import { pagbankFailureAllowsSaleRollback } from "../../../supabase/functions/_shared/pagbank/attempt-policy";
+import {
+  pagbankFailureAllowsSaleRollback,
+  resolvePagbankCheckoutAvailability,
+} from "@/lib/pagbankCheckoutAvailability";
 
 // ---- CPF validation helpers ----
 function isValidCpf(cpf: string): boolean {
