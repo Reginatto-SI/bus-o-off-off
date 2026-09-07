@@ -197,7 +197,7 @@ export function PagbankConnectionCard({ companyId, canEdit }: { companyId: strin
                 <Alert>
                   <AlertTriangle className="h-4 w-4" />
                   <AlertDescription>
-                    O PagBank está liberado apenas em Sandbox nesta fase. Esta sessão está operando em {status?.company_environment === 'production' ? 'Produção' : 'ambiente não definido'}; para testar, use o endereço de teste (pré-visualização) ou ajuste o ambiente de pagamento da empresa para Sandbox.
+                    Esta sessão está em {status?.company_environment === 'production' ? 'Produção' : 'ambiente não definido'}. Você pode cadastrar a conta de testes abaixo: ela será salva exclusivamente em Sandbox, sem alterar o ambiente da empresa. Para ativar PagBank e realizar vendas de teste, use uma sessão Sandbox. PagBank em Produção continua bloqueado.
                   </AlertDescription>
                 </Alert>
               )}
@@ -213,26 +213,31 @@ export function PagbankConnectionCard({ companyId, canEdit }: { companyId: strin
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2 rounded-md border p-3">
                     <p className="text-sm font-medium flex items-center gap-2"><Link2 className="h-4 w-4" /> Conectar com autorização PagBank</p>
-                    <p className="text-xs text-muted-foreground">Você será levado ao PagBank para autorizar o SmartBus a criar cobranças na sua conta.</p>
-                    <Button type="button" size="sm" onClick={() => void run('connect_start')} disabled={busy !== null || !status?.platform_ready.connect || !envIsSandbox}>
+                    <p className="text-xs text-muted-foreground">Alternativa ao token manual. Você será levado ao PagBank Sandbox para autorizar sua conta de testes.</p>
+                    <Button type="button" size="sm" onClick={() => void run('connect_start')} disabled={loading || busy !== null || !status?.platform_ready.connect || !status?.platform_ready.encryption}>
                       {busy === 'connect_start' ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
                       Autorizar no PagBank
                     </Button>
                     {status && !status.platform_ready.connect && (
-                      <p className="text-xs text-muted-foreground">Autorização ainda não habilitada na plataforma.</p>
+                      <p className="text-xs text-muted-foreground">OAuth ainda não habilitado. Client ID e Client Secret são necessários apenas para esta alternativa; você pode usar token Sandbox manual.</p>
                     )}
                   </div>
                   <div className="space-y-2 rounded-md border p-3">
                     <p className="text-sm font-medium">Token Sandbox (testes)</p>
+                    <p className="text-xs text-muted-foreground">Cadastro exclusivo de teste. Salvar não altera o gateway nem o ambiente das vendas.</p>
                     <div className="space-y-1">
                       <Label htmlFor="pagbank-sandbox-token" className="text-xs">Token da conta Sandbox</Label>
                       <Input id="pagbank-sandbox-token" type="password" autoComplete="off" value={sandboxToken} onChange={(e) => setSandboxToken(e.target.value)} placeholder="Cole o token de Sandbox" />
                     </div>
                     <div className="space-y-1">
                       <Label htmlFor="pagbank-sandbox-account" className="text-xs">ID da conta (recebedor)</Label>
-                      <Input id="pagbank-sandbox-account" autoComplete="off" value={sandboxAccountId} onChange={(e) => setSandboxAccountId(e.target.value)} placeholder="ACCO_..." />
+                      <Input id="pagbank-sandbox-account" autoComplete="off" value={sandboxAccountId} onChange={(e) => setSandboxAccountId(e.target.value)} placeholder="ACCO_..." aria-describedby="pagbank-account-help" aria-invalid={sandboxAccountId.trim().length > 0 && !/^ACCO_[A-Za-z0-9-]+$/.test(sandboxAccountId.trim())} />
+                      <p id="pagbank-account-help" className="text-xs text-muted-foreground">Informe o ID da conta Sandbox da empresa vendedora, começando com ACCO_. Não é o e-mail, o token nem o ID do Marketplace. Use a conta correspondente ao token informado.</p>
+                      {sandboxAccountId.trim() && !/^ACCO_[A-Za-z0-9-]+$/.test(sandboxAccountId.trim()) && (
+                        <p className="text-xs text-destructive" role="alert">ID inválido. Informe o identificador ACCO_… fornecido pelo PagBank, não um e-mail.</p>
+                      )}
                     </div>
-                    <Button type="button" size="sm" variant="secondary" onClick={() => void run('save_sandbox_token', { token: sandboxToken, account_id: sandboxAccountId }, 'Token Sandbox aceito e salvo. PIX e divisão só ficam comprovados após a primeira cobrança.')} disabled={busy !== null || sandboxToken.trim().length < 20 || !sandboxAccountId.trim() || !envIsSandbox}>
+                    <Button type="button" size="sm" variant="secondary" onClick={() => void run('save_sandbox_token', { token: sandboxToken.trim(), account_id: sandboxAccountId.trim() }, 'Token Sandbox aceito e salvo. PIX e divisão só ficam comprovados após a primeira cobrança.')} disabled={loading || busy !== null || !status?.platform_ready.encryption || sandboxToken.trim().length < 20 || !/^ACCO_[A-Za-z0-9-]+$/.test(sandboxAccountId.trim())}>
                       {busy === 'save_sandbox_token' ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
                       Validar e salvar
                     </Button>
@@ -241,10 +246,12 @@ export function PagbankConnectionCard({ companyId, canEdit }: { companyId: strin
                 </div>
               )}
 
-              {status && status.platform_ready.missing_secret_names.length > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  Pendências de configuração da plataforma: {status.platform_ready.missing_secret_names.join(', ')}.
-                </p>
+              {status && (!status.platform_ready.split || !status.platform_ready.webhook) && (
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <p>Pendências da plataforma para testar a compra completa (não impedem salvar o token):</p>
+                  {!status.platform_ready.split && <p>• Recebedor Marketplace: configurar PAGBANK_MARKETPLACE_ACCOUNT_ID_SANDBOX no backend SmartBus.</p>}
+                  {!status.platform_ready.webhook && <p>• Confirmação por webhook: configurar PAGBANK_WEBHOOK_TOKEN_SANDBOX conforme o runbook, pelo cofre de segredos.</p>}
+                </div>
               )}
             </div>
           </>
