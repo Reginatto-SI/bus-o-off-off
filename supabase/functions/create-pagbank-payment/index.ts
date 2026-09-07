@@ -265,14 +265,14 @@ Deno.serve(async (req) => {
       supabaseAdmin, source: SOURCE, saleId: sale.id, companyId: sale.company_id, environment,
       splitEnabled: platformFeeEngine.totalFee > 0, representativeId: sale.representative_id ?? null,
     });
-    // Recebedor elegível sem conta bloqueia (sem degradação silenciosa).
+    // Regra financeira SmartBus (PRD): conta ausente = participante ausente e a
+    // parcela é redistribuída pelos quatro cenários. Só bloqueiam os casos em que
+    // a ausência NÃO está comprovada: ambiguidade cadastral ou falha de consulta.
     const blockedRecipients: string[] = [];
-    if (recipients.socio.eligible && !recipients.socio.accountId) blockedRecipients.push("socio");
-    if (recipients.representative.eligible && !recipients.representative.accountId) blockedRecipients.push("representative");
     if (recipients.socio.reason === "ambiguous" || recipients.socio.reason === "query_failed") blockedRecipients.push(`socio:${recipients.socio.reason}`);
     if (recipients.representative.reason === "query_failed") blockedRecipients.push("representative:query_failed");
     if (platformFeeEngine.totalFee > 0 && blockedRecipients.length > 0) {
-      throw new PagbankError("pagbank_split_recipient_missing", "A divisão financeira não pôde ser montada para esta empresa.", 409, { missing: blockedRecipients });
+      throw new PagbankError("pagbank_split_recipient_missing", "A divisão financeira não pôde ser montada com segurança para esta empresa.", 409, { missing: blockedRecipients });
     }
     const distribution = distributePlatformFee({
       totalFee: platformFeeEngine.totalFee,
