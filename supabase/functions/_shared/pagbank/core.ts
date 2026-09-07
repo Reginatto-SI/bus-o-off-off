@@ -43,6 +43,8 @@ export type PagbankErrorCode =
   | "pagbank_tenant_mismatch"
   | "pagbank_split_recipient_missing"
   | "pagbank_split_sum_mismatch"
+  | "pagbank_split_not_confirmed"
+  | "pagbank_pix_artifact_missing"
   | "pagbank_transient_error";
 
 export class PagbankError extends Error {
