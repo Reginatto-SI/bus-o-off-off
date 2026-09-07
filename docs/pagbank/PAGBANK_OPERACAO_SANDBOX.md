@@ -26,11 +26,17 @@ Sem `PAGBANK_MARKETPLACE_ACCOUNT_ID_SANDBOX`, a criação do PIX falha com
 
 ## 3. Habilitar uma empresa (admin → Empresa → Pagamentos)
 
-1. Ambiente de pagamento da empresa deve ser **Sandbox**.
+1. O cadastro da conexão é sempre **Sandbox**, independentemente do ambiente da sessão.
+   Salvar token ou iniciar autorização Sandbox não altera gateway, ambiente da empresa ou vendas.
+   Para ativar PagBank nas novas vendas, a sessão deve ter ambiente efetivo **Sandbox**.
 2. Conectar a conta PagBank por **uma** das vias:
    - *Autorizar no PagBank* (Connect OAuth) — requer client id/secret;
    - *Token Sandbox manual* — cole token + `account_id` (recebedor). O token é validado
-     (`GET /public-keys`) e salvo cifrado. Nunca é exibido novamente.
+     (`GET /public-keys/card`) e salvo cifrado. Nunca é exibido novamente.
+     O ID deve começar com `ACCO_`: não é e-mail, token ou conta Marketplace.
+     A validação de formato não comprova titularidade: use o ID da mesma conta do token.
+     Essa via não exige Client ID/Client Secret OAuth nem o secret Marketplace para salvar.
+     A chave de criptografia do backend continua obrigatória.
 3. Com a conexão `connected` e corrente, selecionar **PagBank** como gateway das novas vendas.
    `pix_ready`/`split_ready` são **evidência** de capacidade já comprovada por cobrança real,
    nunca pré-requisito da primeira cobrança (isso criaria bloqueio circular).
@@ -111,7 +117,7 @@ números reais, nem valores de teste neste repositório.
 3. `account_id` Sandbox da conta Marketplace (SmartBus).
 4. `account_id` Sandbox do sócio global e dos representantes que participarão.
 5. Token de autenticação do webhook configurado na conta Sandbox.
-6. `client_id`, `client_secret` e redirect URI da aplicação Connect.
+6. `client_id`, `client_secret` e redirect URI da aplicação Connect — somente se optar por OAuth; dispensados para cadastrar token manual.
 7. Confirmação, pelo PagBank, de que PIX e split estão habilitados na conta.
 
 ## 12. Order externo já criado (nunca duplicar nem perder a venda)
