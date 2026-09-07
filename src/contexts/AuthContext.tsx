@@ -47,6 +47,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [userCompanies, setUserCompanies] = useState<Company[]>([]);
   const [hasDeveloperAccess, setHasDeveloperAccess] = useState(false);
   const [loading, setLoading] = useState(true);
+  const authUserIdRef = useRef<string | null>(null);
+  const authRequestVersionRef = useRef(0);
+  const pendingAuthRequestRef = useRef<number | null>(null);
   const loadingRef = useRef(loading);
   loadingRef.current = loading;
   const [representativeProfile, setRepresentativeProfile] = useState<Representative | null>(null);
@@ -65,7 +68,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return role;
   };
 
-  const fetchUserData = useCallback(async (userId: string) => {
+  const fetchUserData = useCallback(async (userId: string, requestVersion: number) => {
+    const isCurrentRequest = () => authRequestVersionRef.current === requestVersion
+      && authUserIdRef.current === userId;
+    if (!isCurrentRequest()) return;
+
     try {
       // Fetch profile
       const { data: profileData, error: profileError } = await supabase
@@ -73,6 +80,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .select('*')
         .eq('id', userId)
         .single();
+
+      if (!isCurrentRequest()) return;
 
       if (profileError) {
         console.error('Erro ao carregar profile (profiles.select)', {
@@ -92,6 +101,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .from('user_roles')
         .select('*')
         .eq('user_id', userId);
+
+      if (!isCurrentRequest()) return;
 
       if (rolesError) {
         console.error('Erro ao carregar roles (user_roles.select)', {
@@ -114,6 +125,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .select('*')
           .eq('user_id', userId)
           .maybeSingle();
+
+        if (!isCurrentRequest()) return;
 
         if (representativeError) {
           console.error('Erro ao carregar representante (representatives.select)', {
@@ -164,6 +177,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         : supabase.from('companies').select('*').in('id', companyIds);
 
       const { data: companiesData, error: companiesError } = await companiesQuery;
+
+      if (!isCurrentRequest()) return;
 
       if (companiesError) {
         console.error('[AuthContext] Erro ao carregar empresas (companies.select)', {
@@ -248,6 +263,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setActiveCompany(null);
       }
     } catch (error) {
+      if (!isCurrentRequest()) return;
       console.error('[AuthContext] Erro inesperado ao resolver dados do usuário:', error);
       setUserCompanies([]);
       setHasDeveloperAccess(false);
@@ -259,48 +275,75 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       // Bug fix: loading só é false DEPOIS que todos os dados foram resolvidos.
       // Isso evita que AdminLayout veja userRole=null enquanto fetchUserData ainda roda.
-      setLoading(false);
+      if (isCurrentRequest()) {
+        pendingAuthRequestRef.current = null;
+        setLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
+    let disposed = false;
+    let receivedAuthEvent = false;
+    const clearUserData = () => {
+      setProfile(null);
+      setUserRole(null);
+      setSellerId(null);
+      setActiveCompanyId(null);
+      setActiveCompany(null);
+      setUserCompanies([]);
+      setHasDeveloperAccess(false);
+      setRepresentativeProfile(null);
+    };
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      (event, session) => {
+        if (disposed) return;
+        receivedAuthEvent = true;
         if (new URLSearchParams(window.location.search).get('cameraDebug') === '1') window.dispatchEvent(new CustomEvent('smartbus:auth-diagnostic', { detail: {
           at: new Date().toISOString(), event, authenticated: Boolean(session?.user),
           loadingBefore: loadingRef.current, visibility: document.visibilityState, url: window.location.href,
         } }));
+        const nextUserId = session?.user?.id ?? null;
+        const identityChanged = authUserIdRef.current !== nextUserId;
         setSession(session);
         setUser(session?.user ?? null);
 
-        if (session?.user) {
-          // Bug fix: setar loading=true para evitar race condition onde componentes
-          // protegidos (ex: RepresentativeDashboard) renderizam antes de fetchUserData
-          // resolver o role/isRepresentative. fetchUserData faz setLoading(false) no finally.
-          setLoading(true);
-          setTimeout(() => fetchUserData(session.user.id), 0);
-        } else {
-          setProfile(null);
-          setUserRole(null);
-          setSellerId(null);
-          setActiveCompanyId(null);
-          setActiveCompany(null);
-          setUserCompanies([]);
-          setHasDeveloperAccess(false);
-          setRepresentativeProfile(null);
-          setLoading(false);
+        if (identityChanged || !nextUserId) {
+          // Invalida também respostas ainda em trânsito da sessão anterior.
+          authRequestVersionRef.current += 1;
+          pendingAuthRequestRef.current = null;
+          authUserIdRef.current = nextUserId;
+          clearUserData();
         }
+
+        if (!nextUserId) {
+          setLoading(false);
+          return;
+        }
+
+        // Refoco e renovação da mesma sessão revalidam permissões em segundo plano.
+        // O loader inicial desmonta formulários; só deve bloquear uma nova identidade.
+        if (identityChanged) setLoading(true);
+        if (pendingAuthRequestRef.current !== null) return;
+        const requestVersion = ++authRequestVersionRef.current;
+        pendingAuthRequestRef.current = requestVersion;
+        setTimeout(() => fetchUserData(nextUserId, requestVersion), 0);
       }
     );
 
-    // Checar sessão existente — se não houver, desligar loading
+    // Uma resposta inicial atrasada não pode liberar o loader de um login já iniciado.
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
-        setLoading(false);
-      }
+      if (!disposed && !receivedAuthEvent && !session) setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      disposed = true;
+      subscription.unsubscribe();
+      authRequestVersionRef.current += 1;
+      pendingAuthRequestRef.current = null;
+      authUserIdRef.current = null;
+    };
   }, [fetchUserData]);
 
   const signIn = async (email: string, password: string) => {
