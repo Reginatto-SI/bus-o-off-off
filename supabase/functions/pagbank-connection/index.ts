@@ -13,7 +13,7 @@ import {
   assertPagbankEnvironmentAllowed,
   maskIdentifier,
 } from "../_shared/pagbank/core.ts";
-import { probePagbankToken } from "../_shared/pagbank/client.ts";
+import { probePagbankAuth } from "../_shared/pagbank/client.ts";
 import { encryptSecret, isEncryptionConfigured } from "../_shared/pagbank/crypto.ts";
 import { loadCurrentConnection, missingPagbankSecrets, pagbankSecretNames } from "../_shared/pagbank/credentials.ts";
 
@@ -34,6 +34,8 @@ function publicConnection(c: any) {
     credential_mode: c.credential_mode,
     account_masked: maskIdentifier(c.external_account_email ?? c.external_account_id),
     pix_ready: c.pix_ready,
+    split_ready: c.split_ready,
+    capabilities_verified_at: c.capabilities_verified_at,
     last_validated_at: c.last_validated_at,
     last_error: c.last_error,
     connected_at: c.connected_at,
@@ -94,7 +96,9 @@ Deno.serve(async (req) => {
           return json({ error: "PagBank está disponível apenas em Sandbox nesta fase. Ajuste o ambiente da empresa para Sandbox antes.", error_code: "pagbank_environment_not_allowed" }, 409);
         }
         const connection = await loadCurrentConnection(supabaseAdmin, { companyId, environment });
-        if (!connection || connection.status !== "connected" || !connection.pix_ready) {
+        // `pix_ready` é comprovado por cobrança real; exigir aqui impediria a
+        // primeira cobrança. Basta a conexão corrente estar conectada.
+        if (!connection || connection.status !== "connected") {
           return json({ error: "Conecte e valide a conta PagBank antes de ativá-la para novas vendas.", error_code: "pagbank_connection_not_operational" }, 409);
         }
       }
@@ -112,21 +116,30 @@ Deno.serve(async (req) => {
       if (token.length < 20) return json({ error: "Token Sandbox inválido." }, 400);
       if (!accountId) return json({ error: "Informe o ID da conta PagBank (recebedor) do Sandbox." }, 400);
 
-      // Validação sem efeito financeiro.
-      const probe = await probePagbankToken({ environment, accessToken: token });
+      // Prova apenas de autenticação: NÃO comprova PIX nem split. Essas
+      // capacidades só são marcadas após a primeira cobrança aceita.
+      const probe = await probePagbankAuth({ environment, accessToken: token });
       if (!probe.ok) {
         const reason = probe.status === 401 || probe.status === 403 ? "token_rejected" : probe.indeterminate ? "pagbank_unreachable" : `http_${probe.status}`;
         return json({ error: "O PagBank não aceitou este token.", error_code: "pagbank_auth_failed", reason }, 409);
       }
       const now = new Date().toISOString();
-      // Substitui conexão corrente (nova identidade lógica; vendas antigas mantêm a anterior).
-      await supabaseAdmin.from("payment_gateway_connections")
-        .update({ is_current: false, revoked_at: now, status: "revoked" })
-        .eq("company_id", companyId).eq("gateway", "pagbank").eq("environment", environment).eq("is_current", true);
+      const previous = await loadCurrentConnection(supabaseAdmin, { companyId, environment });
+      // Mesma conta externa = rotação de credencial dentro da MESMA identidade
+      // lógica: a conexão antiga não é revogada, apenas deixa de ser corrente,
+      // para que vendas antigas continuem consultáveis e reconciliáveis.
+      if (previous) {
+        const sameAccount = previous.external_account_id === accountId;
+        await supabaseAdmin.from("payment_gateway_connections")
+          .update(sameAccount
+            ? { is_current: false, superseded_by_rotation: true }
+            : { is_current: false, revoked_at: now, status: "revoked", pix_ready: false, split_ready: false })
+          .eq("id", previous.id);
+      }
       const { data: created, error } = await supabaseAdmin.from("payment_gateway_connections").insert({
         company_id: companyId, gateway: "pagbank", environment, status: "connected", credential_mode: "sandbox_manual_token",
         external_account_id: accountId, access_token_enc: await encryptSecret(token), scopes: PAGBANK_CONNECT_SCOPES,
-        pix_ready: true, last_validated_at: now, connected_at: now, is_current: true, credential_generation: 1,
+        pix_ready: false, last_validated_at: now, connected_at: now, is_current: true, credential_generation: 1,
       }).select("*").single();
       if (error) return json({ error: error.message }, 500);
       logPaymentTrace("info", "pagbank-connection", "sandbox_token_saved", { company_id: companyId, connection_id: created.id });
