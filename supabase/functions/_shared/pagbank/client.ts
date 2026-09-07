@@ -129,12 +129,16 @@ export function findPagbankOrdersByReference(params: {
   });
 }
 
-/** Chamada barata para validar um token (autenticação) sem efeito financeiro. */
-export function probePagbankToken(params: { environment: PagbankEnvironment; accessToken: string }) {
+/**
+ * Prova SOMENTE de autenticação: o token é aceito pela API oficial.
+ * Não comprova identidade da conta, PIX habilitado nem split habilitado —
+ * essas capacidades só são confirmadas pela primeira cobrança real.
+ */
+export function probePagbankAuth(params: { environment: PagbankEnvironment; accessToken: string }) {
   return pagbankRequest({
     environment: params.environment,
     accessToken: params.accessToken,
     method: "GET",
-    path: "/public-keys",
+    path: "/public-keys/card",
   });
 }
