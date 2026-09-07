@@ -1,6 +1,9 @@
 # PagBank no SmartBus — checkpoint atual
 
-> Branch oficial: `feature/pagbank-integration`.
+> Base atual: `main`. Em 2026-09-07, o responsável revogou a obrigatoriedade da
+> `feature/pagbank-integration`. PRs temporários partem de `main` e retornam a `main`.
+> Referências anteriores à branch e a etapas já executadas são históricas;
+> não bloqueiam a manutenção atual. PagBank em Produção continua bloqueado.
 
 ## Estado operacional — 2026-09-07 (sessão 3: Alternativa A — estabilizar PIX)
 
