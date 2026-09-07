@@ -1,16 +1,24 @@
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  classifyOrigin,
+  currentBrowserHost,
+  resolveEffectivePaymentEnvironment,
+  type PaymentEnvironment,
+} from "@/lib/paymentEnvironmentPolicy";
 
-export type PaymentEnvironment = "production" | "sandbox";
+export type { PaymentEnvironment };
 type EnvironmentSource = "company" | "active_company";
 
 export const DEFAULT_PAYMENT_ENVIRONMENT: PaymentEnvironment = "production";
 
 /**
- * Fonte única de verdade do ambiente de pagamento.
+ * Ambiente de pagamento em duas camadas:
+ * - configurado: `companies.payment_environment` (intenção da empresa);
+ * - efetivo: o configurado, rebaixado para Sandbox quando a origem atual não é
+ *   um domínio oficial de Produção (preview Lovable, editor, localhost,
+ *   origem desconhecida).
  *
- * Regra oficial do projeto: o ambiente vem da configuração da empresa
- * (`companies.payment_environment`). Nunca de domínio, hostname, usuário
- * conectado ou fallback silencioso.
+ * A origem nunca promove Produção — apenas rebaixa.
  */
 export function normalizePaymentEnvironment(
   value?: string | null,
@@ -20,8 +28,6 @@ export function normalizePaymentEnvironment(
 }
 
 /**
- * Expõe o ambiente operacional da empresa em contexto.
- *
  * @param companyEnvironment ambiente explícito da empresa relevante para a tela
  * (ex.: empresa do evento no checkout público). Quando omitido, usa a empresa
  * ativa do painel administrativo.
@@ -37,7 +43,7 @@ export function useRuntimePaymentEnvironment(
       ?.payment_environment,
   );
 
-  const environment: PaymentEnvironment | null =
+  const configuredEnvironment: PaymentEnvironment | null =
     explicit ?? fromActiveCompany ?? null;
   const source: EnvironmentSource | null = explicit
     ? "company"
@@ -45,8 +51,16 @@ export function useRuntimePaymentEnvironment(
       ? "active_company"
       : null;
 
+  const originClass = classifyOrigin(currentBrowserHost());
+  const { environment, downgradedByOrigin } = resolveEffectivePaymentEnvironment(
+    { configured: configuredEnvironment, originClass },
+  );
+
   return {
     environment,
+    configuredEnvironment,
+    originClass,
+    isDowngradedByOrigin: downgradedByOrigin,
     source,
     isSandbox: environment === "sandbox",
     isProduction: environment === "production",
