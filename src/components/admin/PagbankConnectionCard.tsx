@@ -145,10 +145,15 @@ export function PagbankConnectionCard({ companyId, canEdit }: { companyId: strin
                 </div>
               </label>
               <label className="flex items-start gap-3 p-4 rounded-lg border bg-card cursor-pointer has-[:checked]:border-primary has-[:checked]:ring-2 has-[:checked]:ring-primary/20">
-                <RadioGroupItem value="pagbank" className="mt-1" disabled={!canEdit || busy !== null} />
+                <RadioGroupItem value="pagbank" className="mt-1" disabled={!canEdit || busy !== null || !isConnected || !envIsSandbox} />
                 <div>
                   <p className="font-semibold flex items-center gap-2">PagBank <Badge variant="outline">Sandbox</Badge></p>
                   <p className="text-sm text-muted-foreground">Somente PIX nesta fase. Requer conta conectada e validada.</p>
+                  {!isConnected && (
+                    <p className="text-xs text-amber-700 mt-1">
+                      Primeiro conecte a conta PagBank logo abaixo (token Sandbox ou autorização). Depois esta opção fica disponível.
+                    </p>
+                  )}
                 </div>
               </label>
             </RadioGroup>
@@ -192,7 +197,7 @@ export function PagbankConnectionCard({ companyId, canEdit }: { companyId: strin
                 <Alert>
                   <AlertTriangle className="h-4 w-4" />
                   <AlertDescription>
-                    O PagBank está liberado apenas em Sandbox nesta fase. A empresa está em {status?.company_environment === 'production' ? 'Produção' : 'ambiente não definido'}; para testar, ajuste o ambiente de pagamento para Sandbox.
+                    O PagBank está liberado apenas em Sandbox nesta fase. Esta sessão está operando em {status?.company_environment === 'production' ? 'Produção' : 'ambiente não definido'}; para testar, use o endereço de teste (pré-visualização) ou ajuste o ambiente de pagamento da empresa para Sandbox.
                   </AlertDescription>
                 </Alert>
               )}
