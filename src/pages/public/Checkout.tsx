@@ -752,15 +752,20 @@ export default function Checkout() {
           setCompanyPaymentGateway(gateway);
           let pagbankReady = false;
           if (gateway === "pagbank") {
-            // Prontidão PIX PagBank vem da conexão corrente da empresa (leitura pública restrita a flags).
+            // Aptidão para TENTAR a cobrança: conexão corrente e conectada.
+            // `pix_ready`/`split_ready` são evidência posterior, não pré-requisito.
             const { data: pagbankConn } = await supabase
               .from("payment_gateway_connections")
-              .select("pix_ready, status")
+              .select("pix_ready, split_ready, status, is_current")
               .eq("company_id", eventData.company_id)
               .eq("gateway", "pagbank")
               .eq("is_current", true)
               .maybeSingle();
-            pagbankReady = Boolean(pagbankConn?.pix_ready && pagbankConn?.status === "connected");
+            pagbankReady = resolvePagbankCheckoutAvailability({
+              environment: (companyData as { payment_environment?: string | null }).payment_environment ?? null,
+              connection: pagbankConn ?? null,
+              platformFeePercent: Number(companyData.platform_fee_percent ?? 0),
+            }).allowed;
           }
           setCompanyPixStatus({
             productionReady: Boolean(companyData.asaas_pix_ready_production),
