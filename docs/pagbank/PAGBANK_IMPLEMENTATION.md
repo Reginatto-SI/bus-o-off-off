@@ -5,6 +5,26 @@
 > Referências anteriores à branch e a etapas já executadas são históricas;
 > não bloqueiam a manutenção atual. PagBank em Produção continua bloqueado.
 
+## Manutenção — 2026-09-07: fluxo main e cadastro Sandbox
+
+- Revogada a exigência de branch PagBank em `AGENTS.md` e `BRANCH_CONTEXT.md`;
+  `main` passa a ser a base atual, sem autorizar PagBank em Produção.
+- Cadastro manual e autorização Sandbox não dependem do ambiente operacional
+  da sessão: essas ações já usam exclusivamente Sandbox no backend. Não alteram
+  o gateway da empresa. Selecionar PagBank para novas vendas continua exigindo
+  ambiente efetivo Sandbox e conexão corrente.
+- O formulário separa OAuth opcional das pendências Marketplace/webhook e exige
+  criptografia disponível. ID de recebedor tem validação de formato no frontend
+  e backend; e-mail é recusado antes de consultar o provedor. Formato não prova
+  titularidade: informar a conta correspondente ao token continua obrigatório.
+- Validação local focada do formulário/guardas não substitui a suíte completa,
+  implantação da Edge Function ou teste com Sandbox real. Nenhuma credencial
+  foi utilizada e nenhuma cobrança foi criada nesta manutenção.
+- Após publicar: verificar implantação de `pagbank-connection`, recarregar a
+  tela e validar token novo + account ID Sandbox. Se o ambiente exibido divergir
+  do cabeçalho, diagnosticar a resposta de status e a origem recebida no backend;
+  não forçar ambiente de cobranças pelo frontend.
+
 ## Estado operacional — 2026-09-07 (sessão 3: Alternativa A — estabilizar PIX)
 
 Decisão: **estabilizar a jornada PIX antes de iniciar cartão**. Cartão sobre uma
