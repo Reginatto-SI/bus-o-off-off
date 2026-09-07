@@ -2262,6 +2262,12 @@ export default function CompanyPage() {
                         <p>
                           <strong>Resultado:</strong> {lastAsaasCheckResultLabel}
                         </p>
+                        {runtimePaymentDowngraded && (
+                          <p className="text-amber-700">
+                            Esta empresa está configurada como Produção, mas você está em um endereço de teste
+                            (pré-visualização, editor ou computador local). Por segurança, tudo aqui funciona em Sandbox.
+                          </p>
+                        )}
                         {lastAsaasCheckErrorReason && (
                           <p className="text-destructive">
                             <strong>Motivo:</strong> {lastAsaasCheckErrorReason}
