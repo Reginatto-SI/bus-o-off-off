@@ -306,13 +306,8 @@ Deno.serve(async (req) => {
     if (phone.length >= 10) {
       customer.phones = [{ country: "55", area: phone.slice(0, 2), number: phone.slice(2), type: "MOBILE" }];
     }
-    const qrCode: Record<string, unknown> = {
-      amount: { value: splitPlan.totalCents },
-      expiration_date: expiresAt.toISOString(),
-    };
-    if (splitPlan.payload) qrCode.splits = splitPlan.payload;
     const webhookUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/pagbank-webhook`;
-    const orderPayload = {
+    const baseOrder: Record<string, unknown> = {
       reference_id: sale.id,
       customer,
       items: [{
@@ -321,12 +316,30 @@ Deno.serve(async (req) => {
         quantity: 1,
         unit_amount: splitPlan.totalCents,
       }],
-      qr_codes: [qrCode],
       notification_urls: [webhookUrl],
     };
+    // Com divisão: formato oficial "Pedido com divisão de pagamento com PIX"
+    // (charges[].payment_method.type = PIX + charges[].splits).
+    // Sem divisão: pedido com QR Code simples.
+    const orderPayload = splitPlan.payload
+      ? {
+        ...baseOrder,
+        charges: [{
+          reference_id: sale.id,
+          description: `Passagem ${String(sale.event?.name ?? "").slice(0, 40)}`.trim(),
+          amount: { value: splitPlan.totalCents, currency: "BRL" },
+          payment_method: { type: "PIX", pix: { expiration_date: expiresAt.toISOString() } },
+          splits: splitPlan.payload,
+        }],
+      }
+      : {
+        ...baseOrder,
+        qr_codes: [{ amount: { value: splitPlan.totalCents }, expiration_date: expiresAt.toISOString() }],
+      };
     const payloadHash = await (async () => {
-      const bytes = new TextEncoder().encode(JSON.stringify({ ...orderPayload, qr_codes: [{ ...qrCode, expiration_date: undefined }] }));
-      const h = await crypto.subtle.digest("SHA-256", bytes);
+      // Hash estável: a expiração muda a cada tentativa e não define a operação.
+      const stable = JSON.stringify(orderPayload).replace(/"expiration_date":"[^"]*"/g, '"expiration_date":"*"');
+      const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(stable));
       return Array.from(new Uint8Array(h)).map((b) => b.toString(16).padStart(2, "0")).join("");
     })();
 
