@@ -90,6 +90,8 @@ Deno.serve(async (req) => {
         company_configured_environment: company.payment_environment,
         allowed_environments: PAGBANK_ALLOWED_ENVIRONMENTS,
         connection: publicConnection(connection),
+        marketplace_configured: missing.split.length === 0,
+        capabilities: buildCapabilities(connection, missing.split.length === 0),
         platform_ready: {
           connect: missing.connect.length === 0,
           split: missing.split.length === 0,
@@ -98,6 +100,38 @@ Deno.serve(async (req) => {
           missing_secret_names: [...missing.connect, ...missing.split, ...missing.webhook, ...missing.encryption],
         },
       });
+    }
+
+    // Revalida SOMENTE autenticação, sem criar cobrança. Não comprova PIX,
+    // cartão nem divisão: essas capacidades continuam `unproven`.
+    if (action === "validate") {
+      assertPagbankEnvironmentAllowed(environment);
+      const connection = await loadCurrentConnection(supabaseAdmin, { companyId, environment });
+      if (!connection) return json({ error: "Nenhuma conta PagBank Sandbox cadastrada nesta empresa.", error_code: "pagbank_connection_missing" }, 409);
+      const credential = await resolveCredentialFromConnection(supabaseAdmin, connection, "query");
+      const probe = await probePagbankAuth({ environment, accessToken: credential.accessToken });
+      const now = new Date().toISOString();
+      const patch = probe.ok
+        ? { last_validated_at: now, last_error: null, status: "connected" }
+        : {
+          last_validated_at: now,
+          last_error: probe.indeterminate ? "validate_unreachable" : `validate_http_${probe.status}`,
+          status: probe.status === 401 || probe.status === 403 ? "error" : connection.status,
+        };
+      const { data: updated } = await supabaseAdmin
+        .from("payment_gateway_connections").update(patch).eq("id", connection.id).eq("company_id", companyId)
+        .select("*").maybeSingle();
+      logPaymentTrace("info", "pagbank-connection", "revalidated", {
+        company_id: companyId, connection_id: connection.id, auth_ok: probe.ok,
+      });
+      return json({
+        ok: probe.ok,
+        connection: publicConnection(updated ?? { ...connection, ...patch }),
+        marketplace_configured: missing.split.length === 0,
+        capabilities: buildCapabilities({ ...connection, ...patch }, missing.split.length === 0),
+        error: probe.ok ? undefined : "O PagBank não aceitou mais este token. Cadastre um token Sandbox válido.",
+        error_code: probe.ok ? undefined : "pagbank_auth_failed",
+      }, probe.ok ? 200 : 409);
     }
 
     if (action === "set_gateway") {
