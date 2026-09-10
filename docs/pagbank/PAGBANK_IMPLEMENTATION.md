@@ -5,6 +5,22 @@
 > Referências anteriores à branch e a etapas já executadas são históricas;
 > não bloqueiam a manutenção atual. PagBank em Produção continua bloqueado.
 
+## Manutenção — 2026-09-10: identidades Sandbox e diagnóstico honesto
+
+- Duas identidades separadas e não intercambiáveis: empresa vendedora
+  (`BUSÃO OFF OFF`, token + `ACCO_` cifrados por `company_id`) e plataforma
+  (somente `PAGBANK_MARKETPLACE_ACCOUNT_ID_SANDBOX`). Nenhum token da plataforma
+  é armazenado; nenhum token de empresa virou secret global.
+- `pagbank-connection`: guarda `pagbank_account_identity_conflict` contra
+  inverter empresa e plataforma; nova ação `validate` (só autenticação, sem
+  cobrança); `status`/`validate` devolvem `marketplace_configured` e um bloco
+  `capabilities` com `order|pix|card|split` marcados `unproven` até cobrança real.
+- `PagbankConnectionCard`: painel "Diagnóstico da conta (Sandbox)" com
+  `NÃO COMPROVADO` explícito e botão "Validar novamente".
+- Sem migration, sem alteração em Asaas, split, taxa, webhook ou vendas.
+  Detalhes operacionais em `PAGBANK_OPERACAO_SANDBOX.md`, seção 10.1.
+- Próximo teste: primeira cobrança PIX Sandbox de valor baixo com divisão.
+
 ## Manutenção — 2026-09-07: fluxo main e cadastro Sandbox
 
 - Revogada a exigência de branch PagBank em `AGENTS.md` e `BRANCH_CONTEXT.md`;
