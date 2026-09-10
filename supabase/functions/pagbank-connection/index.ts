@@ -16,7 +16,7 @@ import {
 import { probePagbankAuth } from "../_shared/pagbank/client.ts";
 import { encryptSecret, isEncryptionConfigured } from "../_shared/pagbank/crypto.ts";
 import { classifyRequestOrigin, resolveEffectivePaymentEnvironment } from "../_shared/payment-environment-policy.ts";
-import { loadCurrentConnection, missingPagbankSecrets, pagbankSecretNames } from "../_shared/pagbank/credentials.ts";
+import { loadCurrentConnection, missingPagbankSecrets, pagbankSecretNames, resolveCredentialFromConnection } from "../_shared/pagbank/credentials.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -41,6 +41,28 @@ function publicConnection(c: any) {
     last_error: c.last_error,
     connected_at: c.connected_at,
     token_expires_at: c.token_expires_at,
+  };
+}
+
+/**
+ * Diagnóstico honesto de capacidades. A API oficial do PagBank não expõe
+ * consulta que comprove PIX, cartão, Order ou divisão habilitados numa conta:
+ * só a primeira cobrança real comprova. Aqui, "proven" vem exclusivamente de
+ * resultado de cobrança já registrado na conexão.
+ */
+function buildCapabilities(c: any, marketplaceConfigured: boolean) {
+  const unproven = "unproven" as const;
+  return {
+    account_role: "seller" as const,
+    environment: "sandbox" as const,
+    auth: c?.status === "connected" ? "proven" : unproven,
+    auth_verified_at: c?.last_validated_at ?? null,
+    order: c?.pix_ready ? "proven" : unproven,
+    pix: c?.pix_ready ? "proven" : unproven,
+    card: unproven,
+    split: c?.split_ready ? "proven" : unproven,
+    capabilities_verified_at: c?.capabilities_verified_at ?? null,
+    marketplace_account_configured: marketplaceConfigured,
   };
 }
 
@@ -90,6 +112,8 @@ Deno.serve(async (req) => {
         company_configured_environment: company.payment_environment,
         allowed_environments: PAGBANK_ALLOWED_ENVIRONMENTS,
         connection: publicConnection(connection),
+        marketplace_configured: missing.split.length === 0,
+        capabilities: buildCapabilities(connection, missing.split.length === 0),
         platform_ready: {
           connect: missing.connect.length === 0,
           split: missing.split.length === 0,
@@ -98,6 +122,38 @@ Deno.serve(async (req) => {
           missing_secret_names: [...missing.connect, ...missing.split, ...missing.webhook, ...missing.encryption],
         },
       });
+    }
+
+    // Revalida SOMENTE autenticação, sem criar cobrança. Não comprova PIX,
+    // cartão nem divisão: essas capacidades continuam `unproven`.
+    if (action === "validate") {
+      assertPagbankEnvironmentAllowed(environment);
+      const connection = await loadCurrentConnection(supabaseAdmin, { companyId, environment });
+      if (!connection) return json({ error: "Nenhuma conta PagBank Sandbox cadastrada nesta empresa.", error_code: "pagbank_connection_missing" }, 409);
+      const credential = await resolveCredentialFromConnection(supabaseAdmin, connection, "query");
+      const probe = await probePagbankAuth({ environment, accessToken: credential.accessToken });
+      const now = new Date().toISOString();
+      const patch = probe.ok
+        ? { last_validated_at: now, last_error: null, status: "connected" }
+        : {
+          last_validated_at: now,
+          last_error: probe.indeterminate ? "validate_unreachable" : `validate_http_${probe.status}`,
+          status: probe.status === 401 || probe.status === 403 ? "error" : connection.status,
+        };
+      const { data: updated } = await supabaseAdmin
+        .from("payment_gateway_connections").update(patch).eq("id", connection.id).eq("company_id", companyId)
+        .select("*").maybeSingle();
+      logPaymentTrace("info", "pagbank-connection", "revalidated", {
+        company_id: companyId, connection_id: connection.id, auth_ok: probe.ok,
+      });
+      return json({
+        ok: probe.ok,
+        connection: publicConnection(updated ?? { ...connection, ...patch }),
+        marketplace_configured: missing.split.length === 0,
+        capabilities: buildCapabilities({ ...connection, ...patch }, missing.split.length === 0),
+        error: probe.ok ? undefined : "O PagBank não aceitou mais este token. Cadastre um token Sandbox válido.",
+        error_code: probe.ok ? undefined : "pagbank_auth_failed",
+      }, probe.ok ? 200 : 409);
     }
 
     if (action === "set_gateway") {
@@ -127,6 +183,15 @@ Deno.serve(async (req) => {
       const accountId = typeof body?.account_id === "string" ? body.account_id.trim() : "";
       if (token.length < 20) return json({ error: "Token Sandbox inválido." }, 400);
       if (!/^ACCO_[A-Za-z0-9-]+$/.test(accountId)) return json({ error: "Informe o ID da conta Sandbox da empresa vendedora (ACCO_…). Não informe e-mail ou token neste campo.", error_code: "pagbank_account_id_invalid" }, 400);
+      // Empresa vendedora e plataforma são identidades distintas: informar a
+      // conta do Marketplace aqui inverteria os papéis da divisão.
+      const marketplaceAccountId = Deno.env.get(pagbankSecretNames(environment).marketplaceAccountId)?.trim();
+      if (marketplaceAccountId && marketplaceAccountId === accountId) {
+        return json({
+          error: "Este é o identificador da conta da plataforma SmartBus, não o da empresa vendedora. Informe a conta de testes da empresa.",
+          error_code: "pagbank_account_identity_conflict",
+        }, 409);
+      }
 
       // Prova apenas de autenticação: NÃO comprova PIX nem split. Essas
       // capacidades só são marcadas após a primeira cobrança aceita.

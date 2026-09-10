@@ -28,6 +28,19 @@ type ConnectionStatus = {
     last_error: string | null;
     connected_at: string | null;
   } | null;
+  marketplace_configured?: boolean;
+  capabilities?: {
+    account_role: string;
+    environment: string;
+    auth: 'proven' | 'unproven';
+    auth_verified_at: string | null;
+    order: 'proven' | 'unproven';
+    pix: 'proven' | 'unproven';
+    card: 'proven' | 'unproven';
+    split: 'proven' | 'unproven';
+    capabilities_verified_at: string | null;
+    marketplace_account_configured: boolean;
+  } | null;
   platform_ready: {
     connect: boolean;
     split: boolean;
@@ -36,6 +49,26 @@ type ConnectionStatus = {
     missing_secret_names: string[];
   };
 };
+
+function formatDateTimeBR(value: string | null | undefined): string {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('pt-BR');
+}
+
+function CapabilityRow({ label, proven, hint }: { label: string; proven: boolean; hint?: string }) {
+  return (
+    <div className="flex items-start justify-between gap-3 py-1.5 border-b last:border-b-0">
+      <div>
+        <p className="text-sm">{label}</p>
+        {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+      </div>
+      <Badge variant={proven ? 'default' : 'secondary'} className="shrink-0">
+        {proven ? 'Comprovado' : 'NÃO COMPROVADO'}
+      </Badge>
+    </div>
+  );
+}
 
 async function callConnection<T = unknown>(body: Record<string, unknown>): Promise<{ data: T | null; errorMessage: string | null; errorCode: string | null }> {
   const { data, error } = await supabase.functions.invoke('pagbank-connection', { body });
@@ -179,17 +212,38 @@ export function PagbankConnectionCard({ companyId, canEdit }: { companyId: strin
                   )}
                 </div>
                 {isConnected && canEdit && (
-                  <Button type="button" variant="outline" size="sm" onClick={() => void run('disconnect', {}, 'Conta PagBank desvinculada.')} disabled={busy !== null}>
-                    <Unlink className="h-4 w-4 mr-2" /> Desvincular
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={() => void run('validate', {}, 'Token aceito pelo PagBank Sandbox.')} disabled={busy !== null}>
+                      {busy === 'validate' ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />} Validar novamente
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => void run('disconnect', {}, 'Conta PagBank desvinculada.')} disabled={busy !== null}>
+                      <Unlink className="h-4 w-4 mr-2" /> Desvincular
+                    </Button>
+                  </div>
                 )}
               </div>
 
               {isConnected && connection && (
                 <div className="text-sm text-muted-foreground space-y-1">
                   <p>Conta: <span className="font-mono">{connection.account_masked ?? '—'}</span></p>
+                  <p>Função desta conta: empresa vendedora da passagem</p>
                   <p>Modo: {connection.credential_mode === 'connect_oauth' ? 'Autorização PagBank Connect' : 'Token Sandbox manual'}</p>
                   {connection.last_error && <p className="text-destructive">Último erro: {connection.last_error}</p>}
+                </div>
+              )}
+
+              {isConnected && status?.capabilities && (
+                <div className="rounded-md border p-3">
+                  <p className="text-sm font-medium">Diagnóstico da conta (Sandbox)</p>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    O PagBank não oferece consulta que comprove estes recursos sem uma cobrança. Só a primeira cobrança de teste confirma cada item.
+                  </p>
+                  <CapabilityRow label="Token aceito pelo PagBank" proven={status.capabilities.auth === 'proven'} hint={`Última validação: ${formatDateTimeBR(status.capabilities.auth_verified_at)}`} />
+                  <CapabilityRow label="Pedidos (Order)" proven={status.capabilities.order === 'proven'} />
+                  <CapabilityRow label="PIX" proven={status.capabilities.pix === 'proven'} />
+                  <CapabilityRow label="Cartão" proven={status.capabilities.card === 'proven'} hint="Fora desta fase do projeto." />
+                  <CapabilityRow label="Divisão / marketplace" proven={status.capabilities.split === 'proven'} />
+                  <CapabilityRow label="Conta da plataforma SmartBus configurada" proven={status.capabilities.marketplace_account_configured} hint="Identificador da conta recebedora da plataforma." />
                 </div>
               )}
 
