@@ -28,6 +28,19 @@ type ConnectionStatus = {
     last_error: string | null;
     connected_at: string | null;
   } | null;
+  marketplace_configured?: boolean;
+  capabilities?: {
+    account_role: string;
+    environment: string;
+    auth: 'proven' | 'unproven';
+    auth_verified_at: string | null;
+    order: 'proven' | 'unproven';
+    pix: 'proven' | 'unproven';
+    card: 'proven' | 'unproven';
+    split: 'proven' | 'unproven';
+    capabilities_verified_at: string | null;
+    marketplace_account_configured: boolean;
+  } | null;
   platform_ready: {
     connect: boolean;
     split: boolean;
@@ -36,6 +49,26 @@ type ConnectionStatus = {
     missing_secret_names: string[];
   };
 };
+
+function formatDateTimeBR(value: string | null | undefined): string {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('pt-BR');
+}
+
+function CapabilityRow({ label, proven, hint }: { label: string; proven: boolean; hint?: string }) {
+  return (
+    <div className="flex items-start justify-between gap-3 py-1.5 border-b last:border-b-0">
+      <div>
+        <p className="text-sm">{label}</p>
+        {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+      </div>
+      <Badge variant={proven ? 'default' : 'secondary'} className="shrink-0">
+        {proven ? 'Comprovado' : 'NÃO COMPROVADO'}
+      </Badge>
+    </div>
+  );
+}
 
 async function callConnection<T = unknown>(body: Record<string, unknown>): Promise<{ data: T | null; errorMessage: string | null; errorCode: string | null }> {
   const { data, error } = await supabase.functions.invoke('pagbank-connection', { body });
