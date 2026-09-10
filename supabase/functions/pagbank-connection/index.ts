@@ -183,6 +183,15 @@ Deno.serve(async (req) => {
       const accountId = typeof body?.account_id === "string" ? body.account_id.trim() : "";
       if (token.length < 20) return json({ error: "Token Sandbox inválido." }, 400);
       if (!/^ACCO_[A-Za-z0-9-]+$/.test(accountId)) return json({ error: "Informe o ID da conta Sandbox da empresa vendedora (ACCO_…). Não informe e-mail ou token neste campo.", error_code: "pagbank_account_id_invalid" }, 400);
+      // Empresa vendedora e plataforma são identidades distintas: informar a
+      // conta do Marketplace aqui inverteria os papéis da divisão.
+      const marketplaceAccountId = Deno.env.get(pagbankSecretNames(environment).marketplaceAccountId)?.trim();
+      if (marketplaceAccountId && marketplaceAccountId === accountId) {
+        return json({
+          error: "Este é o identificador da conta da plataforma SmartBus, não o da empresa vendedora. Informe a conta de testes da empresa.",
+          error_code: "pagbank_account_identity_conflict",
+        }, 409);
+      }
 
       // Prova apenas de autenticação: NÃO comprova PIX nem split. Essas
       // capacidades só são marcadas após a primeira cobrança aceita.
