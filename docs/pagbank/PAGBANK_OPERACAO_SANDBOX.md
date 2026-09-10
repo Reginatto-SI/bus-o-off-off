@@ -109,6 +109,33 @@ exclusivamente os dados de teste publicados pelo PagBank em
 <https://developer.pagbank.com.br/docs/cartoes-de-teste>. Nunca registrar
 números reais, nem valores de teste neste repositório.
 
+## 10.1 Cadastro e validação das duas identidades Sandbox (2026-09-10)
+
+Identidades desta homologação, que nunca podem ser trocadas entre si:
+
+- **Empresa vendedora da passagem** — conta Sandbox pessoal de teste. Empresa
+  SmartBus escolhida: `BUSÃO OFF OFF`. Token e `ACCO_` são cadastrados na
+  própria tela `/admin/empresa?tab=pagamentos`, gravados cifrados por
+  `company_id` em `payment_gateway_connections` (nunca como secret global).
+  Cadastrar não altera gateway nem ambiente da empresa: a linha é sempre
+  `environment = sandbox`.
+- **Plataforma SmartBus / Marketplace** — apenas o identificador da conta, no
+  secret `PAGBANK_MARKETPLACE_ACCOUNT_ID_SANDBOX`. Nenhum token da plataforma é
+  armazenado: no fluxo atual ela participa somente como recebedora da divisão.
+
+Guardas implementadas:
+
+- `save_sandbox_token` recusa (`pagbank_account_identity_conflict`) quando o
+  `ACCO_` informado para a empresa é igual ao da plataforma.
+- Ação `validate` reexecuta apenas a prova de autenticação (`/public-keys/card`)
+  e atualiza `last_validated_at`/`last_error`, sem criar cobrança.
+
+Diagnóstico exibido no cartão (honesto por construção): a API oficial não expõe
+consulta que comprove Order, PIX, cartão ou divisão habilitados numa conta.
+Enquanto não houver cobrança real aceita, todos esses itens aparecem como
+`NÃO COMPROVADO`; `pix_ready`/`split_ready`/`capabilities_verified_at` continuam
+sendo escritos somente por resultado de cobrança.
+
 ## 11. Dados ainda necessários (nomes, nunca valores)
 
 1. Token Sandbox rotacionado (qualquer credencial já compartilhada fora do cofre
