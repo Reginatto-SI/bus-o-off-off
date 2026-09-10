@@ -212,17 +212,38 @@ export function PagbankConnectionCard({ companyId, canEdit }: { companyId: strin
                   )}
                 </div>
                 {isConnected && canEdit && (
-                  <Button type="button" variant="outline" size="sm" onClick={() => void run('disconnect', {}, 'Conta PagBank desvinculada.')} disabled={busy !== null}>
-                    <Unlink className="h-4 w-4 mr-2" /> Desvincular
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={() => void run('validate', {}, 'Token aceito pelo PagBank Sandbox.')} disabled={busy !== null}>
+                      {busy === 'validate' ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />} Validar novamente
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => void run('disconnect', {}, 'Conta PagBank desvinculada.')} disabled={busy !== null}>
+                      <Unlink className="h-4 w-4 mr-2" /> Desvincular
+                    </Button>
+                  </div>
                 )}
               </div>
 
               {isConnected && connection && (
                 <div className="text-sm text-muted-foreground space-y-1">
                   <p>Conta: <span className="font-mono">{connection.account_masked ?? '—'}</span></p>
+                  <p>Função desta conta: empresa vendedora da passagem</p>
                   <p>Modo: {connection.credential_mode === 'connect_oauth' ? 'Autorização PagBank Connect' : 'Token Sandbox manual'}</p>
                   {connection.last_error && <p className="text-destructive">Último erro: {connection.last_error}</p>}
+                </div>
+              )}
+
+              {isConnected && status?.capabilities && (
+                <div className="rounded-md border p-3">
+                  <p className="text-sm font-medium">Diagnóstico da conta (Sandbox)</p>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    O PagBank não oferece consulta que comprove estes recursos sem uma cobrança. Só a primeira cobrança de teste confirma cada item.
+                  </p>
+                  <CapabilityRow label="Token aceito pelo PagBank" proven={status.capabilities.auth === 'proven'} hint={`Última validação: ${formatDateTimeBR(status.capabilities.auth_verified_at)}`} />
+                  <CapabilityRow label="Pedidos (Order)" proven={status.capabilities.order === 'proven'} />
+                  <CapabilityRow label="PIX" proven={status.capabilities.pix === 'proven'} />
+                  <CapabilityRow label="Cartão" proven={status.capabilities.card === 'proven'} hint="Fora desta fase do projeto." />
+                  <CapabilityRow label="Divisão / marketplace" proven={status.capabilities.split === 'proven'} />
+                  <CapabilityRow label="Conta da plataforma SmartBus configurada" proven={status.capabilities.marketplace_account_configured} hint="Identificador da conta recebedora da plataforma." />
                 </div>
               )}
 
