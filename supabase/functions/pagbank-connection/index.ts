@@ -16,7 +16,7 @@ import {
 import { probePagbankAuth } from "../_shared/pagbank/client.ts";
 import { encryptSecret, isEncryptionConfigured } from "../_shared/pagbank/crypto.ts";
 import { classifyRequestOrigin, resolveEffectivePaymentEnvironment } from "../_shared/payment-environment-policy.ts";
-import { loadCurrentConnection, missingPagbankSecrets, pagbankSecretNames } from "../_shared/pagbank/credentials.ts";
+import { loadCurrentConnection, missingPagbankSecrets, pagbankSecretNames, resolveCredentialFromConnection } from "../_shared/pagbank/credentials.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -41,6 +41,28 @@ function publicConnection(c: any) {
     last_error: c.last_error,
     connected_at: c.connected_at,
     token_expires_at: c.token_expires_at,
+  };
+}
+
+/**
+ * Diagnóstico honesto de capacidades. A API oficial do PagBank não expõe
+ * consulta que comprove PIX, cartão, Order ou divisão habilitados numa conta:
+ * só a primeira cobrança real comprova. Aqui, "proven" vem exclusivamente de
+ * resultado de cobrança já registrado na conexão.
+ */
+function buildCapabilities(c: any, marketplaceConfigured: boolean) {
+  const unproven = "unproven" as const;
+  return {
+    account_role: "seller" as const,
+    environment: "sandbox" as const,
+    auth: c?.status === "connected" ? "proven" : unproven,
+    auth_verified_at: c?.last_validated_at ?? null,
+    order: c?.pix_ready ? "proven" : unproven,
+    pix: c?.pix_ready ? "proven" : unproven,
+    card: unproven,
+    split: c?.split_ready ? "proven" : unproven,
+    capabilities_verified_at: c?.capabilities_verified_at ?? null,
+    marketplace_account_configured: marketplaceConfigured,
   };
 }
 
