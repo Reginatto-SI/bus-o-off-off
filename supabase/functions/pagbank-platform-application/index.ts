@@ -25,7 +25,9 @@ const PLATFORM_TOKEN_SECRET = "PAGBANK_SMARTBUS_TOKEN_SANDBOX";
 const APPLICATION_NAME = "SmartBus";
 const APPLICATION_SITE = "https://smartbus.com.br";
 // URL direta (sem redirecionamento): o PagBank recusa logo que não responda 200.
-const APPLICATION_LOGO = "https://www.smartbus.com.br/logo-branca2.png";
+// Logo oficial redimensionada para o limite documentado (mínimo 220x80,
+// máximo 440x160) e servida em URL direta, sem redirecionamento.
+const APPLICATION_LOGO = "https://www.smartbus.com.br/platform/smartbus-logo-connect.png";
 
 const APPLICATION_DESCRIPTION =
   "SmartBus é uma plataforma de venda e gestão de passagens de ônibus para empresas de transporte, excursões e caravanas.";
@@ -139,7 +141,9 @@ Deno.serve(async (req) => {
         site: APPLICATION_SITE,
         logo: APPLICATION_LOGO,
         redirect_uri: platformRedirectUri(),
-        scopes: [...PAGBANK_CONNECT_SCOPES],
+        // A especificação oficial atual de criação de aplicação não possui campo
+        // `scopes`; os escopos são pedidos no Connect Authorization.
+
       };
       const res = await pagbankRequest({
         environment: ENVIRONMENT,
