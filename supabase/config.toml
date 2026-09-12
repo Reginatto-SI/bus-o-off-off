@@ -35,3 +35,6 @@ project_id = "cdrcyjrvurrphnceromd"
     verify_jwt = false
   [functions.pagbank-connection]
     verify_jwt = false
+  [functions.pagbank-platform-application]
+    verify_jwt = false
+
