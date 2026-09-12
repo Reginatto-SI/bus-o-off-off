@@ -9,7 +9,7 @@
 // interna). Segredos só existem no ambiente do backend.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { logPaymentTrace } from "../_shared/payment-observability.ts";
-import { PagbankError, assertPagbankEnvironmentAllowed, PAGBANK_CONNECT_SCOPES } from "../_shared/pagbank/core.ts";
+import { PagbankError, assertPagbankEnvironmentAllowed } from "../_shared/pagbank/core.ts";
 import { pagbankRequest } from "../_shared/pagbank/client.ts";
 
 const corsHeaders = {
@@ -24,7 +24,11 @@ const ENVIRONMENT = "sandbox" as const; // Produção PagBank continua bloqueada
 const PLATFORM_TOKEN_SECRET = "PAGBANK_SMARTBUS_TOKEN_SANDBOX";
 const APPLICATION_NAME = "SmartBus";
 const APPLICATION_SITE = "https://smartbus.com.br";
-const APPLICATION_LOGO = "https://smartbus.com.br/logo-branca2.png";
+// URL direta (sem redirecionamento): o PagBank recusa logo que não responda 200.
+// Logo oficial redimensionada para o limite documentado (mínimo 220x80,
+// máximo 440x160) e servida em URL direta, sem redirecionamento.
+const APPLICATION_LOGO = "https://www.smartbus.com.br/platform/smartbus-logo-connect.png";
+
 const APPLICATION_DESCRIPTION =
   "SmartBus é uma plataforma de venda e gestão de passagens de ônibus para empresas de transporte, excursões e caravanas.";
 
@@ -137,7 +141,9 @@ Deno.serve(async (req) => {
         site: APPLICATION_SITE,
         logo: APPLICATION_LOGO,
         redirect_uri: platformRedirectUri(),
-        scopes: [...PAGBANK_CONNECT_SCOPES],
+        // A especificação oficial atual de criação de aplicação não possui campo
+        // `scopes`; os escopos são pedidos no Connect Authorization.
+
       };
       const res = await pagbankRequest({
         environment: ENVIRONMENT,
