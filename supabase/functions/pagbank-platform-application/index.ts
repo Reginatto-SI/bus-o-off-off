@@ -24,7 +24,9 @@ const ENVIRONMENT = "sandbox" as const; // Produção PagBank continua bloqueada
 const PLATFORM_TOKEN_SECRET = "PAGBANK_SMARTBUS_TOKEN_SANDBOX";
 const APPLICATION_NAME = "SmartBus";
 const APPLICATION_SITE = "https://smartbus.com.br";
-const APPLICATION_LOGO = "https://smartbus.com.br/logo-branca2.png";
+// URL direta (sem redirecionamento): o PagBank recusa logo que não responda 200.
+const APPLICATION_LOGO = "https://www.smartbus.com.br/logo-branca2.png";
+
 const APPLICATION_DESCRIPTION =
   "SmartBus é uma plataforma de venda e gestão de passagens de ônibus para empresas de transporte, excursões e caravanas.";
 
