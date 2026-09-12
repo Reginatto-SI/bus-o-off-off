@@ -9,7 +9,7 @@
 // interna). Segredos só existem no ambiente do backend.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { logPaymentTrace } from "../_shared/payment-observability.ts";
-import { PagbankError, assertPagbankEnvironmentAllowed, PAGBANK_CONNECT_SCOPES } from "../_shared/pagbank/core.ts";
+import { PagbankError, assertPagbankEnvironmentAllowed } from "../_shared/pagbank/core.ts";
 import { pagbankRequest } from "../_shared/pagbank/client.ts";
 
 const corsHeaders = {
