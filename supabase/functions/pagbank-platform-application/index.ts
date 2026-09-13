@@ -11,6 +11,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { logPaymentTrace } from "../_shared/payment-observability.ts";
 import { PagbankError, assertPagbankEnvironmentAllowed } from "../_shared/pagbank/core.ts";
 import { pagbankRequest } from "../_shared/pagbank/client.ts";
+import { encryptSecret } from "../_shared/pagbank/crypto.ts";
+import { loadCurrentPlatformApplication } from "../_shared/pagbank/credentials.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -84,9 +86,26 @@ Deno.serve(async (req) => {
       );
     }
 
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    );
+
     const body = await req.json().catch(() => ({}));
     const action = String(body?.action ?? "inspect");
-    const knownClientId = (typeof body?.client_id === "string" ? body.client_id : Deno.env.get("PAGBANK_CLIENT_ID_SANDBOX"))?.trim() || null;
+    const registered = await loadCurrentPlatformApplication(supabaseAdmin, ENVIRONMENT).catch(() => null);
+    const knownClientId =
+      (typeof body?.client_id === "string" ? body.client_id : registered?.client_id ?? Deno.env.get("PAGBANK_CLIENT_ID_SANDBOX"))?.trim() || null;
+    const registryState = registered
+      ? {
+          client_id: registered.client_id,
+          account_id: registered.account_id,
+          redirect_uri: registered.redirect_uri,
+          status: registered.status,
+          client_secret_stored: Boolean(registered.client_secret_enc),
+          created_at: registered.created_at,
+        }
+      : null;
 
     if (action === "inspect") {
       if (!knownClientId) {
@@ -111,13 +130,17 @@ Deno.serve(async (req) => {
         indeterminate: res.indeterminate,
         error_messages: res.errorMessages,
         existing_application: res.ok ? publicApplication(res.data) : null,
+        registry: registryState,
         redirect_uri: platformRedirectUri(),
       }, res.ok ? 200 : 409);
     }
 
     if (action === "create") {
+      // `replace_reason` autoriza criar uma nova aplicação e abandonar a atual
+      // (ex.: client_secret da primeira não pôde ser preservado).
+      const replaceReason = typeof body?.replace_reason === "string" ? body.replace_reason.slice(0, 200) : null;
       // Evita duplicidade: se já há client_id registrado e consultável, não cria.
-      if (knownClientId) {
+      if (knownClientId && !replaceReason) {
         const existing = await pagbankRequest({
           environment: ENVIRONMENT,
           accessToken: platformToken,
@@ -168,6 +191,46 @@ Deno.serve(async (req) => {
       }
 
       const created = publicApplication(res.data);
+      // Captura imediata do client_secret: só existe nesta resposta. Gravado
+      // exclusivamente cifrado (AES-256-GCM, chave de backend) e nunca devolvido.
+      const rawSecret = (res.data as any)?.client_secret ?? (res.data as any)?.clientSecret ?? null;
+      let secretStored = false;
+      let storageError: string | null = null;
+      if (created?.client_id) {
+        try {
+          if (registered?.client_id && registered.client_id !== created.client_id) {
+            await supabaseAdmin
+              .from("payment_platform_applications")
+              .update({
+                is_current: false,
+                status: "abandoned",
+                abandoned_reason: replaceReason ?? "substituida_por_nova_aplicacao",
+                client_secret_enc: null,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", registered.id);
+          }
+          const { error: insertError } = await supabaseAdmin.from("payment_platform_applications").insert({
+            gateway: "pagbank",
+            environment: ENVIRONMENT,
+            client_id: created.client_id,
+            account_id: created.account_id,
+            name: created.name ?? APPLICATION_NAME,
+            site: created.site ?? APPLICATION_SITE,
+            redirect_uri: created.redirect_uri ?? platformRedirectUri(),
+            client_secret_enc: typeof rawSecret === "string" && rawSecret ? await encryptSecret(rawSecret) : null,
+            status: "active",
+            is_current: true,
+          });
+          if (insertError) storageError = "persist_failed";
+          else secretStored = typeof rawSecret === "string" && Boolean(rawSecret);
+        } catch (_e) {
+          storageError = "persist_failed";
+        }
+      }
+      logPaymentTrace(storageError ? "error" : "info", "pagbank-platform-application", "create_persist", {
+        secret_stored: secretStored, storage_error: storageError,
+      });
       let validation: Record<string, unknown> | null = null;
       if (created?.client_id) {
         const check = await pagbankRequest({
@@ -184,8 +247,30 @@ Deno.serve(async (req) => {
         http_status: res.status,
         application: created,
         validation,
+        client_secret_stored: secretStored,
+        client_secret_storage_error: storageError,
+        abandoned_previous_client_id: registered?.client_id && registered.client_id !== created?.client_id ? registered.client_id : null,
         redirect_uri: platformRedirectUri(),
       });
+    }
+
+    if (action === "abandon") {
+      const target = typeof body?.client_id === "string" ? body.client_id.trim() : null;
+      if (!target) return json({ error: "client_id_required" }, 400);
+      const { error } = await supabaseAdmin
+        .from("payment_platform_applications")
+        .update({
+          is_current: false,
+          status: "abandoned",
+          abandoned_reason: typeof body?.reason === "string" ? body.reason.slice(0, 200) : "abandonada_manualmente",
+          client_secret_enc: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("gateway", "pagbank")
+        .eq("environment", ENVIRONMENT)
+        .eq("client_id", target);
+      if (error) return json({ error: "abandon_failed" }, 409);
+      return json({ environment: ENVIRONMENT, abandoned_client_id: target });
     }
 
     return json({ error: "unknown_action" }, 400);
