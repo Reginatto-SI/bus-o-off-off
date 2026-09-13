@@ -1874,6 +1874,57 @@ export type Database = {
           },
         ]
       }
+      payment_platform_applications: {
+        Row: {
+          abandoned_reason: string | null
+          account_id: string | null
+          client_id: string
+          client_secret_enc: string | null
+          created_at: string
+          environment: string
+          gateway: string
+          id: string
+          is_current: boolean
+          name: string | null
+          redirect_uri: string | null
+          site: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          abandoned_reason?: string | null
+          account_id?: string | null
+          client_id: string
+          client_secret_enc?: string | null
+          created_at?: string
+          environment: string
+          gateway?: string
+          id?: string
+          is_current?: boolean
+          name?: string | null
+          redirect_uri?: string | null
+          site?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          abandoned_reason?: string | null
+          account_id?: string | null
+          client_id?: string
+          client_secret_enc?: string | null
+          created_at?: string
+          environment?: string
+          gateway?: string
+          id?: string
+          is_current?: boolean
+          name?: string | null
+          redirect_uri?: string | null
+          site?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       payment_webhook_events: {
         Row: {
           company_id: string | null
