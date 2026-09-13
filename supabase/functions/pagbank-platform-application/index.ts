@@ -11,6 +11,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { logPaymentTrace } from "../_shared/payment-observability.ts";
 import { PagbankError, assertPagbankEnvironmentAllowed } from "../_shared/pagbank/core.ts";
 import { pagbankRequest } from "../_shared/pagbank/client.ts";
+import { encryptSecret } from "../_shared/pagbank/crypto.ts";
+import { loadCurrentPlatformApplication } from "../_shared/pagbank/credentials.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
