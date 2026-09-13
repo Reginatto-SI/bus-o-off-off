@@ -6,7 +6,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { logPaymentTrace } from "../_shared/payment-observability.ts";
 import { PAGBANK_API_BASE_URLS, PAGBANK_CONNECT_SCOPES } from "../_shared/pagbank/core.ts";
 import { encryptSecret } from "../_shared/pagbank/crypto.ts";
-import { pagbankSecretNames } from "../_shared/pagbank/credentials.ts";
+import { resolvePlatformConnectCredentials } from "../_shared/pagbank/credentials.ts";
 
 function adminRedirect(result: string, detail?: string) {
   const base = Deno.env.get("PAGBANK_ADMIN_RETURN_URL") ?? "https://www.smartbus.com.br/admin/empresa";
@@ -39,9 +39,9 @@ Deno.serve(async (req) => {
 
   const environment = stateRow.environment as "sandbox" | "production";
   if (environment !== "sandbox") return adminRedirect("error", "environment_not_allowed");
-  const names = pagbankSecretNames(environment);
-  const clientId = Deno.env.get(names.clientId);
-  const clientSecret = Deno.env.get(names.clientSecret);
+  // Aplicação corrente da plataforma (client_secret cifrado no backend) com
+  // compatibilidade para os secrets de ambiente.
+  const { clientId, clientSecret } = await resolvePlatformConnectCredentials(supabaseAdmin, environment);
   if (!clientId || !clientSecret) return adminRedirect("error", "connect_not_configured");
 
   const redirectUri = `${Deno.env.get("SUPABASE_URL")}/functions/v1/pagbank-connect-callback`;
