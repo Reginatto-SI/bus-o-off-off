@@ -247,8 +247,30 @@ Deno.serve(async (req) => {
         http_status: res.status,
         application: created,
         validation,
+        client_secret_stored: secretStored,
+        client_secret_storage_error: storageError,
+        abandoned_previous_client_id: registered?.client_id && registered.client_id !== created?.client_id ? registered.client_id : null,
         redirect_uri: platformRedirectUri(),
       });
+    }
+
+    if (action === "abandon") {
+      const target = typeof body?.client_id === "string" ? body.client_id.trim() : null;
+      if (!target) return json({ error: "client_id_required" }, 400);
+      const { error } = await supabaseAdmin
+        .from("payment_platform_applications")
+        .update({
+          is_current: false,
+          status: "abandoned",
+          abandoned_reason: typeof body?.reason === "string" ? body.reason.slice(0, 200) : "abandonada_manualmente",
+          client_secret_enc: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("gateway", "pagbank")
+        .eq("environment", ENVIRONMENT)
+        .eq("client_id", target);
+      if (error) return json({ error: "abandon_failed" }, 409);
+      return json({ environment: ENVIRONMENT, abandoned_client_id: target });
     }
 
     return json({ error: "unknown_action" }, 400);
