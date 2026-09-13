@@ -191,6 +191,46 @@ Deno.serve(async (req) => {
       }
 
       const created = publicApplication(res.data);
+      // Captura imediata do client_secret: só existe nesta resposta. Gravado
+      // exclusivamente cifrado (AES-256-GCM, chave de backend) e nunca devolvido.
+      const rawSecret = (res.data as any)?.client_secret ?? (res.data as any)?.clientSecret ?? null;
+      let secretStored = false;
+      let storageError: string | null = null;
+      if (created?.client_id) {
+        try {
+          if (registered?.client_id && registered.client_id !== created.client_id) {
+            await supabaseAdmin
+              .from("payment_platform_applications")
+              .update({
+                is_current: false,
+                status: "abandoned",
+                abandoned_reason: replaceReason ?? "substituida_por_nova_aplicacao",
+                client_secret_enc: null,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", registered.id);
+          }
+          const { error: insertError } = await supabaseAdmin.from("payment_platform_applications").insert({
+            gateway: "pagbank",
+            environment: ENVIRONMENT,
+            client_id: created.client_id,
+            account_id: created.account_id,
+            name: created.name ?? APPLICATION_NAME,
+            site: created.site ?? APPLICATION_SITE,
+            redirect_uri: created.redirect_uri ?? platformRedirectUri(),
+            client_secret_enc: typeof rawSecret === "string" && rawSecret ? await encryptSecret(rawSecret) : null,
+            status: "active",
+            is_current: true,
+          });
+          if (insertError) storageError = "persist_failed";
+          else secretStored = typeof rawSecret === "string" && Boolean(rawSecret);
+        } catch (_e) {
+          storageError = "persist_failed";
+        }
+      }
+      logPaymentTrace(storageError ? "error" : "info", "pagbank-platform-application", "create_persist", {
+        secret_stored: secretStored, storage_error: storageError,
+      });
       let validation: Record<string, unknown> | null = null;
       if (created?.client_id) {
         const check = await pagbankRequest({
