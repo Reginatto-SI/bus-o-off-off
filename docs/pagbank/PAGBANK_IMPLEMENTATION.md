@@ -5,6 +5,31 @@
 > Referências anteriores à branch e a etapas já executadas são históricas;
 > não bloqueiam a manutenção atual. PagBank em Produção continua bloqueado.
 
+## Manutenção — 2026-09-13 (2): segunda aplicação Sandbox com segredo persistido
+
+- Nova aplicação criada (HTTP 201) e validada (`GET /oauth2/application/{client_id}`
+  → HTTP 200, nome/site/redirect URI conferem):
+  - `client_id`: `cedb1abb-8bc9-4d3a-9ef1-ee54db457e5a` (corrente);
+  - `account_id`: `ACCO_6D195F1C-7EAD-48D6-B8F1-DF551566CFCD` (mesma conta SmartBus);
+  - `redirect_uri`: `.../functions/v1/pagbank-connect-callback`.
+- `client_secret` retornado na criação e **persistido imediatamente cifrado**
+  (AES-256-GCM, `PAGBANK_TOKEN_ENCRYPTION_KEY`) em `payment_platform_applications`
+  (`client_secret_enc`). Nenhum GRANT para `anon`/`authenticated`; RLS habilitada
+  sem policies (acesso exclusivo por service role). A função nunca devolve o valor.
+- Primeira aplicação `cf623105-ff2d-4e4f-b0dd-ccbcd0987a05` **abandonada**
+  (`status = abandoned`, `is_current = false`, motivo registrado). Permanece existindo
+  no PagBank, mas não é usada pelo SmartBus.
+- `PAGBANK_CLIENT_ID_SANDBOX` atualizado para o `client_id` corrente;
+  `PAGBANK_MARKETPLACE_ACCOUNT_ID_SANDBOX` inalterado (mesma conta).
+- `pagbank-connect-callback` e a renovação de token passaram a resolver
+  `client_id`/`client_secret` via `resolvePlatformConnectCredentials` (registro
+  corrente primeiro, secrets de ambiente como compatibilidade).
+- Ações da função: `inspect` | `create` (com `replace_reason` para substituição) |
+  `abandon`. Nada de autorização de vendedor, pedidos, cobranças, QR Code, split
+  real, refund, chargeback ou webhook novo. Asaas intacto; Produção bloqueada.
+- Próximo passo (aguardando autorização): Connect Authorization — gerar URL de
+  autorização com `state` e trocar `code` por token da empresa vendedora no Sandbox.
+
 ## Manutenção — 2026-09-13: aplicação Connect da plataforma criada no Sandbox
 
 - Aplicação única da plataforma SmartBus criada na API oficial (`POST
