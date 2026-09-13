@@ -130,13 +130,17 @@ Deno.serve(async (req) => {
         indeterminate: res.indeterminate,
         error_messages: res.errorMessages,
         existing_application: res.ok ? publicApplication(res.data) : null,
+        registry: registryState,
         redirect_uri: platformRedirectUri(),
       }, res.ok ? 200 : 409);
     }
 
     if (action === "create") {
+      // `replace_reason` autoriza criar uma nova aplicação e abandonar a atual
+      // (ex.: client_secret da primeira não pôde ser preservado).
+      const replaceReason = typeof body?.replace_reason === "string" ? body.replace_reason.slice(0, 200) : null;
       // Evita duplicidade: se já há client_id registrado e consultável, não cria.
-      if (knownClientId) {
+      if (knownClientId && !replaceReason) {
         const existing = await pagbankRequest({
           environment: ENVIRONMENT,
           accessToken: platformToken,
