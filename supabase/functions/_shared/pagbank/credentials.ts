@@ -170,14 +170,71 @@ export async function resolveCredentialFromConnection(
   return { connection, accessToken, webhookToken, environment: connection.environment };
 }
 
+export type PlatformApplicationRow = {
+  id: string;
+  gateway: string;
+  environment: PagbankEnvironment;
+  client_id: string;
+  account_id: string | null;
+  name: string | null;
+  site: string | null;
+  redirect_uri: string | null;
+  client_secret_enc: string | null;
+  status: string;
+  is_current: boolean;
+  abandoned_reason: string | null;
+  created_at: string;
+};
+
+export const PLATFORM_APPLICATION_SELECT =
+  "id, gateway, environment, client_id, account_id, name, site, redirect_uri, client_secret_enc, status, is_current, abandoned_reason, created_at";
+
+/** Aplicação Connect corrente da plataforma para o ambiente. */
+export async function loadCurrentPlatformApplication(
+  supabaseAdmin: SupabaseAdminClient,
+  environment: PagbankEnvironment,
+): Promise<PlatformApplicationRow | null> {
+  const { data, error } = await supabaseAdmin
+    .from("payment_platform_applications")
+    .select(PLATFORM_APPLICATION_SELECT)
+    .eq("gateway", "pagbank")
+    .eq("environment", environment)
+    .eq("is_current", true)
+    .maybeSingle();
+  if (error) throw new Error(`pagbank_platform_application_load_failed:${error.message}`);
+  return (data as PlatformApplicationRow | null) ?? null;
+}
+
+/**
+ * Credenciais da aplicação Connect da plataforma. Prioriza o registro corrente
+ * (client_secret cifrado no backend) e mantém compatibilidade com os secrets de
+ * ambiente. Nunca retorna valores para fora do backend.
+ */
+export async function resolvePlatformConnectCredentials(
+  supabaseAdmin: SupabaseAdminClient,
+  environment: PagbankEnvironment,
+): Promise<{ clientId: string | null; clientSecret: string | null; source: "database" | "environment" | "none" }> {
+  const names = pagbankSecretNames(environment);
+  const application = await loadCurrentPlatformApplication(supabaseAdmin, environment).catch(() => null);
+  if (application?.client_id && application.client_secret_enc) {
+    const secret = await decryptSecret(application.client_secret_enc).catch(() => null);
+    if (secret) return { clientId: application.client_id, clientSecret: secret, source: "database" };
+  }
+  const envId = Deno.env.get(names.clientId) ?? null;
+  const envSecret = Deno.env.get(names.clientSecret) ?? null;
+  if (envId && envSecret) return { clientId: envId, clientSecret: envSecret, source: "environment" };
+  return { clientId: application?.client_id ?? envId, clientSecret: null, source: "none" };
+}
+
 /**
  * Renovação serializada por geração da credencial: só persiste se ninguém
  * renovou antes (controle otimista). Em corrida, relê a conexão vencedora.
  */
 async function refreshConnectToken(supabaseAdmin: SupabaseAdminClient, connection: PagbankConnectionRow): Promise<string> {
   const names = pagbankSecretNames(connection.environment);
-  const clientId = Deno.env.get(names.clientId);
-  const clientSecret = Deno.env.get(names.clientSecret);
+  const platform = await resolvePlatformConnectCredentials(supabaseAdmin, connection.environment);
+  const clientId = platform.clientId;
+  const clientSecret = platform.clientSecret;
   const refreshToken = await decryptSecret(connection.refresh_token_enc);
   if (!clientId || !clientSecret || !refreshToken) {
     throw new PagbankError("pagbank_configuration_missing", "Não foi possível renovar a autorização PagBank.", 409, {
