@@ -5,6 +5,32 @@
 > Referências anteriores à branch e a etapas já executadas são históricas;
 > não bloqueiam a manutenção atual. PagBank em Produção continua bloqueado.
 
+## Manutenção — 2026-09-13: aplicação Connect da plataforma criada no Sandbox
+
+- Aplicação única da plataforma SmartBus criada na API oficial (`POST
+  https://sandbox.api.pagseguro.com/oauth2/application`) via edge function
+  `pagbank-platform-application` (ações `inspect` | `create`, admin/service role).
+- Retorno real: HTTP 201 com `client_id`, `client_secret`, `account_id`,
+  `client_type`, `name`, `site`, `description`, `logo`, `redirect_uri`.
+- Validação: `GET /oauth2/application/{client_id}` → HTTP 200, dados conferem
+  (nome SmartBus, site oficial, redirect URI da callback). O GET **não** devolve
+  `client_secret`.
+- Identificadores não secretos gravados como configuração de backend:
+  `PAGBANK_CLIENT_ID_SANDBOX` e `PAGBANK_MARKETPLACE_ACCOUNT_ID_SANDBOX`
+  (`account_id` real da conta SmartBus Sandbox, sem valor inventado).
+- Divergência com a documentação: o schema atual de criação não possui `scopes`;
+  o campo foi removido do POST. `logo` exige URL pública direta entre 220x80 e
+  440x160 — logo oficial republicada em `/platform/smartbus-logo-connect.png`
+  (440x153). URL com redirecionamento e imagem 796x276 foram recusadas
+  (`41001 logo invalid_request`).
+- **Pendência real:** o `client_secret` veio somente na resposta 201 e não foi
+  persistido (a função sanitiza segredos e não tem canal para gravar no cofre).
+  Sem ele, o Connect Authorization não pode trocar `code` por token. Decisão
+  necessária: recriar aplicação com persistência do segredo ou obtê-lo com o
+  PagBank. O token Sandbox manual por empresa segue funcionando.
+- Não foram feitos: autorização de vendedor, pedidos, cobranças, QR Code, split
+  real, refund, chargeback, webhook novo. Asaas intacto.
+
 ## Manutenção — 2026-09-10: identidades Sandbox e diagnóstico honesto
 
 - Duas identidades separadas e não intercambiáveis: empresa vendedora
