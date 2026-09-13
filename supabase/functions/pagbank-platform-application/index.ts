@@ -86,9 +86,26 @@ Deno.serve(async (req) => {
       );
     }
 
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    );
+
     const body = await req.json().catch(() => ({}));
     const action = String(body?.action ?? "inspect");
-    const knownClientId = (typeof body?.client_id === "string" ? body.client_id : Deno.env.get("PAGBANK_CLIENT_ID_SANDBOX"))?.trim() || null;
+    const registered = await loadCurrentPlatformApplication(supabaseAdmin, ENVIRONMENT).catch(() => null);
+    const knownClientId =
+      (typeof body?.client_id === "string" ? body.client_id : registered?.client_id ?? Deno.env.get("PAGBANK_CLIENT_ID_SANDBOX"))?.trim() || null;
+    const registryState = registered
+      ? {
+          client_id: registered.client_id,
+          account_id: registered.account_id,
+          redirect_uri: registered.redirect_uri,
+          status: registered.status,
+          client_secret_stored: Boolean(registered.client_secret_enc),
+          created_at: registered.created_at,
+        }
+      : null;
 
     if (action === "inspect") {
       if (!knownClientId) {
