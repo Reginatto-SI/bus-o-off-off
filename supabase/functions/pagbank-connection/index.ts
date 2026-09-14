@@ -16,7 +16,13 @@ import {
 import { probePagbankAuth } from "../_shared/pagbank/client.ts";
 import { encryptSecret, isEncryptionConfigured } from "../_shared/pagbank/crypto.ts";
 import { classifyRequestOrigin, resolveEffectivePaymentEnvironment } from "../_shared/payment-environment-policy.ts";
-import { loadCurrentConnection, missingPagbankSecrets, pagbankSecretNames, resolveCredentialFromConnection } from "../_shared/pagbank/credentials.ts";
+import {
+  loadCurrentConnection,
+  loadCurrentPlatformApplication,
+  missingPagbankSecrets,
+  pagbankSecretNames,
+  resolveCredentialFromConnection,
+} from "../_shared/pagbank/credentials.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -106,7 +112,14 @@ Deno.serve(async (req) => {
 
     if (action === "status") {
       const connection = await loadCurrentConnection(supabaseAdmin, { companyId, environment });
+      // Aplicação registrada da plataforma satisfaz o Connect mesmo sem os
+      // secrets de ambiente (client_secret fica cifrado no registro).
+      const application = await loadCurrentPlatformApplication(supabaseAdmin, environment).catch(() => null);
+      const connectReady = (Boolean(application?.client_id) && Boolean(application?.client_secret_enc)) || missing.connect.length === 0;
       return json({
+        platform_application: application
+          ? { client_id: application.client_id, redirect_uri: application.redirect_uri, has_client_secret: Boolean(application.client_secret_enc) }
+          : null,
         company_gateway: company.payment_gateway,
         company_environment: effectiveCompanyEnvironment,
         company_configured_environment: company.payment_environment,
@@ -115,11 +128,16 @@ Deno.serve(async (req) => {
         marketplace_configured: missing.split.length === 0,
         capabilities: buildCapabilities(connection, missing.split.length === 0),
         platform_ready: {
-          connect: missing.connect.length === 0,
+          connect: connectReady,
           split: missing.split.length === 0,
           webhook: missing.webhook.length === 0,
           encryption: missing.encryption.length === 0,
-          missing_secret_names: [...missing.connect, ...missing.split, ...missing.webhook, ...missing.encryption],
+          missing_secret_names: [
+            ...(connectReady ? [] : missing.connect),
+            ...missing.split,
+            ...missing.webhook,
+            ...missing.encryption,
+          ],
         },
       });
     }
@@ -225,21 +243,35 @@ Deno.serve(async (req) => {
 
     if (action === "connect_start") {
       assertPagbankEnvironmentAllowed(environment);
-      if (missing.connect.length > 0 || missing.encryption.length > 0) {
-        throw new PagbankError("pagbank_configuration_missing", "Connect PagBank ainda não configurado na plataforma.", 409, { missing: [...missing.connect, ...missing.encryption] });
+      if (missing.encryption.length > 0) {
+        throw new PagbankError("pagbank_configuration_missing", "Connect PagBank ainda não configurado na plataforma.", 409, { missing: missing.encryption });
       }
+      // Identidade da aplicação: registro corrente da plataforma primeiro
+      // (client_id + redirect_uri realmente cadastrados no PagBank); secret de
+      // ambiente permanece como compatibilidade. Sem aplicação, falha fechado.
+      const application = await loadCurrentPlatformApplication(supabaseAdmin, environment).catch(() => null);
+      const clientId = application?.client_id ?? Deno.env.get(pagbankSecretNames(environment).clientId) ?? null;
+      if (!clientId) {
+        throw new PagbankError("pagbank_configuration_missing", "A aplicação SmartBus deste ambiente ainda não está registrada no PagBank.", 409, {
+          missing: [pagbankSecretNames(environment).clientId],
+        });
+      }
+      const fallbackRedirect = `${Deno.env.get("SUPABASE_URL")}/functions/v1/pagbank-connect-callback`;
+      const redirectUri = application?.redirect_uri ?? fallbackRedirect;
       const state = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
       const { error } = await supabaseAdmin.from("pagbank_connect_states").insert({
         state, company_id: companyId, environment, user_id: userId, expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
       });
       if (error) return json({ error: error.message }, 500);
-      const redirectUri = `${Deno.env.get("SUPABASE_URL")}/functions/v1/pagbank-connect-callback`;
       const url = new URL(PAGBANK_CONNECT_AUTHORIZE_URLS[environment]);
       url.searchParams.set("response_type", "code");
-      url.searchParams.set("client_id", Deno.env.get(pagbankSecretNames(environment).clientId) ?? "");
+      url.searchParams.set("client_id", clientId);
       url.searchParams.set("redirect_uri", redirectUri);
       url.searchParams.set("scope", PAGBANK_CONNECT_SCOPES.join(" "));
       url.searchParams.set("state", state);
+      logPaymentTrace("info", "pagbank-connection", "connect_start", {
+        company_id: companyId, environment, application_source: application ? "database" : "environment",
+      });
       return json({ ok: true, authorize_url: url.toString(), expires_in_seconds: 600 });
     }
 
