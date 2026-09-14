@@ -250,3 +250,12 @@ funcional.
   evolução aditiva, caracterização e gates documentados.
 - **2026-09-05:** baseline Asaas executável concluída; 205 testes verdes e lacunas
   de Edge/finalização concorrente registradas sem alterar produção.
+
+## Manutenção — 2026-09-14 (Connect Authorization ligado à aplicação registrada)
+
+- `pagbank-connection` ação `connect_start` passou a resolver `client_id` e `redirect_uri` do registro corrente em `payment_platform_applications` (fallback: secret `PAGBANK_CLIENT_ID_SANDBOX` + callback padrão). Sem aplicação registrada, falha fechado com `pagbank_configuration_missing`.
+- `status` passou a expor `platform_application` (client_id, redirect_uri, has_client_secret, todos não secretos) e considera o Connect pronto quando a aplicação corrente tem `client_secret` cifrado, mesmo sem os secrets de ambiente.
+- Aplicação corrente Sandbox: `cedb1abb-8bc9-4d3a-9ef1-ee54db457e5a`; redirect `.../functions/v1/pagbank-connect-callback`; scopes mínimos `payments.read payments.create accounts.read`.
+- Nada de PB Integrações; Produção continua bloqueada; Asaas intacto; nenhuma migration nesta etapa.
+- Status: `PROVÁVEL, MAS PRECISA HOMOLOGAÇÃO` — a autorização real do vendedor (consentimento na tela PagBank e troca de `code` por token) ainda não foi executada.
+- Próximo passo: executar a autorização Sandbox da empresa vendedora pela tela de configuração e conferir o vínculo gravado no callback.
