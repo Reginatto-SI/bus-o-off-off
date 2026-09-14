@@ -16,7 +16,13 @@ import {
 import { probePagbankAuth } from "../_shared/pagbank/client.ts";
 import { encryptSecret, isEncryptionConfigured } from "../_shared/pagbank/crypto.ts";
 import { classifyRequestOrigin, resolveEffectivePaymentEnvironment } from "../_shared/payment-environment-policy.ts";
-import { loadCurrentConnection, missingPagbankSecrets, pagbankSecretNames, resolveCredentialFromConnection } from "../_shared/pagbank/credentials.ts";
+import {
+  loadCurrentConnection,
+  loadCurrentPlatformApplication,
+  missingPagbankSecrets,
+  pagbankSecretNames,
+  resolveCredentialFromConnection,
+} from "../_shared/pagbank/credentials.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
