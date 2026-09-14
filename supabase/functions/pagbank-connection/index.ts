@@ -112,7 +112,14 @@ Deno.serve(async (req) => {
 
     if (action === "status") {
       const connection = await loadCurrentConnection(supabaseAdmin, { companyId, environment });
+      // Aplicação registrada da plataforma satisfaz o Connect mesmo sem os
+      // secrets de ambiente (client_secret fica cifrado no registro).
+      const application = await loadCurrentPlatformApplication(supabaseAdmin, environment).catch(() => null);
+      const connectReady = (Boolean(application?.client_id) && Boolean(application?.client_secret_enc)) || missing.connect.length === 0;
       return json({
+        platform_application: application
+          ? { client_id: application.client_id, redirect_uri: application.redirect_uri, has_client_secret: Boolean(application.client_secret_enc) }
+          : null,
         company_gateway: company.payment_gateway,
         company_environment: effectiveCompanyEnvironment,
         company_configured_environment: company.payment_environment,
