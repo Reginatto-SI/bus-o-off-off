@@ -128,11 +128,16 @@ Deno.serve(async (req) => {
         marketplace_configured: missing.split.length === 0,
         capabilities: buildCapabilities(connection, missing.split.length === 0),
         platform_ready: {
-          connect: missing.connect.length === 0,
+          connect: connectReady,
           split: missing.split.length === 0,
           webhook: missing.webhook.length === 0,
           encryption: missing.encryption.length === 0,
-          missing_secret_names: [...missing.connect, ...missing.split, ...missing.webhook, ...missing.encryption],
+          missing_secret_names: [
+            ...(connectReady ? [] : missing.connect),
+            ...missing.split,
+            ...missing.webhook,
+            ...missing.encryption,
+          ],
         },
       });
     }
