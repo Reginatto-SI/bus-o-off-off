@@ -48,14 +48,14 @@ Deno.serve(async (req) => {
   if (!stateRow) return adminRedirect("error", "state_invalid_or_expired");
   // Origem já validada contra a lista fechada no início do fluxo.
   const returnOrigin: string | null = stateRow.return_origin ?? null;
-  if (oauthError || !code) return adminRedirect("denied", oauthError ?? "no_code");
+  if (oauthError || !code) return adminRedirect("denied", oauthError ?? "no_code", returnOrigin);
 
   const environment = stateRow.environment as "sandbox" | "production";
-  if (environment !== "sandbox") return adminRedirect("error", "environment_not_allowed");
+  if (environment !== "sandbox") return adminRedirect("error", "environment_not_allowed", returnOrigin);
   // Aplicação corrente da plataforma (client_secret cifrado no backend) com
   // compatibilidade para os secrets de ambiente.
   const { clientId, clientSecret } = await resolvePlatformConnectCredentials(supabaseAdmin, environment);
-  if (!clientId || !clientSecret) return adminRedirect("error", "connect_not_configured");
+  if (!clientId || !clientSecret) return adminRedirect("error", "connect_not_configured", returnOrigin);
 
   const redirectUri = `${Deno.env.get("SUPABASE_URL")}/functions/v1/pagbank-connect-callback`;
   const tokenRes = await fetch(`${PAGBANK_API_BASE_URLS[environment]}/oauth2/token`, {
@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
     logPaymentTrace("warn", "pagbank-connect-callback", "token_exchange_failed", {
       company_id: stateRow.company_id, http_status: tokenRes?.status ?? null,
     });
-    return adminRedirect("error", `token_exchange_${tokenRes?.status ?? "network"}`);
+    return adminRedirect("error", `token_exchange_${tokenRes?.status ?? "network"}`, returnOrigin);
   }
 
   const accountId = typeof tokenBody.account_id === "string" ? tokenBody.account_id : null;
@@ -87,7 +87,7 @@ Deno.serve(async (req) => {
     pix_ready: false, last_validated_at: now, connected_at: now, is_current: true, credential_generation: 1,
     last_error: accountId ? null : "account_id_missing_in_token_response",
   });
-  if (error) return adminRedirect("error", "persist_failed");
+  if (error) return adminRedirect("error", "persist_failed", returnOrigin);
   logPaymentTrace("info", "pagbank-connect-callback", "connected", { company_id: stateRow.company_id, has_account: Boolean(accountId) });
-  return adminRedirect(accountId ? "connected" : "connected_without_account");
+  return adminRedirect(accountId ? "connected" : "connected_without_account", returnOrigin);
 });
