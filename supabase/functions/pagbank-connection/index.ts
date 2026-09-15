@@ -259,8 +259,12 @@ Deno.serve(async (req) => {
       const fallbackRedirect = `${Deno.env.get("SUPABASE_URL")}/functions/v1/pagbank-connect-callback`;
       const redirectUri = application?.redirect_uri ?? fallbackRedirect;
       const state = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+      // Origem de NAVEGAÇÃO (não financeira): só hosts reconhecidos podem voltar.
+      // Isso evita open redirect — o frontend não envia URL alguma.
+      const returnOrigin = origin.host && origin.originClass !== "unknown" ? `https://${origin.host}` : null;
       const { error } = await supabaseAdmin.from("pagbank_connect_states").insert({
-        state, company_id: companyId, environment, user_id: userId, expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
+        state, company_id: companyId, environment, user_id: userId, return_origin: returnOrigin,
+        expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
       });
       if (error) return json({ error: error.message }, 500);
       const url = new URL(PAGBANK_CONNECT_AUTHORIZE_URLS[environment]);

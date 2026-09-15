@@ -8,9 +8,20 @@ import { PAGBANK_API_BASE_URLS, PAGBANK_CONNECT_SCOPES } from "../_shared/pagban
 import { encryptSecret } from "../_shared/pagbank/crypto.ts";
 import { resolvePlatformConnectCredentials } from "../_shared/pagbank/credentials.ts";
 
-function adminRedirect(result: string, detail?: string) {
+// Rota de retorno desta autorização: a própria configuração de pagamentos.
+// Caminho fixo no código; somente a ORIGEM vem do state gravado no início.
+const RETURN_PATH = "/admin/empresa";
+const RETURN_QUERY = { tab: "pagamentos" } as const;
+
+function adminRedirect(result: string, detail?: string, returnOrigin?: string | null) {
   const base = Deno.env.get("PAGBANK_ADMIN_RETURN_URL") ?? "https://www.smartbus.com.br/admin/empresa";
-  const url = new URL(base);
+  let url: URL;
+  try {
+    url = returnOrigin ? new URL(RETURN_PATH, returnOrigin) : new URL(base);
+  } catch {
+    url = new URL(base);
+  }
+  for (const [key, value] of Object.entries(RETURN_QUERY)) url.searchParams.set(key, value);
   url.searchParams.set("pagbank", result);
   if (detail) url.searchParams.set("detail", detail.slice(0, 80));
   return Response.redirect(url.toString(), 302);
@@ -32,9 +43,11 @@ Deno.serve(async (req) => {
     .eq("state", state)
     .is("used_at", null)
     .gt("expires_at", new Date().toISOString())
-    .select("company_id, environment, user_id")
+    .select("company_id, environment, user_id, return_origin")
     .maybeSingle();
   if (!stateRow) return adminRedirect("error", "state_invalid_or_expired");
+  // Origem já validada contra a lista fechada no início do fluxo.
+  const returnOrigin: string | null = stateRow.return_origin ?? null;
   if (oauthError || !code) return adminRedirect("denied", oauthError ?? "no_code");
 
   const environment = stateRow.environment as "sandbox" | "production";
