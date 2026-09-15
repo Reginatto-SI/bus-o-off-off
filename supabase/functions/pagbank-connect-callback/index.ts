@@ -89,5 +89,5 @@ Deno.serve(async (req) => {
   });
   if (error) return adminRedirect("error", "persist_failed", returnOrigin);
   logPaymentTrace("info", "pagbank-connect-callback", "connected", { company_id: stateRow.company_id, has_account: Boolean(accountId) });
-  return adminRedirect(accountId ? "connected" : "connected_without_account", returnOrigin);
+  return adminRedirect(accountId ? "connected" : "connected_without_account", undefined, returnOrigin);
 });
