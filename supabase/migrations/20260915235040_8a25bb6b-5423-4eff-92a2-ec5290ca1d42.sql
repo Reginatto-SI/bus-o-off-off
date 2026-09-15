@@ -1,0 +1,1 @@
+ALTER TABLE public.pagbank_connect_states ADD COLUMN IF NOT EXISTS return_origin text;

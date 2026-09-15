@@ -1644,6 +1644,7 @@ export type Database = {
           created_at: string
           environment: string
           expires_at: string
+          return_origin: string | null
           state: string
           used_at: string | null
           user_id: string
@@ -1653,6 +1654,7 @@ export type Database = {
           created_at?: string
           environment: string
           expires_at: string
+          return_origin?: string | null
           state: string
           used_at?: string | null
           user_id: string
@@ -1662,6 +1664,7 @@ export type Database = {
           created_at?: string
           environment?: string
           expires_at?: string
+          return_origin?: string | null
           state?: string
           used_at?: string | null
           user_id?: string
