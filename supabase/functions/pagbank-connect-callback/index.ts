@@ -8,9 +8,20 @@ import { PAGBANK_API_BASE_URLS, PAGBANK_CONNECT_SCOPES } from "../_shared/pagban
 import { encryptSecret } from "../_shared/pagbank/crypto.ts";
 import { resolvePlatformConnectCredentials } from "../_shared/pagbank/credentials.ts";
 
-function adminRedirect(result: string, detail?: string) {
+// Rota de retorno desta autorização: a própria configuração de pagamentos.
+// Caminho fixo no código; somente a ORIGEM vem do state gravado no início.
+const RETURN_PATH = "/admin/empresa";
+const RETURN_QUERY = { tab: "pagamentos" } as const;
+
+function adminRedirect(result: string, detail?: string, returnOrigin?: string | null) {
   const base = Deno.env.get("PAGBANK_ADMIN_RETURN_URL") ?? "https://www.smartbus.com.br/admin/empresa";
-  const url = new URL(base);
+  let url: URL;
+  try {
+    url = returnOrigin ? new URL(RETURN_PATH, returnOrigin) : new URL(base);
+  } catch {
+    url = new URL(base);
+  }
+  for (const [key, value] of Object.entries(RETURN_QUERY)) url.searchParams.set(key, value);
   url.searchParams.set("pagbank", result);
   if (detail) url.searchParams.set("detail", detail.slice(0, 80));
   return Response.redirect(url.toString(), 302);
@@ -32,17 +43,19 @@ Deno.serve(async (req) => {
     .eq("state", state)
     .is("used_at", null)
     .gt("expires_at", new Date().toISOString())
-    .select("company_id, environment, user_id")
+    .select("company_id, environment, user_id, return_origin")
     .maybeSingle();
   if (!stateRow) return adminRedirect("error", "state_invalid_or_expired");
-  if (oauthError || !code) return adminRedirect("denied", oauthError ?? "no_code");
+  // Origem já validada contra a lista fechada no início do fluxo.
+  const returnOrigin: string | null = stateRow.return_origin ?? null;
+  if (oauthError || !code) return adminRedirect("denied", oauthError ?? "no_code", returnOrigin);
 
   const environment = stateRow.environment as "sandbox" | "production";
-  if (environment !== "sandbox") return adminRedirect("error", "environment_not_allowed");
+  if (environment !== "sandbox") return adminRedirect("error", "environment_not_allowed", returnOrigin);
   // Aplicação corrente da plataforma (client_secret cifrado no backend) com
   // compatibilidade para os secrets de ambiente.
   const { clientId, clientSecret } = await resolvePlatformConnectCredentials(supabaseAdmin, environment);
-  if (!clientId || !clientSecret) return adminRedirect("error", "connect_not_configured");
+  if (!clientId || !clientSecret) return adminRedirect("error", "connect_not_configured", returnOrigin);
 
   const redirectUri = `${Deno.env.get("SUPABASE_URL")}/functions/v1/pagbank-connect-callback`;
   const tokenRes = await fetch(`${PAGBANK_API_BASE_URLS[environment]}/oauth2/token`, {
@@ -55,7 +68,7 @@ Deno.serve(async (req) => {
     logPaymentTrace("warn", "pagbank-connect-callback", "token_exchange_failed", {
       company_id: stateRow.company_id, http_status: tokenRes?.status ?? null,
     });
-    return adminRedirect("error", `token_exchange_${tokenRes?.status ?? "network"}`);
+    return adminRedirect("error", `token_exchange_${tokenRes?.status ?? "network"}`, returnOrigin);
   }
 
   const accountId = typeof tokenBody.account_id === "string" ? tokenBody.account_id : null;
@@ -74,7 +87,7 @@ Deno.serve(async (req) => {
     pix_ready: false, last_validated_at: now, connected_at: now, is_current: true, credential_generation: 1,
     last_error: accountId ? null : "account_id_missing_in_token_response",
   });
-  if (error) return adminRedirect("error", "persist_failed");
+  if (error) return adminRedirect("error", "persist_failed", returnOrigin);
   logPaymentTrace("info", "pagbank-connect-callback", "connected", { company_id: stateRow.company_id, has_account: Boolean(accountId) });
-  return adminRedirect(accountId ? "connected" : "connected_without_account");
+  return adminRedirect(accountId ? "connected" : "connected_without_account", undefined, returnOrigin);
 });

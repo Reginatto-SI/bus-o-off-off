@@ -259,3 +259,12 @@ funcional.
 - Nada de PB Integrações; Produção continua bloqueada; Asaas intacto; nenhuma migration nesta etapa.
 - Status: `PROVÁVEL, MAS PRECISA HOMOLOGAÇÃO` — a autorização real do vendedor (consentimento na tela PagBank e troca de `code` por token) ainda não foi executada.
 - Próximo passo: executar a autorização Sandbox da empresa vendedora pela tela de configuração e conferir o vínculo gravado no callback.
+
+## Manutenção — 2026-09-15 (retorno do Connect para a origem de início)
+
+- Causa investigada: `pagbank-connect-callback` montava o retorno a partir de `PAGBANK_ADMIN_RETURN_URL` (secret inexistente) e caía no fixo `https://www.smartbus.com.br/admin/empresa`; o `state` gravado em `connect_start` não guardava a origem de navegação. A tela final `/admin/eventos` vinha de `src/pages/admin/Company.tsx` (guarda de perfil), efeito colateral de aterrissar em domínio sem sessão — não havia retorno configurado para eventos.
+- Migration aditiva: `pagbank_connect_states.return_origin text` (nulável).
+- `connect_start` grava `return_origin` apenas quando `classifyRequestOrigin` reconhece o host (domínios oficiais SmartBus + hosts de desenvolvimento/preview `.lovable.app`). Origem desconhecida grava `null`.
+- Callback devolve para `<return_origin>/admin/empresa?tab=pagamentos`; sem origem gravada usa o padrão anterior de Produção com o caminho corrigido. Caminho fixo no código, nenhuma URL vinda do frontend — sem open redirect.
+- Ambiente financeiro continua vindo do `state.environment` / configuração da empresa; hostname nunca promove Produção. Asaas intacto.
+- Validação: `bunx tsgo -p tsconfig.app.json --noEmit` limpo; `bun run test` 250 verdes; build OK; deploy de `pagbank-connection` e `pagbank-connect-callback`. Homologação real da volta ao Preview pendente de execução pelo usuário.
