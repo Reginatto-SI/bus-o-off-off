@@ -89,7 +89,7 @@ type Props = {
   isDeveloper: boolean;
   environment: 'sandbox' | 'production' | null;
   environmentNotice?: boolean;
-  asaasStatus: { label: string; className: string };
+  asaasStatus?: { label: string; className: string } | null;
   asaasConnected: boolean;
   asaasPixReady: boolean;
   children: ReactNode;
@@ -97,7 +97,9 @@ type Props = {
 };
 
 /** Presentation only: existing connection endpoints and Asaas actions remain unchanged. */
-export function PagbankConnectionCard({ companyId, canEdit, isDeveloper, environment, environmentNotice, asaasStatus, asaasConnected, asaasPixReady, children, developerContent }: Props) {
+export function PagbankConnectionCard({ companyId, canEdit, isDeveloper, environment, environmentNotice, asaasStatus: asaasStatusProp, asaasConnected, asaasPixReady, children, developerContent }: Props) {
+  // Presentation guard: a missing badge must not break the payments tab.
+  const asaasStatus = asaasStatusProp ?? { label: 'Não conectado', className: '' };
   const [searchParams, setSearchParams] = useSearchParams();
   const [status, setStatus] = useState<ConnectionStatus | null>(null);
   const [loading, setLoading] = useState(true);

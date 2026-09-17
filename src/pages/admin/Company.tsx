@@ -762,7 +762,7 @@ export default function CompanyPage() {
     partially_configured: { label: 'Configurado', className: 'bg-amber-100 text-amber-800 border-amber-200' },
     inconsistent: { label: 'Inconsistente', className: 'bg-destructive/10 text-destructive border-destructive/20' },
     not_configured: { label: 'Não conectado', className: '' },
-  }[asaasStatus];
+  }[asaasStatus] ?? { label: 'Não conectado', className: '' };
   // Comentário de suporte: reutilizamos apenas o último check no mesmo ambiente operacional
   // para evitar mistura de diagnóstico entre produção e sandbox.
   const lastAsaasCheckForCurrentEnvironment = runtimePaymentEnvironment
