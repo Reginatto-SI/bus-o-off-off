@@ -268,3 +268,12 @@ funcional.
 - Callback devolve para `<return_origin>/admin/empresa?tab=pagamentos`; sem origem gravada usa o padrão anterior de Produção com o caminho corrigido. Caminho fixo no código, nenhuma URL vinda do frontend — sem open redirect.
 - Ambiente financeiro continua vindo do `state.environment` / configuração da empresa; hostname nunca promove Produção. Asaas intacto.
 - Validação: `bunx tsgo -p tsconfig.app.json --noEmit` limpo; `bun run test` 250 verdes; build OK; deploy de `pagbank-connection` e `pagbank-connect-callback`. Homologação real da volta ao Preview pendente de execução pelo usuário.
+
+## Investigação — 2026-09-17 (erro de login no Connect Authorization Sandbox)
+
+- URL gerada pelo SmartBus (`connect_start`): `https://connect.sandbox.pagbank.com.br/oauth2/authorize?response_type=code&client_id=<aplicação corrente>&redirect_uri=https://cdrcyjrvurrphnceromd.supabase.co/functions/v1/pagbank-connect-callback&scope=payments.read payments.create accounts.read&state=<nonce>`. É Sandbox oficial; sem PB Integrações e sem endpoints antigos do PagSeguro.
+- Aplicação usada: `cedb1abb-8bc9-4d3a-9ef1-ee54db457e5a` (`is_current = true`, `client_secret_enc` presente). A primeira aplicação (`cf623105-…`) permanece `abandoned` e não é usada.
+- Cadeia real observada: `connect.sandbox.pagbank.com.br/oauth2/authorize` → 302 `acesso.pagbank.com.br/?connectClientId=<nosso client_id>&dest=https://connect.sandbox.pagbank.com.br/oauth2/authorize?id=…` → replicator `acesso.pagseguro.uol.com.br` → volta a `acesso.pagbank.com.br` com `flow=REPLICATED`. Quem troca o domínio é o PagBank, não o SmartBus; o `dest` continua em Sandbox.
+- Evidência de que o `client_id` é reconhecido: com `client_id` inexistente a resposta é 302 para `connect-web.sandbox.pagbank.com.br/error`; com o nosso, o PagBank cria sessão de autorização e envia ao login. O `redirect_uri` só é conferido após o consentimento.
+- Conclusão: nada a corrigir no SmartBus nesta etapa. O bloqueio está no login da conta usada como vendedor Sandbox (conta/credencial não apta ao login Sandbox do Connect, ou sessão de Produção interferindo no login central). Possuir token Sandbox não comprova existir conta vendedora Sandbox apta ao Connect.
+- Nenhuma alteração de código, aplicação, secret ou Asaas. Cobrança PIX/cartão/split segue fora desta etapa.
