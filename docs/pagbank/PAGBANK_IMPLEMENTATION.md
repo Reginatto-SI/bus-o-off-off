@@ -1,5 +1,27 @@
 # PagBank no SmartBus — checkpoint atual
 
+## Manutenção — 2026-09-17: clareza da aba Pagamentos
+
+- Interface desktop reorganizada com resumo do provedor de novas vendas, ambiente
+  efetivo, cards equivalentes Asaas/PagBank e detalhes de conta sob demanda.
+- Conexão, seleção para novas vendas e comprovação de teste são informações
+  distintas. Falha na consulta não presume Asaas selecionado e não impede abrir
+  seus controles. Alternar os detalhes não desmonta os formulários.
+- Diagnóstico e token manual PagBank ficam na área exclusiva do desenvolvedor,
+  recolhida por padrão, junto do diagnóstico Asaas e parâmetros internos existentes.
+- Troca de provedor e desconexão PagBank pedem confirmação. A desconexão informa
+  o retorno ao Asaas já realizado pelo backend; nenhum endpoint foi alterado.
+- Removidas da apresentação as promessas de percentual fixo de recebimento e de
+  prazo de repasse. Os campos e o salvamento existentes foram preservados.
+- Sem alterações em API, cobrança, checkout, webhook, split, credenciais, ambiente,
+  banco ou RLS. Produção PagBank segue bloqueada; nenhuma cobrança foi executada.
+- Validação: build passou; 127 testes focados passaram, incluindo 8 de interface.
+  Revisão visual desktop em Chromium com respostas simuladas: cards alinhados,
+  configuração sob demanda e área técnica ausente para o administrador comum.
+  Typecheck encontra o mesmo erro preexistente em `Sales.tsx:1414` na base e na
+  versão alterada. Instalação local sem atualizar lockfile, pois o lock npm da
+  base já não corresponde ao package.json.
+
 > Base atual: `main`. Em 2026-09-07, o responsável revogou a obrigatoriedade da
 > `feature/pagbank-integration`. PRs temporários partem de `main` e retornam a `main`.
 > Referências anteriores à branch e a etapas já executadas são históricas;

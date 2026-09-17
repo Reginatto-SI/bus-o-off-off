@@ -2108,133 +2108,140 @@ export default function CompanyPage() {
                   </TabsContent>
 
                   <TabsContent value="pagamentos" className="mt-0">
-                    <div className="space-y-6">
-                      {activeCompanyId && (
-                        <PagbankConnectionCard companyId={activeCompanyId} canEdit={isGerente || isDeveloper} />
-                      )}
+                    {activeCompanyId ? (
+                      <PagbankConnectionCard
+                        key={`${activeCompanyId}:${runtimePaymentEnvironment ?? 'unresolved'}`}
+                        companyId={activeCompanyId}
+                        canEdit={isGerente || isDeveloper}
+                        isDeveloper={isDeveloper}
+                        environment={runtimePaymentEnvironment}
+                        environmentNotice={runtimePaymentDowngraded}
+                        asaasStatus={asaasOperationalBadge}
+                        asaasConnected={asaasStatus === 'connected'}
+                        asaasPixReady={pixReadyEffective}
+                        developerContent={(
+                          <>
+                            {/* Comissionamento da Plataforma — Developer Only */}
+                            {isDeveloper && (() => {
+                              // Comentário de manutenção:
+                              // Estes campos usam estado local controlado para permitir digitação fluida
+                              // (incluindo decimais com ponto/vírgula) sem disparar salvamento automático.
+                              // A persistência ocorre somente no botão "Salvar Empresa" (handleSubmit).
+                              const platformFee = parsePercentInput(form.platform_fee_percent) ?? 0;
+                              const socioSplitFee = parsePercentInput(form.socio_split_percent) ?? 0;
+                              const totalFee = platformFee + socioSplitFee;
+                              const sumExceeds100 = totalFee > 100;
+                              const splitConfigStatus = getFinancialSocioConfigStatus({
+                                socioSplitPercent: socioSplitFee,
+                                socios: financialSocios,
+                              });
 
+                              return (
+                              <details className="rounded-lg border bg-background p-4 space-y-4">
+                                <summary className="cursor-pointer text-sm font-medium">Configurações internas de comissionamento</summary>
+                                <div className="flex items-center justify-between gap-2">
+                                  <h3 className="font-medium">Parâmetros da empresa</h3>
+                                  <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                                    <Eye className="h-3.5 w-3.5" />
+                                    Developer Only
+                                  </span>
+                                </div>
+                                <p className="text-sm text-muted-foreground">
+                                  Estes campos existentes foram preservados para manutenção. Não representam um resumo da taxa comercial vigente, que é calculada por passagem e depois dividida. Alterações aqui dependem do botão “Salvar alterações” da empresa.
+                                </p>
+                                {splitConfigStatus.state !== 'valid' && (
+                                  <Alert variant="destructive">
+                                    <AlertTriangle className="h-4 w-4" />
+                                    <AlertDescription>
+                                      {splitConfigStatus.message} Ajuste o cadastro em <strong>/admin/socios</strong> antes de salvar split acima de zero.
+                                    </AlertDescription>
+                                  </Alert>
+                                )}
+                                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+                                  <div className="space-y-2">
+                                    <Label htmlFor="platform_fee_percent">Percentual cadastrado da plataforma (%)</Label>
+                                    <Input
+                                      id="platform_fee_percent"
+                                      type="text"
+                                      inputMode="decimal"
+                                      min="0"
+                                      max="100"
+                                      step="any"
+                                      value={form.platform_fee_percent}
+                                      onChange={(e) => {
+                                        const rawValue = e.target.value;
+                                        const normalizedValue = rawValue.replace(',', '.');
 
-                      {/* Comissionamento da Plataforma — Developer Only */}
-                      {isDeveloper && (() => {
-                        // Comentário de manutenção:
-                        // Estes campos usam estado local controlado para permitir digitação fluida
-                        // (incluindo decimais com ponto/vírgula) sem disparar salvamento automático.
-                        // A persistência ocorre somente no botão "Salvar Empresa" (handleSubmit).
-                        const platformFee = parsePercentInput(form.platform_fee_percent) ?? 0;
-                        const socioSplitFee = parsePercentInput(form.socio_split_percent) ?? 0;
-                        const totalFee = platformFee + socioSplitFee;
-                        const companyShare = 100 - totalFee;
-                        const sumExceeds100 = totalFee > 100;
-                        const splitConfigStatus = getFinancialSocioConfigStatus({
-                          socioSplitPercent: socioSplitFee,
-                          socios: financialSocios,
-                        });
+                                        // Aceita vazio durante edição e números com decimal (ex: 3,5 -> 3.5).
+                                        if (/^\d*(\.\d*)?$/.test(normalizedValue)) {
+                                          setForm((prev) => ({ ...prev, platform_fee_percent: normalizedValue }));
+                                        }
+                                      }}
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                      Configuração interna preservada; não é uma simulação de cobrança.
+                                    </p>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <Label htmlFor="socio_split_percent">Percentual cadastrado do sócio (%)</Label>
+                                    <Input
+                                      id="socio_split_percent"
+                                      type="text"
+                                      inputMode="decimal"
+                                      min="0"
+                                      max="100"
+                                      step="any"
+                                      value={form.socio_split_percent}
+                                      onChange={(e) => {
+                                        const rawValue = e.target.value;
+                                        const normalizedValue = rawValue.replace(',', '.');
 
-                        return (
-                        <div className="rounded-lg border p-4 space-y-4">
-                          <div className="flex items-center justify-between gap-2">
-                            <h3 className="font-medium">Comissionamento da Plataforma</h3>
-                            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                              <Eye className="h-3.5 w-3.5" />
-                              Developer Only
-                            </span>
-                          </div>
-                          <p className="text-sm text-muted-foreground">
-                            Configure a taxa da plataforma e a taxa do sócio para esta empresa. A empresa recebe o restante via split direto no Asaas.
-                          </p>
-                          {splitConfigStatus.state !== 'valid' && (
-                            <Alert variant="destructive">
-                              <AlertTriangle className="h-4 w-4" />
-                              <AlertDescription>
-                                {splitConfigStatus.message} Ajuste o cadastro em <strong>/admin/socios</strong> antes de salvar split acima de zero.
-                              </AlertDescription>
-                            </Alert>
+                                        // Mantém edição local para evitar perda de foco causada por autosave.
+                                        if (/^\d*(\.\d*)?$/.test(normalizedValue)) {
+                                          setForm((prev) => ({ ...prev, socio_split_percent: normalizedValue }));
+                                        }
+                                      }}
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                      Configuração interna preservada; não comprova repasse ao sócio.
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {sumExceeds100 && (
+                                  <Alert variant="destructive">
+                                    <AlertTriangle className="h-4 w-4" />
+                                    <AlertDescription>
+                                      A soma das taxas excede 100%. Corrija os valores antes de continuar.
+                                    </AlertDescription>
+                                  </Alert>
+                                )}
+                              </details>
+                              );
+                            })()}
+
+                          {isDeveloper && (
+                            <AsaasDiagnosticPanel
+                              company={company}
+                              runtimeEnvironment={runtimePaymentEnvironment}
+                              runtimeSource={runtimePaymentSource}
+                              asaasStatus={asaasStatus}
+                              editingId={editingId}
+                              asaasSnapshot={asaasSnapshot}
+                              lastAsaasCheck={lastAsaasCheck}
+                              persistedPixReady={persistedPixReady}
+                              persistedPixLastError={persistedPixLastError ?? null}
+                            />
                           )}
-                          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
-                            <div className="space-y-2">
-                              <Label htmlFor="platform_fee_percent">Taxa da Plataforma (%)</Label>
-                              <Input
-                                id="platform_fee_percent"
-                                type="text"
-                                inputMode="decimal"
-                                min="0"
-                                max="100"
-                                step="any"
-                                value={form.platform_fee_percent}
-                                onChange={(e) => {
-                                  const rawValue = e.target.value;
-                                  const normalizedValue = rawValue.replace(',', '.');
-
-                                  // Aceita vazio durante edição e números com decimal (ex: 3,5 -> 3.5).
-                                  if (/^\d*(\.\d*)?$/.test(normalizedValue)) {
-                                    setForm((prev) => ({ ...prev, platform_fee_percent: normalizedValue }));
-                                  }
-                                }}
-                              />
-                              <p className="text-xs text-muted-foreground">
-                                Comissão retida pela plataforma sobre cada venda online.
-                              </p>
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="socio_split_percent">Taxa do Sócio (%)</Label>
-                              <Input
-                                id="socio_split_percent"
-                                type="text"
-                                inputMode="decimal"
-                                min="0"
-                                max="100"
-                                step="any"
-                                value={form.socio_split_percent}
-                                onChange={(e) => {
-                                  const rawValue = e.target.value;
-                                  const normalizedValue = rawValue.replace(',', '.');
-
-                                  // Mantém edição local para evitar perda de foco causada por autosave.
-                                  if (/^\d*(\.\d*)?$/.test(normalizedValue)) {
-                                    setForm((prev) => ({ ...prev, socio_split_percent: normalizedValue }));
-                                  }
-                                }}
-                              />
-                              <p className="text-xs text-muted-foreground">
-                                Percentual enviado diretamente ao sócio ativo via split Asaas. Se zero ou sem sócio ativo, será ignorado.
-                              </p>
-                            </div>
-                          </div>
-
-                          {/* Resumo calculado automaticamente */}
-                          <div className="rounded-md bg-muted/50 p-3 space-y-1 text-sm">
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Taxa total da plataforma:</span>
-                              <span className={`font-medium ${sumExceeds100 ? 'text-destructive' : ''}`}>
-                                {totalFee.toFixed(1)}%
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Empresa receberá:</span>
-                              <span className={`font-medium ${sumExceeds100 ? 'text-destructive' : 'text-green-700'}`}>
-                                {companyShare.toFixed(1)}%
-                              </span>
-                            </div>
-                          </div>
-
-                          {sumExceeds100 && (
-                            <Alert variant="destructive">
-                              <AlertTriangle className="h-4 w-4" />
-                              <AlertDescription>
-                                A soma das taxas excede 100%. Corrija os valores antes de continuar.
-                              </AlertDescription>
-                            </Alert>
-                          )}
-                        </div>
-                        );
-                      })()}
-
+                          </>
+                        )}
+                      >
                       {/* Integração Asaas */}
                       <div className="flex items-center justify-between">
                         <div>
-                          <h3 className="font-medium">Integração de Pagamentos</h3>
+                          <h3 className="font-medium">Conta Asaas</h3>
                           <p className="text-sm text-muted-foreground">
-                            Conecte sua conta Asaas para receber pagamentos online via Pix e Cartão.
+                            Gerencie a conexão e verifique a disponibilidade dos recebimentos.
                           </p>
                         </div>
                         {asaasStatus === 'connected' ? (
@@ -2254,20 +2261,8 @@ export default function CompanyPage() {
                           <strong>Última verificação:</strong> {lastAsaasCheckAtLabel}
                         </p>
                         <p>
-                          <strong>Ambiente:</strong>{' '}
-                          {lastAsaasCheckForCurrentEnvironment
-                            ? (lastAsaasCheckForCurrentEnvironment.environment === 'production' ? 'Produção' : 'Sandbox')
-                            : (runtimePaymentEnvironment === 'production' ? 'Produção' : 'Sandbox')}
-                        </p>
-                        <p>
                           <strong>Resultado:</strong> {lastAsaasCheckResultLabel}
                         </p>
-                        {runtimePaymentDowngraded && (
-                          <p className="text-amber-700">
-                            Esta empresa está configurada como Produção, mas você está em um endereço de teste
-                            (pré-visualização, editor ou computador local). Por segurança, tudo aqui funciona em Sandbox.
-                          </p>
-                        )}
                         {lastAsaasCheckErrorReason && (
                           <p className="text-destructive">
                             <strong>Motivo:</strong> {lastAsaasCheckErrorReason}
@@ -2277,11 +2272,11 @@ export default function CompanyPage() {
 
                       {asaasStatus === 'connected' ? (
                         <div className="space-y-3">
-                          <div className="rounded-lg border border-green-200 bg-green-50 p-4 space-y-2">
+                          <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-2">
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                               <div className="flex items-center gap-2">
-                                <CheckCircle2 className="h-5 w-5 text-green-600" />
-                                <p className="font-medium text-green-800">Pagamentos ativos</p>
+                                <CheckCircle2 className="h-5 w-5 text-muted-foreground" />
+                                <p className="font-medium text-foreground">Conta vinculada</p>
                               </div>
                               <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
                                 <Button
@@ -2313,37 +2308,29 @@ export default function CompanyPage() {
                                 </Button>
                               </div>
                             </div>
-                            <p className="text-sm text-green-700">
-                              Sua conta está conectada para recebimentos online. O Pix só é liberado quando houver chave ativa validada no ambiente operacional.
-                              {/* Comentário de regra de negócio: o desconto total exibido ao usuário
-                                  soma taxa da plataforma + taxa do sócio (split Asaas). */}
-                              A plataforma retém automaticamente <strong>{((company?.platform_fee_percent ?? 6) + (company?.socio_split_percent ?? 0)).toFixed(1)}%</strong> de comissão sobre cada venda online.
+                            <p className="text-sm text-muted-foreground">
+                              A conexão desta conta é independente do provedor selecionado para novas vendas.
                             </p>
-                            <p className={`text-xs ${pixReadyEffective ? 'text-green-700' : 'text-amber-700'}`}>
-                              Readiness Pix: <strong>{pixReadyEffective ? 'Pix pronto' : 'Pix pendente de configuração'}</strong>.
+                            <p className={`text-xs ${pixReadyEffective ? 'text-muted-foreground' : 'text-amber-700'}`}>
+                              Disponibilidade do Pix: <strong>{pixReadyEffective ? 'Pix pronto' : 'Pix pendente de configuração'}</strong>.
                               {!pixReadyEffective && (
                                 <>
                                   {' '}Sem chave Pix ativa, o checkout público desabilita Pix até regularização.
                                 </>
                               )}
                             </p>
-                            {!pixReadyEffective && pixLastErrorEffective && (
+                            {isDeveloper && !pixReadyEffective && pixLastErrorEffective && (
                               <p className="text-xs text-amber-700">
-                                Último retorno de readiness Pix: {pixLastErrorEffective}
+                                Pendência do Pix: {pixLastErrorEffective}
                               </p>
                             )}
-                            <p className="text-xs text-green-700">
+                            <p className="text-xs text-muted-foreground">
                               {/* Comentário de suporte: exibimos fallback explícito quando o e-mail
                                   ainda não foi retornado/salvo na vinculação da conta Asaas. */}
                               Conta Asaas conectada: {asaasSnapshot?.current.accountEmail || 'Não identificado'}
                             </p>
-                            {runtimePaymentEnvironment && (
-                              <p className="text-xs text-green-700">
-                                Ambiente operacional atual: <strong>{runtimePaymentEnvironment === 'production' ? 'Produção' : 'Sandbox'}</strong>
-                              </p>
-                            )}
-                            {asaasSnapshot?.current.walletId && (
-                              <p className="text-xs text-green-600 font-mono">
+                            {isDeveloper && asaasSnapshot?.current.walletId && (
+                              <p className="text-xs text-muted-foreground font-mono">
                                 Wallet: {asaasSnapshot.current.walletId}
                               </p>
                             )}
@@ -2360,9 +2347,7 @@ export default function CompanyPage() {
                               </Button>
                             </div>
                           </div>
-                          <p className="text-xs text-muted-foreground">
-                            Repasse via Pix: D+1 após confirmação do pagamento.
-                          </p>
+
                         </div>
                       ) : (
                         <div className="space-y-4">
@@ -2376,16 +2361,16 @@ export default function CompanyPage() {
                                     : 'A configuração do Asaas ainda não está completa para o ambiente operacional atual.'}
                                 </p>
                                 <div className="text-xs">
-                                  <p>Ambiente operacional atual: <strong>{runtimePaymentEnvironment === 'production' ? 'Produção' : 'Sandbox'}</strong></p>
+
                                   <p className="mt-1">
-                                    Readiness Pix: <strong>{pixReadyEffective ? 'Pix pronto' : 'Pix pendente de configuração'}</strong>
+                                    Disponibilidade do Pix: <strong>{pixReadyEffective ? 'Pix pronto' : 'Pix pendente de configuração'}</strong>
                                   </p>
-                                  {!pixReadyEffective && pixLastErrorEffective && (
+                                  {isDeveloper && !pixReadyEffective && pixLastErrorEffective && (
                                     <p className="mt-1 text-amber-700">
-                                      Último retorno de readiness Pix: {pixLastErrorEffective}
+                                      Pendência do Pix: {pixLastErrorEffective}
                                     </p>
                                   )}
-                                  {asaasSnapshot.reasons.length > 0 && (
+                                  {isDeveloper && asaasSnapshot.reasons.length > 0 && (
                                     <ul className="mt-1 list-disc pl-5">
                                       {asaasSnapshot.reasons.map((reason) => (
                                         <li key={reason}>{reason}</li>
@@ -2439,7 +2424,7 @@ export default function CompanyPage() {
                                       ({form.legal_type === 'PF' ? 'CPF' : 'CNPJ'}, e-mail e nome).
                                     </>
                                   )
-                                  : 'Vamos abrir o mesmo wizard usado em /admin/eventos para vincular sua conta existente por API Key com a mesma regra de ambiente e tratamento de erros.'}
+                                  : 'Siga as orientações para conectar sua conta Asaas com segurança.'}
                               </p>
                               <div className="flex flex-col gap-2 sm:flex-row">
                                 <Button
@@ -2452,7 +2437,7 @@ export default function CompanyPage() {
                                   ) : (
                                     <Link2 className="h-4 w-4 mr-2" />
                                   )}
-                                  {asaasOnboardingMode === 'create' ? 'Iniciar conexão guiada' : 'Abrir wizard de vínculo'}
+                                  {asaasOnboardingMode === 'create' ? 'Iniciar conexão guiada' : 'Conectar conta existente'}
                                 </Button>
                                 <Button
                                   type="button"
@@ -2467,20 +2452,9 @@ export default function CompanyPage() {
                           )}
                         </div>
                       )}
-                    </div>
-
-                    {isDeveloper && (
-                      <AsaasDiagnosticPanel
-                        company={company}
-                        runtimeEnvironment={runtimePaymentEnvironment}
-                        runtimeSource={runtimePaymentSource}
-                        asaasStatus={asaasStatus}
-                        editingId={editingId}
-                        asaasSnapshot={asaasSnapshot}
-                        lastAsaasCheck={lastAsaasCheck}
-                        persistedPixReady={persistedPixReady}
-                        persistedPixLastError={persistedPixLastError ?? null}
-                      />
+                      </PagbankConnectionCard>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Salve e selecione a empresa para configurar os recebimentos online.</p>
                     )}
                   </TabsContent>
 
