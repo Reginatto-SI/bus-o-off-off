@@ -89,7 +89,7 @@ type Props = {
   isDeveloper: boolean;
   environment: 'sandbox' | 'production' | null;
   environmentNotice?: boolean;
-  asaasStatus: { label: string; className: string };
+  asaasStatus?: { label: string; className: string } | null;
   asaasConnected: boolean;
   asaasPixReady: boolean;
   children: ReactNode;
