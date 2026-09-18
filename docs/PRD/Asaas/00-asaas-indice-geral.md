@@ -40,3 +40,12 @@ Ser a porta de entrada oficial da documentação Asaas do SmartBus BR, com ordem
 - Este índice não define novas regras de negócio.
 - Este índice não substitui os PRDs detalhados.
 - Este índice não autoriza alteração de código sem nova tarefa.
+
+
+## Regra de precedência financeira
+
+Para taxa da plataforma, split, wallets de sócio/representante, mínimo, teto e distribuição financeira, prevalece o documento normativo:
+
+`../PRD 01 — Regra Oficial de Divisão da Taxa entre Marketplace, Sócio e Representante.txt`
+
+Os PRDs 04 e 07 devem ser lidos como documentação histórica/operacional e de integração, sem criar regra financeira paralela.

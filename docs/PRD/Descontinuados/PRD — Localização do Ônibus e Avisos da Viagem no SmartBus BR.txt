@@ -1,0 +1,470 @@
+# DOCUMENTO DESCONTINUADO
+
+> Preservado para histórico. Não representa funcionalidade ativa nem compromisso de implementação atual.
+
+# PRD — Localização do Ônibus e Avisos da Viagem no SmartBus BR
+
+## 1. Objetivo
+
+Criar um recurso simples para permitir que passageiros acompanhem a localização do ônibus vinculada à sua viagem, diretamente pela passagem virtual.
+
+O objetivo inicial não é criar um rastreamento avançado estilo aplicativo nativo, mas oferecer uma forma prática, clara e confiável de informar ao passageiro onde o ônibus está, quando a localização estiver disponível.
+
+## 2. Contexto
+
+Alguns clientes do SmartBus BR estão solicitando um recurso para que os passageiros acompanhem a localização do ônibus em relação aos pontos de embarque.
+
+O SmartBus BR é um PWA, não um aplicativo nativo. Por isso, a localização deve ser tratada com cuidado, sem prometer funcionamento contínuo em segundo plano.
+
+A primeira versão deve priorizar:
+
+* simplicidade;
+* baixa manutenção;
+* clareza para passageiro e motorista;
+* uso da passagem virtual como ponto principal de acesso;
+* uso do mapa nativo do celular para reduzir complexidade;
+* funcionamento por empresa, evento, viagem e ponto de embarque.
+
+## 3. Regra de ouro
+
+A localização do ônibus deve ser um recurso auxiliar da viagem, e não uma obrigação crítica para o embarque.
+
+A passagem virtual continua sendo a fonte principal para:
+
+* QR Code;
+* dados do passageiro;
+* evento;
+* ponto de embarque;
+* horário de embarque;
+* avisos importantes da viagem.
+
+## 4. Escopo da primeira versão
+
+A primeira versão deve permitir:
+
+1. Motorista ou auxiliar iniciar o compartilhamento de localização no PWA.
+2. Motorista ou auxiliar encerrar o compartilhamento de localização.
+3. Sistema salvar a última localização recebida do ônibus.
+4. Passageiro visualizar o status da localização pela passagem virtual.
+5. Passageiro abrir a localização no mapa nativo do celular.
+6. Passageiro visualizar a data e hora da última atualização.
+7. Sistema indicar quando a localização estiver desatualizada.
+8. Admin ou motorista enviar avisos manuais da viagem.
+9. Passageiro visualizar histórico de avisos dentro da passagem virtual.
+10. Passageiro ativar notificações no celular, quando o navegador permitir.
+
+## 5. Fora do escopo da primeira versão
+
+Não implementar nesta etapa:
+
+* mapa complexo dentro do SmartBus;
+* rastreamento em segundo plano garantido;
+* cálculo automático de previsão de chegada;
+* integração com trânsito;
+* histórico completo de rota;
+* notificação automática baseada em distância;
+* promessa de funcionamento igual aplicativo nativo;
+* criação de aplicativo nativo;
+* fluxo separado para cada empresa;
+* qualquer comportamento que dependa exclusivamente de push para informação crítica.
+
+## 6. Usuários envolvidos
+
+### Motorista ou auxiliar de embarque
+
+Usa o PWA para iniciar e encerrar o compartilhamento de localização da viagem.
+
+Também pode enviar avisos simples para os passageiros.
+
+### Passageiro
+
+Acessa a passagem virtual para consultar:
+
+* QR Code;
+* ponto de embarque;
+* horário;
+* localização atual do ônibus;
+* últimos avisos da viagem.
+
+### Empresa
+
+Configura e opera seus eventos normalmente. O recurso deve respeitar os dados da empresa e não misturar informações entre empresas.
+
+### Administrador SmartBus
+
+Pode diagnosticar problemas, consultar status e validar se a localização está ativa ou desatualizada.
+
+## 7. Funcionamento esperado — Motorista
+
+Na tela do motorista, dentro do evento ou viagem ativa, deve existir uma área chamada:
+
+```text
+Localização do ônibus
+```
+
+Quando a localização ainda não estiver ativa, mostrar:
+
+```text
+Compartilhe a localização do ônibus para que os passageiros acompanhem a viagem pela passagem virtual.
+
+[Iniciar localização]
+```
+
+Ao clicar em “Iniciar localização”:
+
+1. O navegador solicita permissão de localização.
+2. Se o motorista permitir, o sistema começa a atualizar a posição.
+3. A tela mostra o status ativo.
+
+Exemplo de estado ativo:
+
+```text
+Localização ativa
+
+Última atualização: há 12 segundos.
+Os passageiros desta viagem podem acompanhar a localização pela passagem virtual.
+
+[Encerrar localização]
+```
+
+Se a permissão for negada:
+
+```text
+Não foi possível ativar a localização.
+
+Permita o acesso à localização no navegador para compartilhar a posição do ônibus.
+```
+
+Se a localização ficar desatualizada:
+
+```text
+Localização desatualizada.
+
+Não recebemos atualização recente deste dispositivo.
+Mantenha o app aberto para continuar compartilhando.
+```
+
+## 8. Funcionamento esperado — Passageiro
+
+Na passagem virtual, adicionar um card chamado:
+
+```text
+Localização do ônibus
+```
+
+Quando houver localização ativa:
+
+```text
+O ônibus está compartilhando a localização desta viagem.
+
+Última atualização: há 35 segundos.
+
+[Abrir no mapa]
+```
+
+O botão “Abrir no mapa” deve abrir o mapa nativo do celular com a última posição conhecida do ônibus.
+
+Quando a localização estiver desatualizada:
+
+```text
+A localização do ônibus está desatualizada.
+
+Última atualização recebida às 08:42.
+Acompanhe os avisos da viagem ou entre em contato com a empresa.
+```
+
+Quando a localização não estiver ativa:
+
+```text
+A localização do ônibus ainda não foi iniciada.
+
+Quando a equipe da viagem ativar o compartilhamento, a posição aparecerá aqui.
+```
+
+## 9. Mapa
+
+Na primeira versão, não criar mapa complexo dentro do SmartBus.
+
+Usar botão para abrir a localização no mapa nativo do celular, como Google Maps, Apple Maps ou app padrão do dispositivo.
+
+O SmartBus deve exibir apenas:
+
+* status da localização;
+* horário da última atualização;
+* botão para abrir no mapa;
+* avisos da viagem.
+
+Em versão futura, poderá ser criado um mapa simples dentro da passagem virtual, com marcador do ônibus e ponto de embarque.
+
+## 10. Avisos da viagem
+
+A passagem virtual deve ter uma área de avisos.
+
+Exemplo:
+
+```text
+Avisos da viagem
+
+08:10 — O ônibus saiu da garagem.
+08:35 — O ônibus está a caminho do ponto Praça Central.
+08:48 — Embarque iniciado.
+```
+
+O motorista ou administrador poderá enviar avisos manuais, como:
+
+* ônibus saiu da garagem;
+* ônibus está a caminho;
+* ônibus próximo ao ponto;
+* embarque iniciado;
+* embarque encerrado;
+* aviso personalizado.
+
+Na primeira versão, priorizar avisos manuais. Não criar automações por distância nesta etapa.
+
+## 11. Notificações push
+
+A primeira versão pode permitir que o passageiro ative notificações no celular pela passagem virtual.
+
+Na passagem, exibir:
+
+```text
+Avisos no celular
+
+Receba alertas importantes desta viagem, como saída do ônibus, chegada ao ponto e início do embarque.
+
+[Ativar avisos no meu celular]
+```
+
+Quando o passageiro aceitar notificações, o sistema deve vincular o dispositivo à passagem/viagem.
+
+O envio de push deve ser tratado como apoio, não como canal obrigatório. Todos os avisos também devem aparecer dentro da passagem virtual.
+
+Se o navegador não permitir push, mostrar:
+
+```text
+Seu navegador não permite notificações neste momento.
+Você ainda pode acompanhar os avisos diretamente pela passagem virtual.
+```
+
+## 12. Como o sistema sabe para qual celular enviar
+
+O sistema não deve depender de número de telefone.
+
+O passageiro ativa os avisos pela passagem virtual. Quando ele permite notificações, o navegador gera uma inscrição daquele dispositivo.
+
+Essa inscrição deve ser vinculada à viagem/passagem do passageiro.
+
+O vínculo deve considerar, no mínimo:
+
+* empresa;
+* evento;
+* viagem;
+* ponto de embarque, quando existir;
+* venda;
+* passagem/ticket;
+* dispositivo inscrito para push;
+* status ativo ou inativo.
+
+Se o passageiro abrir a passagem em mais de um celular e ativar notificações nos dois, ambos poderão receber avisos.
+
+Se o passageiro trocar de celular ou navegador, deverá ativar novamente.
+
+## 13. Regras de segurança e isolamento
+
+Toda localização, aviso e inscrição de push deve respeitar o isolamento da empresa.
+
+O sistema nunca deve misturar dados entre empresas.
+
+A localização deve ser vinculada ao contexto correto:
+
+* empresa;
+* evento;
+* viagem;
+* veículo, quando disponível;
+* ponto de embarque, quando aplicável.
+
+Passageiros só devem acessar a localização da viagem vinculada à sua passagem.
+
+Motoristas e auxiliares só devem atualizar localização de viagens às quais tenham acesso operacional.
+
+## 14. Estados da localização
+
+A localização pode ter os seguintes estados:
+
+### Não iniciada
+
+Nenhum motorista ou auxiliar iniciou a localização.
+
+### Ativa
+
+O motorista iniciou o compartilhamento e o sistema recebeu atualização recente.
+
+### Desatualizada
+
+O sistema não recebeu atualização recente.
+
+Sugestão de regra visual: considerar desatualizada quando a última atualização passar de 2 minutos.
+
+### Encerrada
+
+O motorista ou auxiliar encerrou o compartilhamento.
+
+### Indisponível
+
+O navegador não permitiu acesso à localização ou houve falha operacional.
+
+## 15. Regras de UX
+
+A interface deve ser simples e clara.
+
+Evitar termos técnicos como:
+
+* geolocalização;
+* coordenadas;
+* latitude;
+* longitude;
+* subscription;
+* token;
+* push endpoint.
+
+Usar linguagem simples:
+
+* localização do ônibus;
+* acompanhar ônibus;
+* última atualização;
+* abrir no mapa;
+* ativar avisos;
+* localização desatualizada.
+
+Sempre informar que a localização depende do celular da equipe permanecer com o app aberto e com permissão ativa.
+
+Mensagem recomendada:
+
+```text
+A localização é atualizada enquanto a equipe da viagem estiver com o app aberto e a permissão de localização ativa.
+```
+
+## 16. Telas impactadas
+
+### PWA do motorista / auxiliar
+
+Adicionar área para:
+
+* iniciar localização;
+* encerrar localização;
+* ver status;
+* ver última atualização;
+* enviar avisos manuais.
+
+### Passagem virtual
+
+Adicionar área para:
+
+* acompanhar localização;
+* abrir localização no mapa;
+* ativar notificações;
+* visualizar histórico de avisos.
+
+### Admin do evento
+
+Adicionar área para:
+
+* visualizar status da localização;
+* enviar avisos manuais;
+* consultar últimos avisos enviados;
+* verificar última atualização recebida.
+
+## 17. Critérios de aceite
+
+O recurso será considerado correto quando:
+
+1. Motorista conseguir iniciar localização no PWA.
+2. Motorista conseguir encerrar localização.
+3. Sistema mostrar última atualização recebida.
+4. Passageiro conseguir ver status da localização na passagem virtual.
+5. Passageiro conseguir abrir a posição do ônibus no mapa nativo do celular.
+6. Passageiro conseguir visualizar avisos da viagem na passagem virtual.
+7. Admin ou motorista conseguir enviar aviso manual.
+8. Avisos enviados ficarem registrados no histórico da passagem.
+9. Notificações push não forem obrigatórias para funcionamento do recurso.
+10. Se push falhar, o aviso continuar disponível dentro da passagem virtual.
+11. Localização antiga aparecer como desatualizada.
+12. Dados de uma empresa não aparecerem para outra empresa.
+13. Passageiro não acessar localização de viagem que não pertence à sua passagem.
+14. O sistema não prometer rastreamento em segundo plano.
+15. O recurso funcionar de forma simples e previsível.
+
+## 18. Textos sugeridos
+
+### Card na passagem virtual
+
+```text
+Localização do ônibus
+
+Acompanhe a posição mais recente do ônibus desta viagem.
+
+Última atualização: há poucos segundos.
+
+[Abrir no mapa]
+```
+
+### Localização desatualizada
+
+```text
+A localização está desatualizada.
+
+A última posição foi recebida às 08:42.
+Acompanhe os avisos da viagem para novas atualizações.
+```
+
+### Localização não iniciada
+
+```text
+A localização ainda não foi iniciada.
+
+Quando a equipe da viagem ativar o compartilhamento, a posição aparecerá aqui.
+```
+
+### Ativar notificações
+
+```text
+Receba avisos desta viagem no seu celular.
+
+Você será avisado sobre saída do ônibus, chegada ao ponto e início do embarque.
+
+[Ativar avisos]
+```
+
+### Aviso sobre limitação do PWA
+
+```text
+A localização depende do celular da equipe permanecer com o app aberto e com permissão de localização ativa.
+```
+
+## 19. Evoluções futuras
+
+Após validar o uso real do recurso, avaliar:
+
+* mapa simples dentro da passagem virtual;
+* marcador do ônibus e do ponto de embarque;
+* notificação automática quando o ônibus se aproximar do ponto;
+* previsão aproximada de chegada;
+* alerta automático de localização desatualizada;
+* relatórios operacionais de localização por viagem;
+* histórico de rota para auditoria interna.
+
+Essas evoluções não devem ser implementadas na primeira versão.
+
+## 20. Recomendação final de implementação
+
+Implementar primeiro a versão simples:
+
+1. localização iniciada manualmente pelo motorista;
+2. última posição salva;
+3. card na passagem virtual;
+4. botão para abrir no mapa nativo;
+5. avisos manuais;
+6. histórico de avisos na passagem;
+7. push como opcional, não obrigatório.
+
+Não implementar mapa interno avançado, ETA automático ou rastreamento em segundo plano nesta etapa.
