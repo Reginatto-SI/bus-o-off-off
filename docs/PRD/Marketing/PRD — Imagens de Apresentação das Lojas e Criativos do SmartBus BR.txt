@@ -1,0 +1,514 @@
+# PRD — Imagens de Apresentação das Lojas e Criativos do SmartBus BR
+
+## 1. Objetivo
+
+Criar um padrão oficial para as imagens de apresentação do SmartBus BR nas lojas de aplicativos e para os criativos comerciais derivados dessas imagens.
+
+As artes devem apresentar o SmartBus BR como uma plataforma profissional para empresas venderem passagens, organizarem excursões, controlarem embarques e gerirem a operação de transporte com mais clareza.
+
+O foco principal é B2B: empresas de turismo, excursões, fretamento, eventos, viagens religiosas, viagens esportivas, passeios e operações de transporte recorrente.
+
+---
+
+## 2. Contexto
+
+O SmartBus BR é uma plataforma de venda de passagens e gestão de eventos de transporte.
+
+O sistema ajuda empresas a:
+
+* vender passagens online;
+* divulgar passeios, excursões e viagens;
+* organizar passageiros;
+* controlar embarques;
+* validar passagens por QR Code;
+* acompanhar vendas e operação;
+* trabalhar com patrocinadores, parceiros e canais digitais;
+* profissionalizar a experiência do passageiro.
+
+As imagens das lojas devem comunicar essa proposta com clareza, sem depender de textos longos.
+
+---
+
+## 3. Regra de ouro
+
+As imagens devem vender o valor do SmartBus BR para empresas, mas sem parecer propaganda exagerada.
+
+O visual deve ser:
+
+* profissional;
+* premium;
+* moderno;
+* confiável;
+* direto;
+* com linguagem B2B;
+* alinhado à identidade visual da marca.
+
+As imagens não devem parecer infantis, genéricas ou desconectadas do produto real.
+
+---
+
+## 4. Público-alvo principal
+
+As imagens devem falar principalmente com:
+
+* empresas que vendem passagens;
+* organizadores de excursões;
+* agências de viagens;
+* empresas de turismo;
+* empresas de fretamento;
+* organizadores de eventos com transporte;
+* operadores que precisam controlar embarque;
+* empresas que querem vender pelo digital sem criar sistema próprio.
+
+O passageiro também deve entender o valor, mas não é o foco principal da comunicação.
+
+---
+
+## 5. Direção visual oficial
+
+O estilo visual aprovado deve seguir o conceito do exemplo apresentado:
+
+* fundo claro, limpo e sofisticado;
+* uso forte do laranja SmartBus BR;
+* contraste com preto/grafite;
+* ilustrações profissionais, não infantis;
+* mockups de celular com telas do app;
+* cards de dashboard;
+* ônibus moderno;
+* QR Code;
+* mapa, rota e pin de localização;
+* operadores/gestores usando notebook, celular ou tablet;
+* sensação de tecnologia, organização e crescimento.
+
+A arte deve misturar:
+
+* ilustração editorial moderna;
+* elementos de interface real;
+* mockup de celular;
+* linguagem comercial B2B;
+* ícones simples e consistentes.
+
+---
+
+## 6. Paleta visual
+
+Usar como base:
+
+* Preto/grafite para áreas premium e contraste;
+* Branco ou off-white para fundo principal;
+* Laranja SmartBus BR como cor de destaque;
+* Cinza claro para elementos de apoio;
+* Verde somente para indicar crescimento positivo, se necessário.
+
+Evitar:
+
+* excesso de cores;
+* visual colorido demais;
+* fundo muito poluído;
+* aparência de panfleto popular;
+* gradientes muito chamativos;
+* elementos que pareçam infantis.
+
+---
+
+## 7. Tipografia
+
+A tipografia deve ser:
+
+* forte;
+* moderna;
+* limpa;
+* fácil de ler em tela pequena;
+* com hierarquia clara.
+
+Os títulos devem ser grandes e curtos.
+
+Os subtítulos devem ter no máximo uma ou duas linhas.
+
+Evitar textos pequenos demais, parágrafos longos e excesso de informação em uma única imagem.
+
+---
+
+## 8. Formatos de entrega
+
+### 8.1 Google Play
+
+Criar:
+
+* Ícone do app: 512 × 512 px;
+* Feature Graphic: 1024 × 500 px;
+* Imagens de apresentação celular: 1080 × 1920 px;
+* Quantidade recomendada: 5 imagens principais;
+* Formato: PNG ou JPG conforme exigência da loja.
+
+### 8.2 Apple App Store
+
+Criar:
+
+* Ícone do app: 1024 × 1024 px;
+* Screenshots promocionais iPhone: usar tamanho aceito pelo App Store Connect para iPhone moderno, preferencialmente versão de maior resolução disponível;
+* Quantidade recomendada: 5 imagens principais;
+* Formato: PNG ou JPG;
+* Sem transparência.
+
+### 8.3 Padrão interno recomendado
+
+Para criação inicial, produzir as artes em proporção vertical 9:16, com master em alta resolução.
+
+Depois adaptar para os tamanhos finais exigidos por cada loja.
+
+---
+
+## 9. Estrutura do carrossel de 5 imagens
+
+As imagens devem formar uma narrativa.
+
+Não concentrar todas as funções em uma única imagem.
+
+Cada imagem deve ter um tema principal.
+
+---
+
+# Imagem 1 — Venda online para empresas
+
+## Objetivo
+
+Mostrar que o SmartBus BR permite que a empresa venda passagens online com mais agilidade e profissionalismo.
+
+## Título
+
+Venda passagens online com mais agilidade
+
+## Subtítulo
+
+Sua empresa pronta para vender passeios, excursões e viagens em poucos minutos.
+
+## Visual recomendado
+
+* Smartphone central mostrando uma vitrine/lista de eventos;
+* Cards de passeio ou viagem;
+* Botão de compra visível;
+* Ônibus moderno ao fundo;
+* Gestor acompanhando vendas em notebook ou tablet;
+* Card pequeno com indicador “Vendas online”;
+* Pin de localização com ônibus.
+
+## Mensagem que a imagem precisa passar
+
+A empresa consegue sair do atendimento manual e vender de forma organizada pelo digital.
+
+---
+
+# Imagem 2 — Checkout simples para o passageiro
+
+## Objetivo
+
+Mostrar que a experiência de compra é simples, clara e rápida para o passageiro.
+
+## Título
+
+Checkout simples para o passageiro
+
+## Subtítulo
+
+Compra clara, rápida e integrada ao pagamento online.
+
+## Visual recomendado
+
+* Celular com tela de checkout;
+* Campos simples de comprador e passageiros;
+* Escolha de assento ou embarque;
+* Botão de pagamento destacado;
+* Ícones genéricos de Pix/cartão, sem destacar bandeiras específicas;
+* Elementos de segurança e confirmação.
+
+## Mensagem que a imagem precisa passar
+
+O passageiro compra com facilidade, e a empresa reduz atrito no processo de venda.
+
+---
+
+# Imagem 3 — Embarque com QR Code
+
+## Objetivo
+
+Mostrar que o SmartBus BR ajuda a controlar o embarque com mais segurança e menos confusão.
+
+## Título
+
+Embarque com QR Code
+
+## Subtítulo
+
+Mais controle na entrada, menos filas e mais segurança na operação.
+
+## Visual recomendado
+
+* Passagem digital com QR Code;
+* Motorista ou auxiliar validando passagem no celular;
+* Ônibus moderno próximo ao ponto de embarque;
+* Passageiros organizados, sem multidão;
+* Selo visual de passagem validada;
+* Card com status: embarcado, pendente ou validado.
+
+## Mensagem que a imagem precisa passar
+
+A empresa consegue saber quem embarcou, quem está pendente e controlar melhor a operação.
+
+---
+
+# Imagem 4 — Gestão da operação
+
+## Objetivo
+
+Mostrar que o SmartBus BR não é apenas uma vitrine de venda, mas também uma ferramenta de gestão.
+
+## Título
+
+Gestão completa da operação
+
+## Subtítulo
+
+Acompanhe vendas, passageiros, embarques e resultados em um painel simples.
+
+## Visual recomendado
+
+* Dashboard com cards grandes;
+* Indicadores de vendas, passageiros, embarcados e pendentes;
+* Gráfico simples de crescimento;
+* Gestor usando notebook ou tablet;
+* Interface limpa, sem excesso de números reais;
+* Elementos de relatórios e controle.
+
+## Mensagem que a imagem precisa passar
+
+A empresa tem visão da operação em tempo real e toma decisões com mais segurança.
+
+---
+
+# Imagem 5 — Crescimento com parceiros e eventos
+
+## Objetivo
+
+Mostrar o potencial comercial do SmartBus BR para transformar eventos e passeios em vendas recorrentes.
+
+## Título
+
+Transforme eventos em vendas recorrentes
+
+## Subtítulo
+
+Divulgue passeios, organize embarques e fortaleça sua operação comercial.
+
+## Visual recomendado
+
+* Vários cards de eventos/passeios;
+* Rede de parceiros ou empresas conectadas;
+* Ônibus em rota;
+* Pin de localização;
+* Elementos de divulgação e canais digitais;
+* Sensação de escala, crescimento e recorrência.
+
+## Mensagem que a imagem precisa passar
+
+A empresa pode usar o SmartBus BR como canal de venda, gestão e expansão comercial.
+
+---
+
+## 10. Feature Graphic do Google Play
+
+## Tamanho
+
+1024 × 500 px.
+
+## Objetivo
+
+Ser a imagem principal de impacto na Google Play.
+
+## Texto sugerido
+
+SmartBus BR
+Venda passagens online e organize excursões com mais controle
+
+## Visual recomendado
+
+* Fundo premium escuro ou claro;
+* Logo SmartBus BR;
+* Pin com ônibus;
+* Smartphone com tela do app;
+* Ônibus moderno;
+* Cards pequenos de venda, QR Code e gestão;
+* Pouco texto;
+* Elementos importantes centralizados.
+
+## Regra importante
+
+A Feature Graphic deve funcionar como capa comercial, não como print detalhado do sistema.
+
+---
+
+## 11. Ícone do app
+
+## Direção aprovada
+
+Usar símbolo simplificado:
+
+* pin laranja;
+* ônibus interno;
+* fundo preto/grafite ou branco;
+* sem texto;
+* sem slogan;
+* sem logo completa.
+
+## Versão recomendada
+
+Pin laranja com ônibus dentro sobre fundo preto/grafite.
+
+## Justificativa
+
+O ícone precisa ser reconhecido em tamanho pequeno. A logo completa com “SmartBus BR Viagens & Passeios” perde leitura quando instalada no celular.
+
+---
+
+## 12. O que pode aparecer nos criativos
+
+Pode aparecer:
+
+* mockup de celular;
+* tela de vitrine de eventos;
+* tela de checkout;
+* passagem digital;
+* QR Code;
+* ônibus;
+* dashboard;
+* gráficos simples;
+* operador/gestor;
+* mapa ou rota;
+* pin de localização;
+* cards de eventos;
+* benefícios curtos.
+
+---
+
+## 13. O que não deve aparecer
+
+Não mostrar:
+
+* comissão da plataforma;
+* split financeiro;
+* dados reais de empresas;
+* dados reais de passageiros;
+* valores financeiros sensíveis;
+* promessas como “venda garantida”;
+* frases exageradas;
+* excesso de funcionalidades em uma única arte;
+* textos pequenos demais;
+* prints confusos;
+* telas com erro;
+* informações internas administrativas sensíveis.
+
+---
+
+## 14. Tom de comunicação
+
+A comunicação deve ser clara, comercial e confiável.
+
+Usar frases como:
+
+* Venda passagens online com mais agilidade;
+* Organize excursões com mais controle;
+* Embarque com QR Code;
+* Gestão simples para sua operação;
+* Transforme eventos em vendas recorrentes;
+* Venda online, organize passageiros e controle embarques em um só lugar.
+
+Evitar frases como:
+
+* O melhor app do Brasil;
+* Ganhe dinheiro sem esforço;
+* Venda automaticamente sem trabalhar;
+* Sistema revolucionário;
+* Nunca mais tenha problemas;
+* Garantia de vendas.
+
+---
+
+## 15. Critérios de qualidade visual
+
+Cada imagem deve cumprir:
+
+* título legível em tela pequena;
+* subtítulo curto;
+* composição limpa;
+* mockup de celular bem visível;
+* identidade SmartBus BR clara;
+* no máximo uma promessa principal por imagem;
+* visual premium;
+* elementos B2B;
+* coerência entre todas as imagens;
+* sem poluição visual.
+
+---
+
+## 16. Critérios de aceite
+
+O pacote de imagens estará aprovado quando:
+
+* houver 5 imagens verticais consistentes;
+* cada imagem tiver um tema próprio;
+* o conjunto contar uma narrativa comercial;
+* a marca SmartBus BR estiver presente sem poluir;
+* o visual seguir o estilo premium ilustrado aprovado;
+* os textos forem claros e curtos;
+* as imagens puderem ser adaptadas para Google Play e App Store;
+* nenhuma arte expuser dado sensível;
+* nenhuma arte criar promessa exagerada;
+* o foco B2B estiver evidente.
+
+---
+
+## 17. Entregáveis finais
+
+O time de design deve entregar:
+
+## 17.1 Arquivos principais
+
+* 5 imagens verticais promocionais;
+* 1 Feature Graphic para Google Play;
+* 1 ícone iOS;
+* 1 ícone Android;
+* versões adaptadas conforme exigência de cada loja.
+
+## 17.2 Arquivos editáveis
+
+* arquivo fonte editável;
+* imagens em alta resolução;
+* versão com textos editáveis;
+* exportação final em PNG/JPG.
+
+## 17.3 Organização sugerida das pastas
+
+```text
+SmartBusBR_Lojas/
+  01_Icones/
+  02_Google_Play/
+  03_App_Store/
+  04_Criativos_Editaveis/
+  05_Referencias/
+```
+
+---
+
+## 18. Observação final
+
+As imagens das lojas devem funcionar como uma apresentação comercial do SmartBus BR.
+
+O objetivo não é apenas mostrar telas, mas explicar rapidamente por que uma empresa deve usar a plataforma para vender passagens, organizar excursões e controlar sua operação.
+
+A melhor abordagem é combinar:
+
+* tela real do app;
+* ilustração profissional;
+* texto curto;
+* visual premium;
+* foco em benefício empresarial.
