@@ -22,6 +22,7 @@ import { getConfirmationResponsibilityText } from '@/lib/intermediationPolicy';
 import { resolveTicketPurchaseConfirmedAt, resolveTicketPurchaseOriginLabel } from '@/lib/ticketPurchaseMetadata';
 import { isInstalledAppPaymentContext, logAsaasInvoiceOpen } from '@/lib/asaasInvoiceUrl';
 import { PagbankPixPanel } from '@/components/public/PagbankPixPanel';
+import { usePageMeta } from '@/lib/usePageMeta';
 
 interface CompanyInfo {
   name: string;
@@ -67,6 +68,22 @@ export default function Confirmation() {
   const [lastVerificationAt, setLastVerificationAt] = useState<Date | null>(null);
   const [commercialPartners, setCommercialPartners] = useState<{ name: string; logo_url: string | null }[]>([]);
   const [eventSponsors, setEventSponsors] = useState<{ name: string; logo_url: string | null }[]>([]);
+
+  // Metadados OpenGraph da confirmação: título/descrição próprios da rota
+  // (og:type e og:url autorreferente são aplicados pelo hook). Sem dados
+  // sensíveis do passageiro nas tags.
+  const confirmationMetaTitle = sale?.event?.name
+    ? `Sua passagem | ${sale.event.name}`.slice(0, 59)
+    : 'Sua passagem | SmartBus';
+  const confirmationMetaDescription = sale?.event
+    ? `Passagens para ${sale.event.name} em ${sale.event.city} via SmartBus. Confirme embarque, assentos e pagamento.`
+    : 'Passagens de ônibus e van com pagamento seguro via SmartBus.';
+
+  usePageMeta({
+    title: confirmationMetaTitle,
+    description: confirmationMetaDescription,
+    path: `/confirmacao/${id ?? ''}`,
+  });
   // Removed verifyCalledRef — polling now calls verify-payment-status periodically (see below)
 
   // Log seguro de montagem (sem dados sensíveis) para diagnosticar o retorno do Asaas.

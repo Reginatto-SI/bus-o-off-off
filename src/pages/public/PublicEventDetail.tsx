@@ -79,6 +79,8 @@ export default function PublicEventDetail() {
     description: metaDescription,
     path: `/eventos/${id ?? ''}`,
     ogType: 'article',
+    // Imagem do evento no preview de compartilhamento (WhatsApp/X/etc.).
+    ogImage: event?.image_url ?? undefined,
   });
 
   // Schema.org Event para enriquecer resultados de busca da página do evento.

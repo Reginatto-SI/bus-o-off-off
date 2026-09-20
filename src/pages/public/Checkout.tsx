@@ -44,6 +44,7 @@ import { toast } from "sonner";
 import { formatCurrencyBRL } from "@/lib/currency";
 import { getTripSeatOccupancyRpc } from "@/lib/tripSeatOccupancyRpc";
 import { formatPhoneBR } from "@/lib/phone";
+import { usePageMeta } from "@/lib/usePageMeta";
 import { useRuntimePaymentEnvironment } from "@/hooks/use-runtime-payment-environment";
 import {
   BENEFIT_PRICING_RULE_VERSION,
@@ -346,6 +347,25 @@ export default function Checkout() {
   const isCreditCardAvailable = !isPagbankGateway;
   const hasConfiguredPlatformFee =
     Number.isFinite(companyPlatformFeePercent) && companyPlatformFeePercent > 0;
+
+  // Metadados OpenGraph do checkout: título/descrição próprios da rota para
+  // previews de compartilhamento corretos (og:type e og:url autorreferente
+  // são aplicados pelo hook).
+  const checkoutMetaTitle = event?.name
+    ? `Checkout | ${event.name}`.slice(0, 59)
+    : "Finalizar compra | SmartBus";
+  const checkoutMetaDescription = event
+    ? `Finalize a compra das passagens para ${event.name} em ${event.city}. Escolha o assento e pague online com segurança.`.slice(
+        0,
+        158,
+      )
+    : "Finalize a compra das suas passagens de ônibus e van no SmartBus com pagamento seguro.";
+
+  usePageMeta({
+    title: checkoutMetaTitle,
+    description: checkoutMetaDescription,
+    path: `/eventos/${id ?? ""}/checkout`,
+  });
 
   // Helper: get price for a seat based on category pricing
   const getSeatPrice = useCallback((seatId: string): number => {
