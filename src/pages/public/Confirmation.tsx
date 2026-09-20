@@ -22,6 +22,7 @@ import { getConfirmationResponsibilityText } from '@/lib/intermediationPolicy';
 import { resolveTicketPurchaseConfirmedAt, resolveTicketPurchaseOriginLabel } from '@/lib/ticketPurchaseMetadata';
 import { isInstalledAppPaymentContext, logAsaasInvoiceOpen } from '@/lib/asaasInvoiceUrl';
 import { PagbankPixPanel } from '@/components/public/PagbankPixPanel';
+import { usePageMeta } from '@/lib/usePageMeta';
 
 interface CompanyInfo {
   name: string;

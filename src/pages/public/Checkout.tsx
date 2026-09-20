@@ -44,6 +44,7 @@ import { toast } from "sonner";
 import { formatCurrencyBRL } from "@/lib/currency";
 import { getTripSeatOccupancyRpc } from "@/lib/tripSeatOccupancyRpc";
 import { formatPhoneBR } from "@/lib/phone";
+import { usePageMeta } from "@/lib/usePageMeta";
 import { useRuntimePaymentEnvironment } from "@/hooks/use-runtime-payment-environment";
 import {
   BENEFIT_PRICING_RULE_VERSION,
