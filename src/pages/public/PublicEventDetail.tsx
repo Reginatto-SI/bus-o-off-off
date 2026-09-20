@@ -82,6 +82,31 @@ export default function PublicEventDetail() {
   });
 
   // Schema.org Event para enriquecer resultados de busca da página do evento.
+  // Local preferencial: endereço completo do primeiro ponto de embarque (PostalAddress);
+  // fallback para cidade do evento quando nenhum embarque com endereço estiver carregado.
+  const boardingWithAddress = locations.find((loc) => loc.boarding_location?.address);
+  const jsonLdLocation = event?.name
+    ? boardingWithAddress?.boarding_location
+      ? {
+          '@type': 'Place',
+          name: boardingWithAddress.boarding_location.name,
+          address: {
+            '@type': 'PostalAddress',
+            streetAddress: boardingWithAddress.boarding_location.address,
+            addressLocality: boardingWithAddress.boarding_location.city || event.city,
+            ...(boardingWithAddress.boarding_location.state && {
+              addressRegion: boardingWithAddress.boarding_location.state,
+            }),
+            addressCountry: 'BR',
+          },
+        }
+      : {
+          '@type': 'Place',
+          name: event.city,
+          address: event.city,
+        }
+    : null;
+
   useJsonLd(
     'event',
     event?.name && event?.date
@@ -93,16 +118,21 @@ export default function PublicEventDetail() {
           startDate: event.date,
           eventStatus: 'https://schema.org/EventScheduled',
           eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
-          location: {
-            '@type': 'Place',
-            name: event.city,
-            address: event.city,
-          },
+          location: jsonLdLocation,
           organizer: {
             '@type': 'Organization',
             name: eventCompanyName,
           },
           url: `https://www.smartbus.com.br/eventos/${event.id}`,
+          // Oferta obrigatória para rich results: a consulta já filtra status 'a_venda',
+          // portanto quando o evento está renderizado há ingressos disponíveis.
+          offers: {
+            '@type': 'Offer',
+            price: event.unit_price,
+            priceCurrency: 'BRL',
+            availability: 'https://schema.org/InStock',
+            url: `https://www.smartbus.com.br/eventos/${event.id}`,
+          },
         }
       : null,
   );
