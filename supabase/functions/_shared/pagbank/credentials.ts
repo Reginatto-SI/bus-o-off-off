@@ -44,9 +44,21 @@ export function pagbankSecretNames(environment: PagbankEnvironment) {
     clientSecret: `PAGBANK_CLIENT_SECRET_${suffix}`,
     marketplaceAccountId: `PAGBANK_MARKETPLACE_ACCOUNT_ID_${suffix}`,
     webhookToken: `PAGBANK_WEBHOOK_TOKEN_${suffix}`,
+    platformToken: `PAGBANK_SMARTBUS_TOKEN_${suffix}`,
     encryptionKey: "PAGBANK_TOKEN_ENCRYPTION_KEY",
   };
 }
+
+/**
+ * Token da conta da plataforma SmartBus. Os endpoints oficiais /oauth2/token e
+ * /oauth2/refresh exigem `Authorization: Bearer <token>` além de X_CLIENT_ID e
+ * X_CLIENT_SECRET. Fonte única: o secret já existente no backend.
+ */
+export function resolvePlatformAccessToken(environment: PagbankEnvironment): string | null {
+  const value = Deno.env.get(pagbankSecretNames(environment).platformToken)?.trim();
+  return value ? value : null;
+}
+
 
 /** Lista nomes de secrets ausentes para o ambiente (sem valores). */
 export function missingPagbankSecrets(environment: PagbankEnvironment): {
