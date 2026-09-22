@@ -64,11 +64,25 @@ Deno.serve(async (req) => {
   // compatibilidade para os secrets de ambiente.
   const { clientId, clientSecret } = await resolvePlatformConnectCredentials(supabaseAdmin, environment);
   if (!clientId || !clientSecret) return adminRedirect("error", "connect_not_configured", returnOrigin);
+  // A API oficial exige também o token da conta da plataforma (Bearer) nesta troca.
+  const platformToken = resolvePlatformAccessToken(environment);
+  if (!platformToken) {
+    logPaymentTrace("warn", "pagbank-connect-callback", "platform_token_missing", {
+      company_id: stateRow.company_id, missing: pagbankSecretNames(environment).platformToken,
+    });
+    return adminRedirect("error", "connect_not_configured", returnOrigin);
+  }
 
   const redirectUri = `${Deno.env.get("SUPABASE_URL")}/functions/v1/pagbank-connect-callback`;
   const tokenRes = await fetch(`${PAGBANK_API_BASE_URLS[environment]}/oauth2/token`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json", X_CLIENT_ID: clientId, X_CLIENT_SECRET: clientSecret },
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Authorization: `Bearer ${platformToken}`,
+      X_CLIENT_ID: clientId,
+      X_CLIENT_SECRET: clientSecret,
+    },
     body: JSON.stringify({ grant_type: "authorization_code", code, redirect_uri: redirectUri }),
   }).catch(() => null);
   const tokenBody = tokenRes ? await tokenRes.json().catch(() => null) : null;
