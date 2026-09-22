@@ -248,9 +248,15 @@ async function refreshConnectToken(supabaseAdmin: SupabaseAdminClient, connectio
   const clientId = platform.clientId;
   const clientSecret = platform.clientSecret;
   const refreshToken = await decryptSecret(connection.refresh_token_enc);
-  if (!clientId || !clientSecret || !refreshToken) {
+  const platformToken = resolvePlatformAccessToken(connection.environment);
+  if (!clientId || !clientSecret || !refreshToken || !platformToken) {
     throw new PagbankError("pagbank_configuration_missing", "Não foi possível renovar a autorização PagBank.", 409, {
-      missing: [!clientId && names.clientId, !clientSecret && names.clientSecret, !refreshToken && "refresh_token"].filter(Boolean),
+      missing: [
+        !clientId && names.clientId,
+        !clientSecret && names.clientSecret,
+        !platformToken && names.platformToken,
+        !refreshToken && "refresh_token",
+      ].filter(Boolean),
     });
   }
   const res = await fetch(`${PAGBANK_API_BASE_URLS[connection.environment]}/oauth2/refresh`, {
@@ -258,6 +264,7 @@ async function refreshConnectToken(supabaseAdmin: SupabaseAdminClient, connectio
     headers: {
       "Content-Type": "application/json",
       Accept: "application/json",
+      Authorization: `Bearer ${platformToken}`,
       X_CLIENT_ID: clientId,
       X_CLIENT_SECRET: clientSecret,
     },
