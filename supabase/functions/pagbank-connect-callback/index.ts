@@ -6,7 +6,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { logPaymentTrace } from "../_shared/payment-observability.ts";
 import { PAGBANK_API_BASE_URLS, PAGBANK_CONNECT_SCOPES } from "../_shared/pagbank/core.ts";
 import { encryptSecret } from "../_shared/pagbank/crypto.ts";
-import { resolvePlatformConnectCredentials } from "../_shared/pagbank/credentials.ts";
+import { resolvePlatformConnectCredentials, resolvePlatformAccessToken, pagbankSecretNames } from "../_shared/pagbank/credentials.ts";
 
 // Rota de retorno desta autorização: a própria configuração de pagamentos.
 // Caminho fixo no código; somente a ORIGEM vem do state gravado no início.
