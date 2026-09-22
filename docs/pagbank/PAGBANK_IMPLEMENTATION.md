@@ -299,3 +299,11 @@ funcional.
 - Evidência de que o `client_id` é reconhecido: com `client_id` inexistente a resposta é 302 para `connect-web.sandbox.pagbank.com.br/error`; com o nosso, o PagBank cria sessão de autorização e envia ao login. O `redirect_uri` só é conferido após o consentimento.
 - Conclusão: nada a corrigir no SmartBus nesta etapa. O bloqueio está no login da conta usada como vendedor Sandbox (conta/credencial não apta ao login Sandbox do Connect, ou sessão de Produção interferindo no login central). Possuir token Sandbox não comprova existir conta vendedora Sandbox apta ao Connect.
 - Nenhuma alteração de código, aplicação, secret ou Asaas. Cobrança PIX/cartão/split segue fora desta etapa.
+
+## Checkpoint 2026-09-22 — Autorizacao Connect concluida
+
+- Causa raiz comprovada: as chamadas oficiais POST /oauth2/token e POST /oauth2/refresh exigem `Authorization: Bearer <token da conta da plataforma>` alem de `X_CLIENT_ID` e `X_CLIENT_SECRET`. Sem o Bearer o PagBank respondia HTTP 401 (`token_exchange_failed` nos logs de 2026-09-22T00:37 e 00:38), o callback caia em erro e a conta permanecia "Nao conectada".
+- Correcao minima: `pagbankSecretNames` passou a expor `platformToken` (`PAGBANK_SMARTBUS_TOKEN_<AMBIENTE>`, secret ja existente, fonte unica) e `resolvePlatformAccessToken` le esse valor no backend. O callback (`pagbank-connect-callback`) e `refreshConnectToken` (`_shared/pagbank/credentials.ts`) passaram a enviar o header `Authorization: Bearer`.
+- Retorno de navegacao: o callback le `return_origin` do state ANTES da marcacao de uso unico, de modo que erros e states expirados tambem retornam para `/admin/empresa?tab=pagamentos` na origem correta (antes caiam no dominio de Producao, que redirecionava para `/admin/eventos` por falta de sessao).
+- Sem migration, sem novo secret, sem alteracao de aplicacao Connect, client_id, client_secret, account_id da plataforma, split, cobranca, confirmacao ou Asaas. PagBank segue restrito a Sandbox.
+- `NAO COMPROVADO` ate o proximo teste real: conclusao do vinculo com a conta vendedora Sandbox (status `connected` + `external_account_id`).
