@@ -6,7 +6,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { logPaymentTrace } from "../_shared/payment-observability.ts";
 import { PAGBANK_API_BASE_URLS, PAGBANK_CONNECT_SCOPES } from "../_shared/pagbank/core.ts";
 import { encryptSecret } from "../_shared/pagbank/crypto.ts";
-import { resolvePlatformConnectCredentials } from "../_shared/pagbank/credentials.ts";
+import { resolvePlatformConnectCredentials, resolvePlatformAccessToken, pagbankSecretNames } from "../_shared/pagbank/credentials.ts";
 
 // Rota de retorno desta autorização: a própria configuração de pagamentos.
 // Caminho fixo no código; somente a ORIGEM vem do state gravado no início.
@@ -36,6 +36,15 @@ Deno.serve(async (req) => {
 
   const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
 
+  // Origem de retorno gravada no início do fluxo (lista fechada de hosts).
+  // Lida antes da marcação para preservar a tela de origem mesmo em erro.
+  const { data: originRow } = await supabaseAdmin
+    .from("pagbank_connect_states")
+    .select("return_origin")
+    .eq("state", state)
+    .maybeSingle();
+  const returnOrigin: string | null = originRow?.return_origin ?? null;
+
   // State: uso único e não expirado (marcação atômica).
   const { data: stateRow } = await supabaseAdmin
     .from("pagbank_connect_states")
@@ -45,10 +54,9 @@ Deno.serve(async (req) => {
     .gt("expires_at", new Date().toISOString())
     .select("company_id, environment, user_id, return_origin")
     .maybeSingle();
-  if (!stateRow) return adminRedirect("error", "state_invalid_or_expired");
-  // Origem já validada contra a lista fechada no início do fluxo.
-  const returnOrigin: string | null = stateRow.return_origin ?? null;
+  if (!stateRow) return adminRedirect("error", "state_invalid_or_expired", returnOrigin);
   if (oauthError || !code) return adminRedirect("denied", oauthError ?? "no_code", returnOrigin);
+
 
   const environment = stateRow.environment as "sandbox" | "production";
   if (environment !== "sandbox") return adminRedirect("error", "environment_not_allowed", returnOrigin);
@@ -56,11 +64,25 @@ Deno.serve(async (req) => {
   // compatibilidade para os secrets de ambiente.
   const { clientId, clientSecret } = await resolvePlatformConnectCredentials(supabaseAdmin, environment);
   if (!clientId || !clientSecret) return adminRedirect("error", "connect_not_configured", returnOrigin);
+  // A API oficial exige também o token da conta da plataforma (Bearer) nesta troca.
+  const platformToken = resolvePlatformAccessToken(environment);
+  if (!platformToken) {
+    logPaymentTrace("warn", "pagbank-connect-callback", "platform_token_missing", {
+      company_id: stateRow.company_id, missing: pagbankSecretNames(environment).platformToken,
+    });
+    return adminRedirect("error", "connect_not_configured", returnOrigin);
+  }
 
   const redirectUri = `${Deno.env.get("SUPABASE_URL")}/functions/v1/pagbank-connect-callback`;
   const tokenRes = await fetch(`${PAGBANK_API_BASE_URLS[environment]}/oauth2/token`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json", X_CLIENT_ID: clientId, X_CLIENT_SECRET: clientSecret },
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Authorization: `Bearer ${platformToken}`,
+      X_CLIENT_ID: clientId,
+      X_CLIENT_SECRET: clientSecret,
+    },
     body: JSON.stringify({ grant_type: "authorization_code", code, redirect_uri: redirectUri }),
   }).catch(() => null);
   const tokenBody = tokenRes ? await tokenRes.json().catch(() => null) : null;
