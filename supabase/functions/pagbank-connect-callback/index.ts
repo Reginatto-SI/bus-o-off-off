@@ -36,6 +36,15 @@ Deno.serve(async (req) => {
 
   const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
 
+  // Origem de retorno gravada no início do fluxo (lista fechada de hosts).
+  // Lida antes da marcação para preservar a tela de origem mesmo em erro.
+  const { data: originRow } = await supabaseAdmin
+    .from("pagbank_connect_states")
+    .select("return_origin")
+    .eq("state", state)
+    .maybeSingle();
+  const returnOrigin: string | null = originRow?.return_origin ?? null;
+
   // State: uso único e não expirado (marcação atômica).
   const { data: stateRow } = await supabaseAdmin
     .from("pagbank_connect_states")
@@ -45,10 +54,9 @@ Deno.serve(async (req) => {
     .gt("expires_at", new Date().toISOString())
     .select("company_id, environment, user_id, return_origin")
     .maybeSingle();
-  if (!stateRow) return adminRedirect("error", "state_invalid_or_expired");
-  // Origem já validada contra a lista fechada no início do fluxo.
-  const returnOrigin: string | null = stateRow.return_origin ?? null;
+  if (!stateRow) return adminRedirect("error", "state_invalid_or_expired", returnOrigin);
   if (oauthError || !code) return adminRedirect("denied", oauthError ?? "no_code", returnOrigin);
+
 
   const environment = stateRow.environment as "sandbox" | "production";
   if (environment !== "sandbox") return adminRedirect("error", "environment_not_allowed", returnOrigin);
