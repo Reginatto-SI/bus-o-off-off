@@ -1,7 +1,8 @@
 # Documento Master – Como publicar um evento e colocar para venda
 
-> **Observação importante:** referências a Stripe neste documento são legadas.
-> No cenário atual do produto, o gateway oficial é **Asaas**.
+> **Observação importante:** o SmartBus é multi-gateway. Referências antigas a
+> Stripe neste documento são legadas; Asaas permanece a referência operacional
+> histórica, sem ser o único gateway estrutural.
 
 ## 1. Objetivo do Processo
 Transformar um evento de rascunho em evento comercialmente ativo, liberando a venda de passagens nos canais habilitados.
@@ -16,7 +17,7 @@ Utilize este fluxo quando:
 - Evento previamente criado.
 - Viagens e embarques configurados.
 - Preço definido.
-- Conta de pagamentos oficial da empresa configurada no Asaas.
+- Conta da empresa configurada e apta no gateway disponibilizado e selecionado para ela.
 - Canais de venda configurados no evento.
 
 ## 4. Visão Geral do Processo

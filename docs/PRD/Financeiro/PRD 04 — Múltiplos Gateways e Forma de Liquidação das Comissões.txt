@@ -9,7 +9,9 @@ Este PRD estabelece que o gateway de pagamento é responsável por processar a c
 O sistema deve estar preparado para operar com:
 
 * Asaas;
+* PagBank;
 * Mercado Pago;
+* Stripe;
 * PayPal;
 * outros gateways futuros;
 * bancos ou provedores de pagamento que venham a ser integrados.
@@ -26,7 +28,10 @@ A forma de liquidação depende da capacidade do gateway.
 
 ## 2. Contexto
 
-Atualmente, o SmartBus BR utiliza o Asaas como gateway principal.
+O SmartBus BR é uma plataforma multi-gateway. Asaas é a integração atualmente
+consolidada e a referência operacional histórica; isso não o torna fonte da regra
+financeira nem gateway estrutural exclusivo. Cada empresa pode escolher entre os
+gateways disponibilizados para ela.
 
 O Asaas permite split automático para os envolvidos, quando a configuração está correta.
 
@@ -96,6 +101,27 @@ Pode ser:
 
 O Developer registra esse pagamento na tela de Comissões e Repasses.
 
+## 4.6 Beneficiário econômico, recebedor técnico e obrigação de repasse
+
+O beneficiário econômico é quem tem direito ao valor pela regra oficial. O recebedor
+técnico é a conta que o gateway consegue creditar diretamente. Se os dois não
+coincidirem, o valor continua pertencendo ao beneficiário econômico e deve permanecer
+como obrigação de repasse no ledger/conciliação até a liquidação aprovada.
+
+A SmartBus/Marketplace é beneficiária permanente da taxa. Sócio e representante são
+condicionais. Um gateway só está apto para vendas SmartBus quando houver, naquele
+gateway e ambiente, uma forma válida de a parcela SmartBus chegar à SmartBus. Não
+liquidar diretamente sócio ou representante não torna o gateway inapto, desde que
+seus direitos econômicos sejam preservados como obrigações de repasse. Não haver
+caminho para a parcela SmartBus é falha de readiness da integração.
+
+Exemplo: em uma taxa de R$ 6,00 com os três participantes, cada um tem direito
+econômico a R$ 2,00. O multi-split completo liquida R$ 2,00 para cada recebedor. Se o
+gateway aceita somente empresa e Marketplace, a taxa pode chegar tecnicamente à
+SmartBus, mas apenas R$ 2,00 são receita SmartBus; R$ 2,00 do sócio e R$ 2,00 do
+representante continuam no ledger como obrigações. Recebimento técnico não altera o
+beneficiário econômico.
+
 ---
 
 ## 5. Tipos de gateway
@@ -104,7 +130,8 @@ O SmartBus BR deve classificar cada gateway conforme sua capacidade de liquidaç
 
 ## 5.1 Gateway com split completo
 
-Gateway que consegue liquidar automaticamente todos os recebedores aplicáveis.
+Gateway que consegue liquidar automaticamente todos os beneficiários aplicáveis em
+suas próprias contas técnicas.
 
 Exemplo atual:
 
@@ -131,7 +158,9 @@ Não deve permitir baixa manual.
 
 ## 5.2 Gateway com split parcial
 
-Gateway que consegue liquidar automaticamente apenas parte dos envolvidos.
+Gateway que consegue liquidar automaticamente apenas parte dos beneficiários. Deve
+existir caminho válido para a parcela SmartBus; parcelas econômicas de sócio ou
+representante não liquidadas diretamente permanecem como obrigações de repasse.
 
 Exemplo previsto:
 
@@ -154,16 +183,20 @@ Nesse caso, o sistema deve registrar:
 
 ---
 
-## 5.3 Gateway sem split
+## 5.3 Gateway sem multi-split
 
-Gateway que apenas cobra o comprador e envia o valor para uma conta principal, sem dividir automaticamente entre os envolvidos.
+Gateway que não divide automaticamente a taxa entre todos os beneficiários internos.
+“Sem split” neste PRD significa sem multi-split completo, não sem liquidação da taxa
+SmartBus. Deve existir forma válida de a parcela SmartBus chegar à SmartBus; caso
+contrário, o gateway não está apto para vendas SmartBus naquele ambiente.
 
 Cenário possível:
 
 * pagamento é confirmado;
 * SmartBus BR calcula a comissão;
 * sistema registra os valores devidos;
-* repasses precisam ser controlados manualmente.
+* parcelas de sócio/representante não liquidadas diretamente ficam como obrigações de
+  repasse no ledger/conciliação.
 
 Esse tipo de gateway deve ser suportado no futuro sem quebrar a estrutura do sistema.
 
@@ -287,7 +320,7 @@ Quando a venda for paga:
 
 ---
 
-## 12. Fluxo com gateway sem split
+## 12. Fluxo com gateway sem multi-split
 
 Quando a venda for paga:
 
@@ -296,6 +329,10 @@ Quando a venda for paga:
 * ledger registra valores dos recebedores;
 * sistema identifica quem recebeu e quem ainda precisa receber;
 * valores não liquidados automaticamente ficam pendentes de repasse manual.
+
+Esse fluxo pressupõe que a parcela SmartBus possui caminho técnico válido até a
+SmartBus. Receber a taxa em uma conta técnica não muda os beneficiários econômicos
+nem converte obrigações de sócio/representante em receita da SmartBus.
 
 ---
 
@@ -446,7 +483,7 @@ Antes de implementar um novo gateway, deve ser definido:
 
 * se possui split completo;
 * se possui split parcial;
-* se não possui split;
+* se não possui multi-split completo, preservando o caminho da parcela SmartBus;
 * quem recebe automaticamente;
 * quem depende de repasse manual;
 * como confirma pagamento;
@@ -480,7 +517,7 @@ O sistema não pode:
 Este PRD estará atendido quando:
 
 * toda venda paga possuir gateway identificado;
-* o sistema diferenciar gateway com split completo, parcial ou sem split;
+* o sistema diferenciar gateway com split completo, parcial ou sem multi-split;
 * a forma de liquidação for registrada por recebedor;
 * Asaas com split automático gerar status Pago via split;
 * Mercado Pago puder gerar pendência manual para sócio e representante;

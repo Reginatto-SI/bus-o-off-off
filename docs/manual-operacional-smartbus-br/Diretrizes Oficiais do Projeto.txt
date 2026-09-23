@@ -74,17 +74,23 @@ Admin:
 
 ---
 
-## 6. PAGAMENTOS (ASAAS)
+## 6. PAGAMENTOS (MULTI-GATEWAY)
 
-- Asaas é o gateway oficial
-- Split de pagamento obrigatório
-- Plataforma retém comissão
+- O SmartBus é uma plataforma multi-gateway; Asaas é a referência operacional histórica, não o único gateway estrutural
+- A empresa usa o gateway disponibilizado e selecionado para ela (Asaas, PagBank e, futuramente, Mercado Pago, Stripe ou outros)
+- Todos os gateways obedecem à mesma regra financeira central do SmartBus; somente autenticação, credenciais, endpoints, payloads, split técnico, webhook, status, tokenização e refresh variam por provedor
+- Split, ledger e conciliação devem preservar a decisão financeira central, ainda que o gateway não liquide diretamente todos os beneficiários
+- SmartBus/Marketplace é participante permanente e o gateway só fica apto quando houver caminho válido para sua parcela naquele ambiente
+- Sócio e representante são condicionais; parcelas devidas e não liquidadas diretamente permanecem como obrigações de repasse
 - Empresa recebe o restante
 
 Regras:
-- pagamento inicia como “reservado”
-- só vira “pago” após confirmação
-- webhook é fonte de verdade
+- venda é criada aguardando pagamento, sem liberar passagem
+- no checkout público atual, o status é `pendente_pagamento`; `reservado` permanece compatível em outros fluxos/legado
+- somente confirmação externa válida do provedor transforma a venda em `pago`
+- webhook é a notificação prioritária quando oferecido, mas seu corpo não precisa ser a prova autoritativa
+- quando exigido pelo contrato do gateway, o SmartBus consulta a cobrança/order no provedor antes de finalizar
+- verificação manual ou polling pode ser fallback; todos os caminhos convergem para a mesma finalização central
 
 ---
 
@@ -177,7 +183,7 @@ Regras:
 
 ## 10. STATUS DE VENDA
 
-- reservado → criado, aguardando pagamento
+- aguardando pagamento → `pendente_pagamento` no checkout público atual; `reservado` em fluxos compatíveis/legados
 - pago → confirmado
 - cancelado → inválido
 
@@ -313,11 +319,12 @@ A confirmação pode ocorrer por:
 
 ### 1. Webhook (prioritário)
 - evento recebido automaticamente
-- atualiza venda para `pago`
+- valida a notificação conforme o adapter
+- quando necessário, dispara consulta autoritativa no provedor antes da finalização
 
 ### 2. Verificação manual (fallback)
 - função `verify-payment-status`
-- consulta direta no Asaas
+- consulta direta no provedor da venda
 - usa MESMA lógica de finalização
 
 👉 Ambos devem convergir para:

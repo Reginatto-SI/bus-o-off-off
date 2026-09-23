@@ -21,12 +21,13 @@ webhook, timeout e reconciliação, e não possui fluxo operacional de cancelame
 estorno, estorno parcial, disputa ou chargeback. O Asaas possui tratamento bem mais
 maduro desses eventos, embora também não automatize a reversão financeira do split.
 
-O maior risco encontrado no Asaas não deve ser copiado: falhas internas de resolução
-do split, ausência da wallet da plataforma ou rejeição explícita do split pelo gateway
-podem produzir uma cobrança **sem split**, mantendo apenas uma pendência de
-conciliação. O PagBank é mais conservador: ambiguidade/erro de consulta bloqueia,
-recebedor devido sem conta bloqueia, a soma deve fechar em centavos e o split ecoado
-pelo provedor precisa coincidir.
+A revisão normativa distingue dois casos. Sócio ou representante legitimamente
+ausente seleciona outro dos quatro cenários, redistribui sua parcela e permite a
+venda; isso é regra de negócio, não `fail-open`. Falha/ambiguidade ao resolver um
+participante condicional exige rastreabilidade e eventual obrigação de repasse, sem
+virar ausência nem bloqueio genérico. A identidade SmartBus indisponível é diferente:
+continua sendo falha de readiness. O PagBank hoje é mais conservador: erro de consulta
+bloqueia, a soma deve fechar em centavos e o split ecoado precisa coincidir.
 
 Há também uma divergência compartilhada entre nomenclatura e comportamento do campo
 `pass_platform_fee_to_customer`. O default de banco é `false`. Quando `true`, a taxa
@@ -40,8 +41,10 @@ de R$ 25 e piso total de R$ 5).
 
 - **Núcleo compartilhado:** suficiente para evoluir incrementalmente; não justifica
   uma nova arquitetura genérica.
-- **Asaas:** referência operacional, mas não referência automática de segurança do
-  split nem de reversão contábil.
+- **Diretriz de produto:** SmartBus é multi-gateway; a empresa escolhe entre os
+  provedores disponibilizados e todos executam a mesma decisão financeira central.
+- **Asaas:** referência operacional histórica e integração consolidada, não gateway
+  oficial exclusivo nem fonte de regra financeira.
 - **PagBank Sandbox PIX:** implementação coerente e defensiva, ainda não homologada
   ponta a ponta.
 - **PagBank Produção/cartão/reversões:** bloqueados ou ausentes.
@@ -71,7 +74,9 @@ checkout hospedado da PB Integrações.
 | Tema | Documento determina | Asaas atual | PagBank atual | Decisão necessária |
 |---|---|---|---|---|
 | Percentual da taxa | PRD 01 vigente: faixa individual 6/5/4/3%, teto R$ 25 por item e piso R$ 5 no total | Usa o motor vigente | Usa o mesmo motor | Corrigir futuramente somente o comentário histórico “+ 6%” da migration; não mudar a regra |
-| Ausência de recebedor | Ausência comprovada seleciona um dos quatro cenários; erro/ambiguidade não equivale a ausência | Ausência aplica cenário, mas erro pode degradar e cobrar sem split | Ausência aplica cenário; erro/ambiguidade bloqueia | Confirmar se o fail-open legado Asaas será proibido em tarefa própria |
+| Ausência de participante condicional | Sócio/representante comprovadamente ausente seleciona outro cenário, redistribui a parcela e não bloqueia | Aplica os cenários | Aplica os cenários | **Resolvida:** preservar esse comportamento e seus registros |
+| Falha temporária/ambiguidade de participante condicional | Não equivale a ausência; preservar direito econômico, rastreabilidade e eventual obrigação | Pode cobrar e abrir pendência | Hoje bloqueia em casos do adapter | Conciliar conforme regra vigente; não instituir bloqueio genérico só por falha ao resolver sócio/representante |
+| Identidade financeira SmartBus ausente | SmartBus é permanente e precisa ter caminho válido para sua parcela antes da venda | Pode cobrar sem split | Conta SmartBus devida bloqueia | Endurecer readiness em tarefa própria, antes de disponibilizar o gateway |
 | Reversões | PRDs reconhecem necessidade de trilha/ledger, sem definir estorno automatizado completo | Invalida operação em casos terminais, mas split/reembolso é manual | Apenas normaliza status; não invalida venda nem ticket | Definir política única de estorno parcial, chargeback, ticket usado e comissão |
 | Gateway/ambiente da venda | Devem ser congelados | As vendas novas passam pelo trigger multi-gateway; campos `asaas_*` permanecem específicos | Congelamento explícito inclui conexão e conta | Nenhuma para novas vendas; confirmar saneamento de legado sem snapshot |
 | Produção PagBank | Só após homologação e autorização | Produção operacional | Bloqueada no código e constraints | Autorização futura só após cumprir todos os gates |
@@ -153,11 +158,14 @@ de integridade. É um gap de diagnóstico/garantia, não uma regra financeira di
 - A empresa emissora fica com o valor não incluído no array de split.
 - Persiste ID, status, URL e snapshot financeiro na venda.
 
-**Dívida crítica:** o Asaas pode seguir sem split quando a wallet da plataforma está
-ausente, a resolução interna falha, ou o gateway rejeita explicitamente o split. A
+**Risco estrutural (não confundir com ausência normal):** o Asaas pode seguir sem
+split quando a identidade financeira permanente da SmartBus está indisponível, a
+resolução interna falha/é ambígua, ou o gateway rejeita explicitamente o split. A
 segunda chamada sem split só ocorre após 4xx explícito que prova que a primeira não
-criou cobrança, o que protege idempotência, mas financeiramente deixa a cobrança na
-empresa e apenas registra valor pendente para conciliação.
+criou cobrança, o que protege idempotência, mas deixa a distribuição esperada sem
+comprovação. Em contraste, omitir sócio ou representante realmente ausente e aplicar
+a redistribuição oficial é comportamento correto, desde que snapshot, payload e logs
+sejam conciliáveis.
 
 ### 3.5 Cobrança PagBank
 
@@ -282,7 +290,8 @@ divergência de regra; **E** regra compartilhada a revisar.
 | Taxas do evento | Fora da base SmartBus | Query falha fechado | Erro da query não é distinguido | C | Médio | Falhar explicitamente e logar em tarefa futura |
 | Repasse/absorção | Campo só muda o bruto cobrado | Correto | Correto | A | Médio documental | Corrigir comentário histórico, sem mudar regra |
 | Quatro cenários | Ausência comprovada redistribui | Sim | Sim | A | Baixo | Manter |
-| Ambiguidade/erro de recebedor | Não tratar como ausência | Pode cobrar sem split e abrir pendência | Bloqueia | D | **Crítico Asaas** | Decisão para eliminar fail-open |
+| Ambiguidade/erro de participante condicional | Não tratar como ausência; preservar obrigação/rastreabilidade | Pode cobrar sem split e abrir pendência | Bloqueia | D | Alto | Alinhar conciliação sem criar bloqueio genérico da venda |
+| Readiness da SmartBus | Parcela permanente precisa ter caminho válido | Pode cobrar sem split | Bloqueia se conta devida falta | D | **Crítico Asaas** | Criar gate antes de disponibilizar integração |
 | Formato split | Valores absolutos | `fixedValue/totalFixedValue`, empresa residual | `FIXED` centavos, empresa explícita | B | Baixo | Manter adapters |
 | Integridade do split | Conservar total e comprovar resultado | Só limita soma; permite fallback sem split | Fecha soma e concilia eco | D | **Crítico Asaas** | Criar gate comum mínimo, sem copiar fallback |
 | Idempotência de criação | Uma operação lógica, sem duplicar | ID persistido + busca por referência; sem chave local genérica | tentativa + chave local/remota + recovery | B/C | Médio Asaas | Consolidar contrato mínimo incremental |
@@ -342,11 +351,14 @@ divergência de regra; **E** regra compartilhada a revisar.
 
 ### Regra central SmartBus
 
+- manter uma única regra financeira para Asaas, PagBank, Mercado Pago, Stripe e
+  futuros gateways;
 - criar e vincular venda, empresa, evento, passageiros e representante;
 - congelar gateway, ambiente, identidade financeira e snapshot;
 - calcular preço efetivo, taxas do evento e taxa SmartBus;
 - decidir repasse ou absorção;
 - decidir elegibilidade e valores de Marketplace/sócio/representante;
+- separar beneficiário econômico, recebedor técnico e obrigação de repasse;
 - garantir conservação em centavos e registrar ledger/snapshot;
 - governar estados internos e transições permitidas;
 - exigir confirmação externa válida;
@@ -499,12 +511,26 @@ repetidos.
 - PRD de ledger é mais amplo que `representative_commissions` e snapshots atuais;
 - comentário histórico de 6% conflita com a regra progressiva vigente.
 
-## 13. Dívida técnica do Asaas que não deve ser propagada
+## 13. Riscos técnicos do Asaas que não devem ser propagados
 
-1. **Fail-open financeiro:** cobrança sem split diante de erro/ambiguidade interna.
+Não constitui dívida nem falha remover participante condicional realmente ausente,
+redistribuir sua parcela, continuar a venda e registrar cenário, snapshot e logs
+corretamente. Esse é o contrato oficial nos quatro cenários.
+
+Também não se deve transformar automaticamente em bloqueio da venda a incapacidade
+temporária de resolver ou liquidar diretamente um sócio/representante devido. Esse
+caso exige rastreabilidade e eventual obrigação no ledger/conciliação. É distinto da
+falta de identidade financeira da SmartBus, que é falha de readiness porque a
+plataforma é participante permanente.
+
+Continuam sendo riscos:
+
+1. **Direito econômico não rastreável:** cobrança diante de erro/ambiguidade sem
+   preservar beneficiário, obrigação e conciliação, diferente de ausência comprovada.
 2. **Fallback após rejeição de split:** seguro contra duplicidade por depender de 4xx
    explícito, mas inseguro para liquidação da taxa.
-3. **Ausência da wallet da plataforma:** permite cobrar e deixar toda a taxa na empresa.
+3. **Identidade SmartBus indisponível:** permite cobrar e deixar toda a taxa na
+   empresa, embora o recebedor permanente devesse ter readiness comprovada antes.
 4. **Garantia incompleta da soma:** não concilia eco do split como PagBank.
 5. **Handler monolítico:** duplica preparação financeira e mistura responsabilidades.
 6. **Campos específicos no núcleo:** `asaas_payment_*` e parâmetro `asaasStatus`.
@@ -515,6 +541,13 @@ repetidos.
 Esses itens são legado/risco, não requisitos de paridade do PagBank.
 
 ## 14. Preparação para Mercado Pago, Stripe e outros
+
+A preparação é normativa, não uma autorização para implementar ou generalizar agora.
+Todos devem consumir cálculo por item, faixas, teto, piso, taxas adicionais,
+repasse/absorção, participantes, redistribuição, conservação, snapshot, confirmação,
+passagens, comissão, ambiente e isolamento definidos pelo SmartBus. Diferenças ficam
+no adapter: autenticação, credenciais, endpoints, payload, split técnico, webhook,
+status, tokenização e refresh.
 
 ### Reuso imediato
 
@@ -575,10 +608,21 @@ adicionar um branch explícito e preservar Asaas/PagBank.
 12. Cartão, se entrar no escopo, exige chave pública por conta, tokenização/PCI, 3DS,
     parcelamento e homologação de split próprios; não é extensão automática do PIX.
 
-## 16. Decisões manuais necessárias
+## 16. Decisões resolvidas e ainda pendentes
 
-1. O Asaas deve passar a falhar fechado quando o split obrigatório não puder ser
-   comprovado, ou existe política formal de crédito/conciliação posterior?
+### Resolvidas por produto nesta consolidação
+
+1. SmartBus é multi-gateway; Asaas não é gateway estrutural exclusivo.
+2. A taxa é calculada por passagem/item, nunca pela faixa do total da compra.
+3. Repasse ou absorção permanece opção da empresa; taxas adicionais são independentes.
+4. Sócio/representante ausente não bloqueia: aplica-se a redistribuição oficial.
+5. SmartBus é recebedora permanente; falta de sua identidade financeira é falha de
+   readiness, não ausência normal.
+
+### Ainda pendentes
+
+1. Qual SLA, responsável e procedimento operacional aplicar a obrigações pendentes
+   por falha temporária/ambiguidade depois do registro para conciliação?
 2. Qual é a política única para estorno parcial: cancelar toda a venda, invalidar
    passageiros/tickets selecionados, ou manter venda paga com ledger compensatório?
 3. Como chargeback afeta ticket já embarcado, comissão do representante, sócio e
@@ -595,14 +639,16 @@ adicionar um branch explícito e preservar Asaas/PagBank.
 
 ## 17. Ordem recomendada das próximas etapas
 
-### Fase 0 — decisões financeiras (sem código)
+### Fase 0 — consolidação normativa (concluída nesta revisão)
 
-Fechar fail-open Asaas, reversões, estorno parcial, ticket usado, comissão e ledger.
+Registrar a regra multi-gateway, o cálculo por item, repasse/absorção, os quatro
+cenários e a distinção entre participante ausente e falha estrutural. Nenhum código.
 
 ### Fase 1 — homologação PIX Sandbox existente
 
-Testar quatro splits, ausência/ambiguidade, assinatura, duplicata, timeout, rotação,
-consulta e pago sem ticket; registrar evidências sem liberar Produção.
+Testar quatro splits (incluindo ausências legítimas sem bloqueio), separar
+ambiguidade/falha estrutural, assinatura, duplicata, timeout, rotação, consulta e
+pago sem ticket; registrar evidências sem liberar Produção.
 
 ### Fase 2 — fechar gaps operacionais PagBank
 
@@ -612,8 +658,10 @@ criar fluxo paralelo.
 
 ### Fase 3 — endurecer garantias compartilhadas
 
-Eliminar fail-open financeiro aprovado, consolidar plano/snapshot comum e contrato
-mínimo de tentativas/status. Mudanças aditivas e testes de não regressão Asaas.
+Criar gates de readiness da SmartBus e garantir rastreabilidade de direitos econômicos,
+recebedores técnicos e obrigações; consolidar plano/snapshot comum e contrato mínimo
+de tentativas/status somente onde a evidência de implementação exigir. Mudanças
+aditivas e testes de não regressão Asaas.
 
 ### Fase 4 — piloto controlado PagBank
 

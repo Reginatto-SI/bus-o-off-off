@@ -21,11 +21,20 @@ A tela deve permitir que o Developer saiba rapidamente:
 
 O SmartBus BR trabalha com venda de passagens e eventos de transporte.
 
-Atualmente, o Asaas é o gateway principal e possui split automático para os envolvidos, quando todos estão corretamente configurados.
+O SmartBus BR é multi-gateway. Asaas é a integração atualmente consolidada e a
+referência operacional histórica, com split automático para os envolvidos quando
+configurados; não é gateway estrutural exclusivo nem fonte da regra financeira.
 
 Com a entrada de novos gateways, como Mercado Pago e futuros provedores de pagamento, nem sempre será possível dividir automaticamente o valor entre todos os envolvidos.
 
 Existem cenários diferentes:
+
+Em todos eles, beneficiário econômico é quem tem direito à parcela; recebedor técnico
+é a conta creditada pelo gateway; e valor não liquidado diretamente ao beneficiário
+permanece como obrigação de repasse no ledger/conciliação. A SmartBus é participante
+permanente e o gateway só pode operar se houver caminho válido para a parcela dela.
+Sócio e representante são condicionais e a falta de liquidação direta para eles não
+torna o gateway inapto.
 
 ### 2.1 Gateway com split completo
 
@@ -45,11 +54,15 @@ Nesse cenário, o gateway pode pagar a empresa/vendedor e a Marketplace, mas nã
 
 A tela deve exibir os valores do sócio e do representante como pendentes de repasse manual.
 
-### 2.3 Gateway sem split
+### 2.3 Gateway sem multi-split
 
 Cenário futuro possível.
 
-Nesse cenário, o sistema deve continuar calculando internamente a comissão dos envolvidos e indicar o que precisa ser repassado manualmente.
+Nesse cenário, o gateway não divide automaticamente a taxa entre todos os
+beneficiários, mas ainda deve conseguir destinar a parcela da SmartBus. O sistema
+continua calculando os direitos econômicos e registra como obrigações os valores de
+sócio/representante que precisarem de repasse posterior. Recebimento técnico pela
+SmartBus não transforma essas parcelas em receita dela.
 
 ---
 

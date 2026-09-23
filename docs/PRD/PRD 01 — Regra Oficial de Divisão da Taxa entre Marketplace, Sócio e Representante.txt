@@ -22,16 +22,68 @@ Esta seção substitui qualquer critério histórico baseado em status, elegibil
 
 Esta tabela é definitiva.
 
-Falha interna de consulta, ambiguidade cadastral ou wallet interna ausente não
-deve impedir uma cobrança que a conta da empresa poderia criar. Nesses casos, o
-payload deve omitir recebedores não confirmados (ou todo o `split` quando a
-wallet da plataforma estiver indisponível), e logs/snapshot devem registrar a
-degradação e a pendência de conciliação. Somente uma rejeição HTTP explícita do
-Asaas atribuída exclusivamente ao split autoriza recuperação sem split. Resultado
-de rede ambíguo exige consulta por `externalReference` antes de qualquer nova
-tentativa, para impedir cobrança duplicada.
+Sócio ou representante legitimamente ausente seleciona outro cenário da tabela,
+redistribui sua parcela e nunca bloqueia a venda. Isso não é `fail-open` nem cria
+dívida: snapshot, payload, logs e liquidação devem registrar o cenário efetivo.
 
-## 0.1 Regra normativa da faixa por passagem individual
+Falha interna de consulta, ambiguidade cadastral ou indisponibilidade temporária de
+informação não provam ausência e não autorizam redistribuição silenciosa. Se sócio ou
+representante for devido, mas não puder ser resolvido ou liquidado diretamente naquele
+momento, a decisão econômica deve permanecer rastreável e a eventual obrigação deve
+ser registrada para conciliação/repasse conforme os mecanismos financeiros vigentes;
+isso, isoladamente, não transforma o participante em ausente nem define bloqueio da
+venda. Resultado de rede ambíguo exige consulta pela referência idempotente antes de
+qualquer nova tentativa.
+
+A identidade financeira da própria SmartBus/Marketplace é diferente: a SmartBus é o
+participante financeiro permanente e sua parcela deve ter um caminho válido até ela
+no gateway e ambiente. Sem esse caminho, a integração não está pronta para vendas
+SmartBus e deve ser impedida de ficar disponível sempre que possível. Isso é falha de
+readiness, não cenário normal da tabela; este PRD não implementa o gate.
+
+## 0.1 Diretriz normativa multi-gateway
+
+O SmartBus BR é uma plataforma multi-gateway. A empresa pode escolher o gateway
+disponibilizado para ela, incluindo Asaas, PagBank e, futuramente, Mercado Pago,
+Stripe ou outros. Asaas é referência operacional histórica, não fonte exclusiva
+da regra financeira.
+
+São regras centrais e independentes de gateway: cálculo por passagem/item, faixas,
+teto, piso, taxas adicionais, repasse ou absorção, participantes, redistribuição,
+conservação do valor, snapshot, confirmação, geração de passagem, comissão, ambiente
+e isolamento por empresa. O adapter apenas traduz essa decisão para autenticação,
+credenciais, endpoints, payload, formato técnico do split, webhook, status,
+tokenização, refresh e demais exigências próprias do provedor. Não se autoriza com
+isso criar framework, plugin system ou arquitetura nova.
+
+`pass_platform_fee_to_customer` continua sendo uma escolha comercial da empresa:
+
+- quando habilitado, uma passagem de R$ 100,00 com taxa de R$ 6,00 custa R$ 106,00
+  ao passageiro; a empresa preserva R$ 100,00 e a taxa é distribuída;
+- quando desabilitado, o passageiro paga R$ 100,00; a empresa fica com R$ 94,00 e
+  os mesmos R$ 6,00 são distribuídos.
+
+A opção não pode ser tornada obrigatória nem presumida como sempre habilitada.
+
+### Beneficiário econômico, recebedor técnico e obrigação de repasse
+
+- **Beneficiário econômico:** quem possui direito a uma parcela segundo a tabela
+  oficial, independentemente da capacidade técnica do provedor.
+- **Recebedor técnico:** conta para a qual o gateway consegue liquidar dinheiro
+  diretamente naquela operação.
+- **Obrigação de repasse:** parcela de um beneficiário econômico não liquidada
+  diretamente, que permanece registrada no ledger/conciliação até o fluxo financeiro
+  aprovado concluir o repasse.
+
+Exemplo com taxa de R$ 6,00 e os três participantes: SmartBus, sócio e representante
+têm direito econômico de R$ 2,00 cada. Com multi-split completo, o gateway liquida
+R$ 2,00 / R$ 2,00 / R$ 2,00 diretamente. Se o gateway liquida apenas empresa e
+SmartBus, os R$ 6,00 podem chegar tecnicamente à SmartBus, mas somente R$ 2,00 são
+receita econômica dela; os R$ 2,00 do sócio e os R$ 2,00 do representante permanecem
+como obrigações de repasse. **Receber tecnicamente o dinheiro não altera quem é o
+beneficiário econômico.**
+
+## 0.2 Regra normativa da faixa por passagem individual
 
 **A faixa percentual é escolhida pelo valor individual de cada passagem ou item. O valor total da venda nunca define a faixa. A compra de várias passagens não transforma os preços individuais em um único item financeiro.**
 
@@ -49,7 +101,7 @@ Não se aplica 4% sobre R$ 600,00. Em comparação, uma única passagem de R$ 60
 
 O percentual comercial nasce exclusivamente do preço individual. Depois de obter a taxa absoluta total e dividi-la, o sistema não deve converter parcelas monetárias fixas em `percentualValue` sobre o bruto: o Asaas aplica esse campo ao líquido. `grossAmount` serve para integridade e auditoria; nunca para escolher 6%, 5%, 4% ou 3%, aplicar teto, substituir snapshots individuais ou calcular uma taxa única sobre a venda.
 
-## 0.2 Regra normativa do split monetário Asaas
+## 0.3 Regra normativa do split monetário Asaas
 
 A taxa comercial absoluta é calculada em reais antes da integração. No Asaas, `percentualValue` incide sobre o valor líquido depois das tarifas; portanto, converter uma parcela monetária por divisão sobre o bruto não preserva o montante aprovado. Quando o negócio exige valor exato, cobrança avulsa deve usar `fixedValue` com duas casas decimais.
 
@@ -57,7 +109,7 @@ Em parcelamentos com duas ou mais parcelas, o total comercial destinado a cada w
 
 A wallet da conta emissora nunca é enviada no array de split: a diferença não transferida permanece na emissora. Na cobrança pública, emitida pela empresa, SmartBus/sócio/representante confirmados são destinos externos. Na cobrança manual da taxa, emitida pela SmartBus, somente sócio e representante externos entram no split; a parcela SmartBus permanece na conta emissora.
 
-Wallet realmente ausente aplica o cenário oficial sem criar dívida. Falha de consulta ou cadastro ambíguo gera pendência somente da parcela potencial do recebedor incerto. Ausência da wallet da plataforma ou fallback aceito sem nenhum split gera pendência da taxa total. Envio no payload não equivale a recebimento: resposta, status e valor efetivo do gateway devem ser conciliados pelos logs antes de afirmar liquidação.
+Wallet de sócio ou representante realmente ausente aplica o cenário oficial sem criar dívida. Falha de consulta ou cadastro ambíguo não pode ser rotulada como ausência: exige rastreabilidade e eventual obrigação pendente no ledger/conciliação, sem determinar automaticamente bloqueio da venda. Ausência de um caminho válido para a parcela da SmartBus é falha de readiness da integração e deve ser detectada antes de disponibilizar o gateway. Envio no payload não equivale a recebimento: resposta, status e valor efetivo do gateway devem ser conciliados pelos logs antes de afirmar liquidação.
 
 ## 1. Objetivo
 
@@ -73,7 +125,7 @@ Este PRD define a regra oficial para:
 - divisão da taxa entre Marketplace, Sócio e Representante;
 - redirecionamento da parte do sócio quando não possuir wallet válida no ambiente;
 - consistência entre venda pública e venda manual;
-- montagem do payload enviado ao Asaas;
+- tradução para o payload do gateway selecionado;
 - snapshot financeiro da venda;
 - logs de auditoria;
 - diagnóstico administrativo.
@@ -85,8 +137,8 @@ Esta regra deve ser aplicada igualmente em:
 - venda manual administrativa;
 - simulações visuais administrativas;
 - snapshot financeiro da venda;
-- payload enviado ao Asaas;
-- retorno do Asaas;
+- payload enviado ao gateway;
+- retorno do gateway;
 - diagnóstico de vendas;
 - ledger de comissões;
 - relatórios financeiros futuros.

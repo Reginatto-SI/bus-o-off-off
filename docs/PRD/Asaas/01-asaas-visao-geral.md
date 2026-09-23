@@ -14,7 +14,11 @@ O SmartBus BR opera com gateway Asaas para cobranças online, com isolamento por
 - **Origem da regra:** código atual (edge functions, frontend, migrations) + diretrizes operacionais já documentadas no projeto
 
 ## 4. Regra de ouro
-**O Asaas é o gateway oficial do SmartBus BR. Toda venda online deve seguir fluxo único, previsível, auditável e isolado por empresa e ambiente.**
+**O SmartBus BR é multi-gateway. O Asaas é o gateway atualmente consolidado e a referência operacional histórica, mas não é regra estrutural exclusiva. Toda venda online, qualquer que seja o gateway selecionado para a empresa, deve seguir as regras centrais do SmartBus e permanecer previsível, auditável e isolada por empresa e ambiente.**
+
+Particularidades Asaas descritas neste diretório são do adapter do provedor e não
+criam cálculo, divisão, confirmação, ticket ou comissão diferentes dos demais
+gateways.
 
 ## 5. Telas envolvidas
 - Checkout público (`Checkout.tsx`)

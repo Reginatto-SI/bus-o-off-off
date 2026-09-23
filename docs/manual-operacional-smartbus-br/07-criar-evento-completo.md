@@ -1,7 +1,8 @@
 # Documento Master – Como criar um evento completo
 
-> **Observação importante:** referências a Stripe neste documento são legadas.
-> No cenário atual do produto, o gateway oficial é **Asaas**.
+> **Observação importante:** o SmartBus é multi-gateway. Referências antigas a
+> Stripe neste documento são legadas; Asaas permanece a referência operacional
+> histórica, sem ser o único gateway estrutural.
 
 ## 1. Objetivo do Processo
 Criar um evento operacionalmente completo no Smartbus BR, com dados comerciais, viagens, motoristas, veículos, locais de embarque e regras de venda.
@@ -14,7 +15,7 @@ Utilize este fluxo quando:
 
 ## 3. Pré-requisitos
 - Empresa cadastrada e configurada.
-- Conta de pagamentos oficial da empresa configurada no Asaas.
+- Conta da empresa configurada e apta no gateway disponibilizado e selecionado para ela.
 - Frota cadastrada.
 - Motoristas cadastrados.
 - Locais de embarque cadastrados.
