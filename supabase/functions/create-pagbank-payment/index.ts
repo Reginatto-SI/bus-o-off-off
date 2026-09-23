@@ -30,7 +30,7 @@ import {
   buildPagbankIdempotencyKey,
   extractPagbankPixArtifacts,
   normalizePagbankStatus,
-  reconcilePagbankSplit,
+  validatePagbankPixOrder,
 } from "../_shared/pagbank/core.ts";
 import { findPagbankOrdersByReference, getPagbankOrder, pagbankRequest, toPagbankError } from "../_shared/pagbank/client.ts";
 import { pagbankSecretNames, resolvePagbankCredentialForSale } from "../_shared/pagbank/credentials.ts";
@@ -172,31 +172,15 @@ Deno.serve(async (req) => {
       return json({ ...attemptToPublic(existing), reused: true }, 200);
     }
 
+    let recoveredOrder: any = null;
     if (existing && existing.state === "indeterminate") {
       // Recupera por referência antes de qualquer nova criação.
       const found = await findPagbankOrdersByReference({ environment, accessToken: credential.accessToken, referenceId: sale.id });
       const orders: any[] = Array.isArray(found.data?.orders) ? found.data.orders : Array.isArray(found.data) ? found.data : [];
       if (found.ok && orders.length > 0) {
-        const art = extractPagbankPixArtifacts(orders[0]);
-        const { data: recovered } = await supabaseAdmin.from("payment_attempts").update({
-          state: "succeeded",
-          external_order_id: art.orderId,
-          external_charge_id: art.chargeId,
-          external_status_raw: art.rawStatus,
-          normalized_status: normalizePagbankStatus(art.rawStatus),
-          pix_qr_text: art.qrText,
-          pix_qr_image_url: art.qrImageUrl,
-          pix_expires_at: art.expiresAt,
-          last_queried_at: new Date().toISOString(),
-        }).eq("id", existing.id).eq("company_id", sale.company_id).select("*").single();
-        await logSaleIntegrationEvent({
-          supabaseAdmin, saleId: sale.id, companyId: sale.company_id, paymentEnvironment: environment,
-          environmentDecisionSource: "sale", provider: "pagbank", direction: "outgoing_request",
-          eventType: "create_pix_recovered", paymentId: art.orderId, externalReference: sale.id,
-          processingStatus: "success", resultCategory: "success", message: "Order recuperado após resultado indeterminado.",
-          payloadJson: { idempotency_key: idempotencyKey }, responseJson: { order_id: art.orderId, status: art.rawStatus },
-        });
-        return json({ ...attemptToPublic(recovered), recovered: true }, 200);
+        // A Order encontrada ainda não é utilizável. Ela será validada contra o
+        // mesmo plano financeiro da criação normal antes de virar `succeeded`.
+        recoveredOrder = orders[0];
       }
       if (!found.ok && found.indeterminate) {
         throw new PagbankError("pagbank_indeterminate", "Ainda não foi possível confirmar a cobrança anterior. Aguarde alguns segundos.", 504);
@@ -314,6 +298,77 @@ Deno.serve(async (req) => {
       representativeEligible: recipients.representative.eligible, engine: platformFeeEngine, distribution,
     });
 
+    // Gate único para respostas do POST e Orders recuperadas por reference_id.
+    // Falha preserva qualquer ID externo encontrado e nunca autoriza novo Order.
+    const requireUsableOrder = async (order: any, paymentAttemptId: string) => {
+      const validation = validatePagbankPixOrder({
+        order,
+        expectedReferenceId: sale.id,
+        expectedReceivers: splitPlan.receivers.map((receiver) => ({
+          accountId: receiver.accountId,
+          amountCents: receiver.amountCents,
+        })),
+        expectedTotalCents: splitPlan.totalCents,
+      });
+      if (validation.ok) return validation.artifacts;
+
+      const splitIssues = validation.split && !validation.split.ok ? validation.split.issues : [];
+      await supabaseAdmin.from("payment_attempts").update({
+        state: "failed",
+        external_order_id: validation.artifacts.orderId,
+        external_charge_id: validation.artifacts.chargeId,
+        external_status_raw: validation.artifacts.rawStatus,
+        normalized_status: normalizePagbankStatus(validation.artifacts.rawStatus),
+        error_code: validation.errorCode,
+        error_message_sanitized: [validation.reason, ...splitIssues].filter(Boolean).join(",").slice(0, 500),
+      }).eq("id", paymentAttemptId).eq("company_id", sale.company_id);
+      await logCriticalPaymentIssue({
+        supabaseAdmin,
+        source: SOURCE,
+        errorCode: validation.errorCode,
+        saleId: sale.id,
+        companyId: sale.company_id,
+        paymentEnvironment: environment,
+        paymentId: validation.artifacts.orderId,
+        detail: `reason=${validation.reason};issues=${splitIssues.join("|") || "none"};expected_receivers=${splitPlan.receivers.length};echoed_receivers=${validation.split?.echoed.length ?? 0};expected_total_cents=${splitPlan.totalCents};echoed_total_cents=${validation.split?.echoedTotalCents ?? "invalid"}`,
+      });
+
+      const publicMessage = validation.errorCode === "pagbank_pix_artifact_missing"
+        ? "O PagBank não devolveu o código PIX desta cobrança. Tente novamente em instantes."
+        : validation.errorCode === "pagbank_split_not_confirmed"
+        ? "O PagBank não confirmou a divisão financeira desta cobrança. A cobrança não será usada."
+        : "A resposta do PagBank está incompleta e exige reconciliação antes de usar a cobrança.";
+      throw new PagbankError(validation.errorCode, publicMessage, validation.errorCode === "pagbank_pix_artifact_missing" ? 502 : 409, {
+        reason: validation.reason,
+        order_id: validation.artifacts.orderId,
+      });
+    };
+
+    if (recoveredOrder && existing) {
+      const art = await requireUsableOrder(recoveredOrder, existing.id);
+      const { data: recovered } = await supabaseAdmin.from("payment_attempts").update({
+        state: "succeeded",
+        external_order_id: art.orderId,
+        external_charge_id: art.chargeId,
+        external_status_raw: art.rawStatus,
+        normalized_status: normalizePagbankStatus(art.rawStatus),
+        pix_qr_text: art.qrText,
+        pix_qr_image_url: art.qrImageUrl,
+        pix_expires_at: art.expiresAt,
+        last_queried_at: new Date().toISOString(),
+        error_code: null,
+        error_message_sanitized: null,
+      }).eq("id", existing.id).eq("company_id", sale.company_id).select("*").single();
+      await logSaleIntegrationEvent({
+        supabaseAdmin, saleId: sale.id, companyId: sale.company_id, paymentEnvironment: environment,
+        environmentDecisionSource: "sale", provider: "pagbank", direction: "outgoing_request",
+        eventType: "create_pix_recovered", paymentId: art.orderId, externalReference: sale.id,
+        processingStatus: "success", resultCategory: "success", message: "Order recuperado e validado após resultado indeterminado.",
+        payloadJson: { idempotency_key: idempotencyKey }, responseJson: { order_id: art.orderId, status: art.rawStatus, split_validated: true, has_qr: true },
+      });
+      return json({ ...attemptToPublic(recovered), recovered: true }, 200);
+    }
+
     // 4) Payload Order PIX (reference_id = sale.id; valores em centavos).
     const expiresAt = new Date(Date.now() + PAGBANK_PIX_EXPIRATION_MINUTES * 60_000);
     const phone = onlyDigits(sale.customer_phone);
@@ -412,52 +467,8 @@ Deno.serve(async (req) => {
       throw err;
     }
 
-    const art = extractPagbankPixArtifacts(res.data);
+    const art = await requireUsableOrder(res.data, attemptId);
     const normalized = normalizePagbankStatus(art.rawStatus ?? "WAITING");
-
-    // Conciliação obrigatória: se o SmartBus esperava divisão, o PagBank precisa
-    // ter registrado exatamente os mesmos recebedores e valores. Divergência não
-    // pode virar cobrança normal (dinheiro sem taxa/repasse).
-    const splitCheck = reconcilePagbankSplit(
-      res.data,
-      splitPlan.receivers.map((r) => ({ accountId: r.accountId, amountCents: r.amountCents })),
-    );
-    if (!splitCheck.ok) {
-      await supabaseAdmin.from("payment_attempts").update({
-        state: "failed", external_order_id: art.orderId, external_charge_id: art.chargeId,
-        external_status_raw: art.rawStatus, normalized_status: normalized,
-        error_code: "pagbank_split_not_confirmed", error_message_sanitized: `split_${splitCheck.reason}`,
-      }).eq("id", attemptId).eq("company_id", sale.company_id);
-      await logCriticalPaymentIssue({
-        supabaseAdmin, source: SOURCE, errorCode: "pagbank_split_not_confirmed", saleId: sale.id, companyId: sale.company_id,
-        paymentEnvironment: environment, paymentId: art.orderId,
-        detail: `reason=${splitCheck.reason}; expected=${splitPlan.receivers.length}; echoed=${splitCheck.echoed.length}`,
-      });
-      throw new PagbankError(
-        "pagbank_split_not_confirmed",
-        "O PagBank não confirmou a divisão financeira desta cobrança. A cobrança não será usada.",
-        409,
-        { reason: splitCheck.reason, order_id: art.orderId },
-      );
-    }
-
-    if (!art.qrText) {
-      await supabaseAdmin.from("payment_attempts").update({
-        state: "failed", external_order_id: art.orderId, external_charge_id: art.chargeId,
-        external_status_raw: art.rawStatus, normalized_status: normalized,
-        error_code: "pagbank_pix_artifact_missing",
-      }).eq("id", attemptId).eq("company_id", sale.company_id);
-      await logCriticalPaymentIssue({
-        supabaseAdmin, source: SOURCE, errorCode: "pagbank_pix_artifact_missing", saleId: sale.id, companyId: sale.company_id,
-        paymentEnvironment: environment, paymentId: art.orderId, detail: "Order criado sem código PIX copia-e-cola.",
-      });
-      throw new PagbankError(
-        "pagbank_pix_artifact_missing",
-        "O PagBank não devolveu o código PIX desta cobrança. Tente novamente em instantes.",
-        502,
-        { order_id: art.orderId },
-      );
-    }
 
     const { data: finalAttempt } = await supabaseAdmin.from("payment_attempts").update({
       state: "succeeded", external_order_id: art.orderId, external_charge_id: art.chargeId, external_status_raw: art.rawStatus ?? "WAITING",

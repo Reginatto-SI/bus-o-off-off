@@ -1,5 +1,19 @@
 # PagBank no SmartBus — checkpoint atual
 
+## Manutenção — 2026-09-23: integridade do Order PIX (Fase 1.1)
+
+- A validação do split ecoado pelo PagBank agora exige igualdade integral: mesma
+  cardinalidade, contas únicas, valores inteiros positivos e soma exatamente igual
+  ao total planejado. Recebedor extra/ausente/duplicado, valor inválido e soma
+  divergente falham com motivo observável, sem expor identificadores ou credenciais.
+- Criação normal e recuperação após timeout por `reference_id` passam pelo mesmo
+  gate puro de Order: referência, IDs mínimos, split integral e artefato PIX.
+- Order recuperado incompleto preserva seus IDs na tentativa com estado `failed` e
+  exige reconciliação; nunca autoriza criar um segundo Order automaticamente.
+- Testes locais cobrem os quatro cenários financeiros e os casos negativos de
+  split/Order. Asaas, banco, RLS, frontend, OAuth, tickets e comissões não mudaram.
+- Produção PagBank continua bloqueada. A homologação E2E Sandbox continua pendente.
+
 ## Manutenção — 2026-09-17: clareza da aba Pagamentos
 
 - Interface desktop reorganizada com resumo do provedor de novas vendas, ambiente

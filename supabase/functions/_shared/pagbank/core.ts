@@ -45,6 +45,7 @@ export type PagbankErrorCode =
   | "pagbank_split_sum_mismatch"
   | "pagbank_split_not_confirmed"
   | "pagbank_pix_artifact_missing"
+  | "pagbank_order_response_incomplete"
   | "pagbank_order_needs_reconciliation"
   | "pagbank_transient_error";
 
@@ -188,8 +189,26 @@ export function extractPagbankSplitReceivers(order: any): PagbankSplitEcho {
 }
 
 export type PagbankSplitReconciliation =
-  | { ok: true; reason: "not_expected" | "confirmed" }
-  | { ok: false; reason: "missing" | "receiver_mismatch" | "amount_mismatch"; echoed: PagbankSplitEcho };
+  | { ok: true; reason: "not_expected" | "confirmed"; echoed: PagbankSplitEcho; echoedTotalCents: number }
+  | {
+    ok: false;
+    reason: PagbankSplitMismatchReason;
+    issues: PagbankSplitMismatchReason[];
+    echoed: PagbankSplitEcho;
+    echoedTotalCents: number | null;
+  };
+
+export type PagbankSplitMismatchReason =
+  | "missing"
+  | "incomplete"
+  | "count_mismatch"
+  | "unexpected_receiver"
+  | "missing_receiver"
+  | "duplicate_receiver"
+  | "invalid_receiver"
+  | "invalid_amount"
+  | "amount_mismatch"
+  | "sum_mismatch";
 
 /**
  * Confere a divisão enviada contra a divisão retornada. Nunca aceitar cobrança em
@@ -198,16 +217,147 @@ export type PagbankSplitReconciliation =
 export function reconcilePagbankSplit(
   order: any,
   expected: Array<{ accountId: string; amountCents: number }>,
+  expectedTotalCents?: number,
 ): PagbankSplitReconciliation {
-  if (expected.length === 0) return { ok: true, reason: "not_expected" };
   const echoed = extractPagbankSplitReceivers(order);
-  if (echoed.length === 0) return { ok: false, reason: "missing", echoed };
-  for (const want of expected) {
-    const match = echoed.find((e) => e.accountId === want.accountId);
-    if (!match) return { ok: false, reason: "receiver_mismatch", echoed };
-    if (match.amountCents !== want.amountCents) return { ok: false, reason: "amount_mismatch", echoed };
+  const splitBuckets = [
+    ...(Array.isArray(order?.charges) ? order.charges : []),
+    ...(Array.isArray(order?.qr_codes) ? order.qr_codes : []),
+  ].filter((bucket: any) => bucket?.splits != null);
+
+  if (expected.length === 0 && echoed.length === 0) {
+    return { ok: true, reason: "not_expected", echoed, echoedTotalCents: 0 };
   }
-  return { ok: true, reason: "confirmed" };
+  if (splitBuckets.length === 0) {
+    return { ok: false, reason: "missing", issues: ["missing"], echoed, echoedTotalCents: 0 };
+  }
+  if (echoed.length === 0) {
+    return { ok: false, reason: "incomplete", issues: ["incomplete"], echoed, echoedTotalCents: 0 };
+  }
+
+  const issues = new Set<PagbankSplitMismatchReason>();
+  if (echoed.length !== expected.length) issues.add("count_mismatch");
+
+  const validEchoed = echoed.filter((receiver) => {
+    if (typeof receiver.accountId !== "string" || receiver.accountId.trim().length === 0) {
+      issues.add("invalid_receiver");
+      return false;
+    }
+    if (!Number.isInteger(receiver.amountCents) || (receiver.amountCents as number) <= 0) {
+      issues.add("invalid_amount");
+      return false;
+    }
+    return true;
+  }) as Array<{ accountId: string; amountCents: number }>;
+
+  const echoedCounts = new Map<string, number>();
+  for (const receiver of validEchoed) {
+    echoedCounts.set(receiver.accountId, (echoedCounts.get(receiver.accountId) ?? 0) + 1);
+  }
+  if ([...echoedCounts.values()].some((count) => count > 1)) issues.add("duplicate_receiver");
+
+  const expectedByAccount = new Map(expected.map((receiver) => [receiver.accountId, receiver.amountCents]));
+  for (const receiver of validEchoed) {
+    if (!expectedByAccount.has(receiver.accountId)) issues.add("unexpected_receiver");
+  }
+  for (const receiver of expected) {
+    const matches = validEchoed.filter((echo) => echo.accountId === receiver.accountId);
+    if (matches.length === 0) {
+      issues.add("missing_receiver");
+    } else if (matches.length === 1 && matches[0].amountCents !== receiver.amountCents) {
+      issues.add("amount_mismatch");
+    }
+  }
+
+  const hasInvalidAmount = echoed.some((receiver) => !Number.isInteger(receiver.amountCents) || (receiver.amountCents as number) <= 0);
+  const echoedTotalCents = hasInvalidAmount
+    ? null
+    : echoed.reduce((sum, receiver) => sum + (receiver.amountCents as number), 0);
+  const expectedSum = expected.reduce((sum, receiver) => sum + receiver.amountCents, 0);
+  const requiredTotal = expectedTotalCents ?? expectedSum;
+  if (echoedTotalCents == null || echoedTotalCents !== requiredTotal || expectedSum !== requiredTotal) {
+    issues.add("sum_mismatch");
+  }
+
+  if (issues.size > 0) {
+    const orderedIssues = [...issues];
+    const priority: PagbankSplitMismatchReason[] = [
+      "missing", "incomplete", "invalid_receiver", "invalid_amount", "duplicate_receiver",
+      "unexpected_receiver", "missing_receiver", "count_mismatch", "amount_mismatch", "sum_mismatch",
+    ];
+    const reason = priority.find((candidate) => issues.has(candidate)) ?? orderedIssues[0];
+    return { ok: false, reason, issues: orderedIssues, echoed, echoedTotalCents };
+  }
+
+  return { ok: true, reason: "confirmed", echoed, echoedTotalCents: echoedTotalCents as number };
+}
+
+export type PagbankPixOrderValidation =
+  | {
+    ok: true;
+    artifacts: PagbankPixArtifacts;
+    split: PagbankSplitReconciliation;
+  }
+  | {
+    ok: false;
+    errorCode: "pagbank_split_not_confirmed" | "pagbank_pix_artifact_missing" | "pagbank_order_response_incomplete";
+    reason: string;
+    artifacts: PagbankPixArtifacts;
+    split: PagbankSplitReconciliation | null;
+  };
+
+/**
+ * Gate único de utilizabilidade do Order PIX. Criação e recuperação precisam
+ * comprovar a mesma referência, IDs mínimos, split integral e artefato PIX antes
+ * de persistir a tentativa como `succeeded`.
+ */
+export function validatePagbankPixOrder(params: {
+  order: any;
+  expectedReferenceId: string;
+  expectedReceivers: Array<{ accountId: string; amountCents: number }>;
+  expectedTotalCents: number;
+}): PagbankPixOrderValidation {
+  const artifacts = extractPagbankPixArtifacts(params.order);
+  const referenceId = typeof params.order?.reference_id === "string" ? params.order.reference_id : null;
+  if (!artifacts.orderId || referenceId !== params.expectedReferenceId) {
+    return {
+      ok: false,
+      errorCode: "pagbank_order_response_incomplete",
+      reason: !artifacts.orderId ? "order_id_missing" : referenceId == null ? "reference_id_missing" : "reference_id_mismatch",
+      artifacts,
+      split: null,
+    };
+  }
+  if (params.expectedReceivers.length > 0 && !artifacts.chargeId) {
+    return {
+      ok: false,
+      errorCode: "pagbank_order_response_incomplete",
+      reason: "charge_id_missing",
+      artifacts,
+      split: null,
+    };
+  }
+
+  const split = reconcilePagbankSplit(params.order, params.expectedReceivers, params.expectedTotalCents);
+  if (!split.ok) {
+    return {
+      ok: false,
+      errorCode: "pagbank_split_not_confirmed",
+      reason: split.reason,
+      artifacts,
+      split,
+    };
+  }
+  if (!artifacts.qrText) {
+    return {
+      ok: false,
+      errorCode: "pagbank_pix_artifact_missing",
+      reason: "pix_qr_text_missing",
+      artifacts,
+      split,
+    };
+  }
+  return { ok: true, artifacts, split };
 }
 
 
