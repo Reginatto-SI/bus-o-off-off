@@ -245,9 +245,14 @@ describe('validação integral de Order PIX PagBank', () => {
       receiver('ACC_MKT', 600),
       receiver('ACC_EXTRA', 1),
     ]));
-    expect(result).toMatchObject({ ok: false, errorCode: 'pagbank_split_not_confirmed' });
-    if (result.ok || !result.split || result.split.ok) throw new Error('split divergence expected');
-    expect(result.split.issues).toEqual(expect.arrayContaining(['count_mismatch', 'unexpected_receiver', 'sum_mismatch']));
+    expect(result).toMatchObject({
+      ok: false,
+      errorCode: 'pagbank_split_not_confirmed',
+      split: {
+        ok: false,
+        issues: expect.arrayContaining(['count_mismatch', 'unexpected_receiver', 'sum_mismatch']),
+      },
+    });
   });
 
   it.each([
