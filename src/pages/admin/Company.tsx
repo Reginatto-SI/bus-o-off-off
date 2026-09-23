@@ -1287,7 +1287,7 @@ export default function CompanyPage() {
     toast.success('Imagem de capa removida');
   };
 
-  if (!isGerente && !isOperador) {
+  if (!isGerente && !isOperador && !isDeveloper) {
     return <Navigate to="/admin/eventos" replace />;
   }
 
