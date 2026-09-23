@@ -14,6 +14,7 @@ export const PAGBANK_ORDER_MAY_EXIST_CODES: readonly string[] = [
   "pagbank_idempotency_conflict",
   "pagbank_split_not_confirmed",
   "pagbank_pix_artifact_missing",
+  "pagbank_order_response_incomplete",
   "pagbank_order_needs_reconciliation",
 ];
 

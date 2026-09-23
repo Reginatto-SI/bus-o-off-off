@@ -56,6 +56,7 @@ describe('PagBank — venda local nunca some quando o Order pode existir', () =>
       'pagbank_idempotency_conflict',
       'pagbank_split_not_confirmed',
       'pagbank_pix_artifact_missing',
+      'pagbank_order_response_incomplete',
       'pagbank_order_needs_reconciliation',
     ]) {
       expect(pagbankFailureAllowsSaleRollback({ errorCode: code })).toBe(false);
@@ -73,7 +74,12 @@ describe('PagBank — venda local nunca some quando o Order pode existir', () =>
   });
 
   it('frontend e backend classificam a falha da mesma forma', () => {
-    const cases = ['pagbank_indeterminate', 'pagbank_validation_rejected', 'pagbank_split_not_confirmed'];
+    const cases = [
+      'pagbank_indeterminate',
+      'pagbank_validation_rejected',
+      'pagbank_split_not_confirmed',
+      'pagbank_order_response_incomplete',
+    ];
     for (const code of cases) {
       expect(pagbankFailureAllowsSaleRollback({ errorCode: code }))
         .toBe(classifyPagbankCreateFailure({ errorCode: code }) === 'rejected_before_creation');

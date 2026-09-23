@@ -9,6 +9,7 @@ import {
   normalizePagbankStatus,
   reconcilePagbankSplit,
   sha256Hex,
+  validatePagbankPixOrder,
   verifyPagbankWebhookSignature,
 } from '../../supabase/functions/_shared/pagbank/core';
 import { buildPagbankFixedSplitPlan } from '../../supabase/functions/_shared/pagbank/split-plan';
@@ -129,7 +130,15 @@ describe('conciliação de split PagBank', () => {
         ] },
       }],
     };
-    expect(reconcilePagbankSplit(order, expected)).toEqual({ ok: true, reason: 'confirmed' });
+    expect(reconcilePagbankSplit(order, expected, 750)).toEqual({
+      ok: true,
+      reason: 'confirmed',
+      echoed: [
+        { accountId: 'ACC_REP', amountCents: 250 },
+        { accountId: 'ACC_MKT', amountCents: 500 },
+      ],
+      echoedTotalCents: 750,
+    });
   });
 
   it('reprova quando o split não volta na resposta', () => {
@@ -155,11 +164,133 @@ describe('conciliação de split PagBank', () => {
         { account: { id: 'ACC_REP' }, amount: { value: 250 } },
       ] } }],
     };
-    expect(reconcilePagbankSplit(order, expected)).toMatchObject({ ok: false, reason: 'receiver_mismatch' });
+    expect(reconcilePagbankSplit(order, expected)).toMatchObject({ ok: false, reason: 'unexpected_receiver' });
   });
 
   it('não exige split quando a venda não tem divisão', () => {
-    expect(reconcilePagbankSplit({ charges: [{ id: 'CHAR_1' }] }, [])).toEqual({ ok: true, reason: 'not_expected' });
+    expect(reconcilePagbankSplit({ charges: [{ id: 'CHAR_1' }] }, [])).toEqual({
+      ok: true,
+      reason: 'not_expected',
+      echoed: [],
+      echoedTotalCents: 0,
+    });
+  });
+});
+
+describe('validação integral de Order PIX PagBank', () => {
+  const expectedReceivers = [
+    { accountId: 'ACC_COMPANY', amountCents: 10_000 },
+    { accountId: 'ACC_MKT', amountCents: 600 },
+  ];
+  const receiver = (accountId: unknown, amountCents: unknown) => ({
+    account: { id: accountId },
+    amount: { value: amountCents },
+  });
+  const order = (receivers: unknown = [receiver('ACC_COMPANY', 10_000), receiver('ACC_MKT', 600)], overrides = {}) => ({
+    id: 'ORDE_1',
+    reference_id: 'sale-1',
+    charges: [{
+      id: 'CHAR_1',
+      status: 'WAITING',
+      payment_method: { type: 'PIX', pix: { qr_code: { text: 'pix-copy-paste' } } },
+      splits: receivers === undefined ? undefined : { method: 'FIXED', receivers },
+    }],
+    ...overrides,
+  });
+  const validate = (candidate: unknown) => validatePagbankPixOrder({
+    order: candidate,
+    expectedReferenceId: 'sale-1',
+    expectedReceivers,
+    expectedTotalCents: 10_600,
+  });
+
+  it('aceita Order recuperada somente com referência, IDs, split, soma e PIX exatos', () => {
+    expect(validate(order())).toMatchObject({ ok: true });
+  });
+
+  it.each([
+    ['recebedor extra', [receiver('ACC_COMPANY', 10_000), receiver('ACC_MKT', 600), receiver('ACC_EXTRA', 1)], 'unexpected_receiver'],
+    ['recebedor esperado ausente', [receiver('ACC_COMPANY', 10_000)], 'missing_receiver'],
+    ['conta diferente', [receiver('ACC_COMPANY', 10_000), receiver('ACC_OTHER', 600)], 'unexpected_receiver'],
+    ['valor maior', [receiver('ACC_COMPANY', 10_000), receiver('ACC_MKT', 601)], 'amount_mismatch'],
+    ['valor menor', [receiver('ACC_COMPANY', 10_000), receiver('ACC_MKT', 599)], 'amount_mismatch'],
+    ['recebedor duplicado', [receiver('ACC_COMPANY', 10_000), receiver('ACC_MKT', 300), receiver('ACC_MKT', 300)], 'duplicate_receiver'],
+    ['soma maior', [receiver('ACC_COMPANY', 10_001), receiver('ACC_MKT', 600)], 'amount_mismatch'],
+    ['soma menor', [receiver('ACC_COMPANY', 9_999), receiver('ACC_MKT', 600)], 'amount_mismatch'],
+    ['conta nula', [receiver('ACC_COMPANY', 10_000), receiver(null, 600)], 'invalid_receiver'],
+    ['valor nulo', [receiver('ACC_COMPANY', 10_000), receiver('ACC_MKT', null)], 'invalid_amount'],
+    ['valor decimal', [receiver('ACC_COMPANY', 10_000), receiver('ACC_MKT', 600.5)], 'invalid_amount'],
+  ])('rejeita %s em Order criada ou recuperada', (_label, receivers, reason) => {
+    expect(validate(order(receivers))).toMatchObject({
+      ok: false,
+      errorCode: 'pagbank_split_not_confirmed',
+      reason,
+    });
+  });
+
+  it.each([
+    ['maior', [receiver('ACC_COMPANY', 10_001), receiver('ACC_MKT', 600)], 10_601],
+    ['menor', [receiver('ACC_COMPANY', 9_999), receiver('ACC_MKT', 600)], 10_599],
+  ])('identifica explicitamente soma %s que o total financeiro', (_label, receivers, echoedTotalCents) => {
+    const result = validate(order(receivers));
+    if (result.ok || !result.split || result.split.ok) throw new Error('split divergence expected');
+    expect(result.split.echoedTotalCents).toBe(echoedTotalCents);
+    expect(result.split.issues).toContain('sum_mismatch');
+  });
+
+  it('registra simultaneamente cardinalidade, recebedor inesperado e soma divergente', () => {
+    const result = validate(order([
+      receiver('ACC_COMPANY', 10_000),
+      receiver('ACC_MKT', 600),
+      receiver('ACC_EXTRA', 1),
+    ]));
+    expect(result).toMatchObject({ ok: false, errorCode: 'pagbank_split_not_confirmed' });
+    if (result.ok || !result.split || result.split.ok) throw new Error('split divergence expected');
+    expect(result.split.issues).toEqual(expect.arrayContaining(['count_mismatch', 'unexpected_receiver', 'sum_mismatch']));
+  });
+
+  it.each([
+    ['split ausente', order(null, {
+      charges: [{
+        id: 'CHAR_1',
+        status: 'WAITING',
+        payment_method: { type: 'PIX', pix: { qr_code: { text: 'pix-copy-paste' } } },
+      }],
+    }), 'missing'],
+    ['split incompleto', order(null), 'incomplete'],
+  ])('rejeita %s', (_label, candidate, reason) => {
+    expect(validate(candidate)).toMatchObject({ ok: false, errorCode: 'pagbank_split_not_confirmed', reason });
+  });
+
+  it('rejeita Order recuperada sem PIX', () => {
+    const candidate = order(undefined, {
+      charges: [{
+        id: 'CHAR_1', status: 'WAITING',
+        splits: { method: 'FIXED', receivers: [receiver('ACC_COMPANY', 10_000), receiver('ACC_MKT', 600)] },
+      }],
+    });
+    expect(validate(candidate)).toMatchObject({
+      ok: false,
+      errorCode: 'pagbank_pix_artifact_missing',
+      reason: 'pix_qr_text_missing',
+    });
+  });
+
+  it.each([
+    ['Order ID', order(undefined, { id: null }), 'order_id_missing'],
+    ['reference_id', order(undefined, { reference_id: null }), 'reference_id_missing'],
+    ['referência divergente', order(undefined, { reference_id: 'other-sale' }), 'reference_id_mismatch'],
+    ['Charge ID', order(undefined, { charges: [{
+      status: 'WAITING',
+      payment_method: { type: 'PIX', pix: { qr_code: { text: 'pix-copy-paste' } } },
+      splits: { method: 'FIXED', receivers: [receiver('ACC_COMPANY', 10_000), receiver('ACC_MKT', 600)] },
+    }] }), 'charge_id_missing'],
+  ])('rejeita resposta incompleta sem %s', (_label, candidate, reason) => {
+    expect(validate(candidate)).toMatchObject({
+      ok: false,
+      errorCode: 'pagbank_order_response_incomplete',
+      reason,
+    });
   });
 });
 
