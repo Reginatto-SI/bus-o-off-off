@@ -211,7 +211,7 @@ const getCompanyDisplayNameForPersistence = ({
 };
 
 export default function CompanyPage() {
-  const { activeCompanyId, user, isGerente, isOperador, isDeveloper, updateActiveCompany } = useAuth();
+  const { activeCompanyId, user, isGerente, isOperador, isDeveloper, updateActiveCompany, loading: authLoading } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const {
     environment: runtimePaymentEnvironment,
@@ -1287,7 +1287,19 @@ export default function CompanyPage() {
     toast.success('Imagem de capa removida');
   };
 
-  if (!isGerente && !isOperador) {
+  // Aguarda a resolução do perfil antes de decidir o acesso: sem isso, o acesso direto
+  // por URL redirecionava durante o carregamento, quando o papel ainda não está resolvido.
+  if (authLoading) {
+    return (
+      <AdminLayout>
+        <div className="flex min-h-[40vh] items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  if (!isGerente && !isOperador && !isDeveloper) {
     return <Navigate to="/admin/eventos" replace />;
   }
 

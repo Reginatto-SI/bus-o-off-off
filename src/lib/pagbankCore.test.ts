@@ -233,9 +233,10 @@ describe('validação integral de Order PIX PagBank', () => {
     ['menor', [receiver('ACC_COMPANY', 9_999), receiver('ACC_MKT', 600)], 10_599],
   ])('identifica explicitamente soma %s que o total financeiro', (_label, receivers, echoedTotalCents) => {
     const result = validate(order(receivers));
-    if (result.ok || !result.split || result.split.ok) throw new Error('split divergence expected');
-    expect(result.split.echoedTotalCents).toBe(echoedTotalCents);
-    expect(result.split.issues).toContain('sum_mismatch');
+    expect(result).toMatchObject({
+      ok: false,
+      split: { ok: false, echoedTotalCents, issues: expect.arrayContaining(['sum_mismatch']) },
+    });
   });
 
   it('registra simultaneamente cardinalidade, recebedor inesperado e soma divergente', () => {
@@ -244,9 +245,14 @@ describe('validação integral de Order PIX PagBank', () => {
       receiver('ACC_MKT', 600),
       receiver('ACC_EXTRA', 1),
     ]));
-    expect(result).toMatchObject({ ok: false, errorCode: 'pagbank_split_not_confirmed' });
-    if (result.ok || !result.split || result.split.ok) throw new Error('split divergence expected');
-    expect(result.split.issues).toEqual(expect.arrayContaining(['count_mismatch', 'unexpected_receiver', 'sum_mismatch']));
+    expect(result).toMatchObject({
+      ok: false,
+      errorCode: 'pagbank_split_not_confirmed',
+      split: {
+        ok: false,
+        issues: expect.arrayContaining(['count_mismatch', 'unexpected_receiver', 'sum_mismatch']),
+      },
+    });
   });
 
   it.each([

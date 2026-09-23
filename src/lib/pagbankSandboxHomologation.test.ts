@@ -192,8 +192,11 @@ describe('caracterização de lacuna da conciliação devolvida pelo PagBank', (
     };
 
     const result = reconcilePagbankSplit(responseWithUnexpectedReceiver, expected, 10_600);
-    expect(result).toMatchObject({ ok: false, reason: 'unexpected_receiver', echoedTotalCents: 10_601 });
-    if (result.ok) throw new Error('split divergence expected');
-    expect(result.issues).toEqual(expect.arrayContaining(['count_mismatch', 'unexpected_receiver', 'sum_mismatch']));
+    expect(result).toMatchObject({
+      ok: false,
+      reason: 'unexpected_receiver',
+      echoedTotalCents: 10_601,
+      issues: expect.arrayContaining(['count_mismatch', 'unexpected_receiver', 'sum_mismatch']),
+    });
   });
 });
