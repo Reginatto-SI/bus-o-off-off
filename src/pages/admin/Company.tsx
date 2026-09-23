@@ -211,7 +211,7 @@ const getCompanyDisplayNameForPersistence = ({
 };
 
 export default function CompanyPage() {
-  const { activeCompanyId, user, isGerente, isOperador, isDeveloper, updateActiveCompany } = useAuth();
+  const { activeCompanyId, user, isGerente, isOperador, isDeveloper, updateActiveCompany, loading: authLoading } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const {
     environment: runtimePaymentEnvironment,
