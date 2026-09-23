@@ -12,7 +12,9 @@ O objetivo principal é permitir que uma empresa venda pelo Asaas, outra pelo Me
 
 ## 2. Contexto
 
-O SmartBus BR nasceu com o Asaas como gateway principal.
+O SmartBus BR nasceu com o Asaas como gateway principal e hoje é uma plataforma
+multi-gateway. Asaas permanece a referência operacional histórica, não um gateway
+estrutural exclusivo.
 
 Com a evolução do produto, o sistema deve suportar múltiplos gateways de pagamento.
 
@@ -133,7 +135,9 @@ Gateways mínimos previstos:
 
 ```text
 asaas
+pagbank
 mercado_pago
+stripe
 paypal
 outro
 ```
@@ -249,9 +253,16 @@ split_parcial
 sem_split
 ```
 
+As categorias descrevem a liquidação técnica, não alteram os beneficiários econômicos.
+Em qualquer categoria, deve existir caminho válido para a parcela permanente da
+SmartBus chegar à SmartBus naquele gateway e ambiente. Sem isso, a configuração não
+está apta para vendas. Parcela de sócio/representante não liquidada diretamente deve
+permanecer como obrigação de repasse no ledger/conciliação.
+
 ### 12.1 Split completo
 
-Gateway consegue liquidar automaticamente Marketplace, sócio e representante.
+Gateway consegue liquidar automaticamente Marketplace, sócio e representante em
+suas respectivas contas técnicas.
 
 Exemplo:
 
@@ -261,7 +272,8 @@ Asaas
 
 ### 12.2 Split parcial
 
-Gateway consegue liquidar parte dos envolvidos, mas outros dependem de repasse manual.
+Gateway consegue liquidar a SmartBus e parte dos demais beneficiários; os outros
+dependem de obrigação de repasse registrada e liquidação posterior.
 
 Exemplo previsto:
 
@@ -269,9 +281,12 @@ Exemplo previsto:
 Mercado Pago
 ```
 
-### 12.3 Sem split
+### 12.3 Sem multi-split
 
-Gateway apenas processa cobrança e exige controle manual dos repasses.
+Gateway não divide automaticamente entre todos os beneficiários. Ainda deve existir
+forma válida de a parcela SmartBus chegar à SmartBus; “sem split” não significa sem
+liquidação da taxa da plataforma. Direitos não liquidados diretamente continuam
+registrados para repasse posterior.
 
 ---
 
@@ -407,7 +422,8 @@ Exemplo:
 
 * Asaas com split completo gera comissão como Pago via split;
 * Mercado Pago gera comissão do sócio e representante como Pendente manual;
-* gateway sem split gera pendências manuais conforme regra aplicável.
+* gateway sem multi-split gera obrigações de repasse conforme a regra aplicável,
+  desde que a parcela SmartBus tenha caminho válido.
 
 A configuração não altera a regra oficial da taxa.
 
