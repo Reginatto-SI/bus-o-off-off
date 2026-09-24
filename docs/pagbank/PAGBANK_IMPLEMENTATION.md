@@ -1,5 +1,18 @@
 # PagBank no SmartBus — checkpoint atual
 
+## Manutenção — 2026-09-24: formato da chave de idempotência
+
+- A chave da criação PIX passou de componentes separados por `:` para
+  `pagbank_{company_id}_{sale_id}_{environment}_{operation}`, atendendo ao formato
+  `^[\w-]+$` recusado no primeiro piloto sem introduzir tempo ou aleatoriedade.
+- Empresa, venda, ambiente e operação continuam compondo deterministicamente a
+  chave; retentativas da mesma operação continuam reutilizando o mesmo valor.
+- Nenhuma migration ou escrita retroativa foi criada: a tentativa HTTP 400 e sua
+  chave histórica permanecem em `payment_attempts` como evidência. O novo piloto
+  deve usar uma nova venda, conforme decisão operacional.
+- Taxa, split, Order, webhook, confirmação, tickets e Asaas não foram alterados.
+  Produção PagBank continua bloqueada e nenhum PIX foi executado nesta manutenção.
+
 ## Manutenção — 2026-09-24: e-mail real do comprador no checkout
 
 - O checkout público passou a solicitar um único e-mail obrigatório no bloco do

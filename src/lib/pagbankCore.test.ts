@@ -25,12 +25,32 @@ describe('PagBank — ambiente e idempotência', () => {
     expect(() => assertPagbankEnvironmentAllowed(null)).toThrowError(PagbankError);
   });
 
-  it('gera chave idempotente estável (sem tempo/aleatoriedade) por empresa+venda+ambiente+operação', () => {
-    const a = buildPagbankIdempotencyKey({ companyId: 'c1', saleId: 's1', environment: 'sandbox', operation: 'create_pix' });
-    const b = buildPagbankIdempotencyKey({ companyId: 'c1', saleId: 's1', environment: 'sandbox', operation: 'create_pix' });
-    const other = buildPagbankIdempotencyKey({ companyId: 'c2', saleId: 's1', environment: 'sandbox', operation: 'create_pix' });
-    expect(a).toBe(b);
-    expect(a).not.toBe(other);
+  it('gera chave aceita pelo PagBank e dentro do limite seguro para os UUIDs reais', () => {
+    const key = buildPagbankIdempotencyKey({
+      companyId: '11111111-1111-4111-8111-111111111111',
+      saleId: '22222222-2222-4222-8222-222222222222',
+      environment: 'sandbox',
+      operation: 'create_pix',
+    });
+
+    expect(key).toBe('pagbank_11111111-1111-4111-8111-111111111111_22222222-2222-4222-8222-222222222222_sandbox_create_pix');
+    expect(key).toMatch(/^[\w-]+$/);
+    expect(key).not.toContain(':');
+    expect(key.length).toBeLessThanOrEqual(128);
+  });
+
+  it('mantém a chave determinística nas retentativas e isola empresa, venda e ambiente', () => {
+    const logicalOperation = { companyId: 'c1', saleId: 's1', environment: 'sandbox' as const, operation: 'create_pix' as const };
+    const firstAttempt = buildPagbankIdempotencyKey(logicalOperation);
+    const retry = buildPagbankIdempotencyKey(logicalOperation);
+
+    expect(retry).toBe(firstAttempt);
+    expect(buildPagbankIdempotencyKey({ ...logicalOperation, saleId: 's2' })).not.toBe(firstAttempt);
+    expect(buildPagbankIdempotencyKey({ ...logicalOperation, companyId: 'c2' })).not.toBe(firstAttempt);
+
+    // Produção continua bloqueada no fluxo; aqui ela comprova apenas o isolamento
+    // determinístico do componente de ambiente da chave pura.
+    expect(buildPagbankIdempotencyKey({ ...logicalOperation, environment: 'production' })).not.toBe(firstAttempt);
   });
 });
 
