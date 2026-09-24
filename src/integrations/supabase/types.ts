@@ -2728,6 +2728,7 @@ export type Database = {
           company_id: string
           created_at: string
           customer_cpf: string | null
+          customer_email: string | null
           customer_name: string
           customer_phone: string | null
           event_id: string
@@ -2780,6 +2781,7 @@ export type Database = {
           company_id: string
           created_at?: string
           customer_cpf?: string | null
+          customer_email?: string | null
           customer_name: string
           customer_phone?: string | null
           event_id: string
@@ -2832,6 +2834,7 @@ export type Database = {
           company_id?: string
           created_at?: string
           customer_cpf?: string | null
+          customer_email?: string | null
           customer_name?: string
           customer_phone?: string | null
           event_id?: string
