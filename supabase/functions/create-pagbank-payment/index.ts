@@ -23,6 +23,7 @@ import {
   roundCurrency,
 } from "../_shared/checkout-financial-integrity.ts";
 import { ensureSaleTermsAcceptance, getPayloadTermsAcceptance } from "../_shared/sale-terms-acceptance.ts";
+// Reempacotamento intencional: este entrypoint depende do helper compartilhado de idempotência PagBank.
 import {
   PAGBANK_PIX_EXPIRATION_MINUTES,
   PagbankError,
