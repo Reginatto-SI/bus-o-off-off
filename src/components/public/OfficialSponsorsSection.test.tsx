@@ -108,16 +108,25 @@ describe("OfficialSponsorsSection", () => {
     expect(screen.getByAltText("Banner mobile de Seguro Viagem da AEG Corretora de Seguros")).toBeInTheDocument();
   });
 
-  it("preserva o fallback SmartBus nos slots sem contato individual", () => {
+  it("mantém o WhatsApp comercial no slot 02 e direciona o slot 03 para a Google Play", () => {
     const { container } = render(<OfficialSponsorsSection />);
     const mobileCards = container.querySelectorAll<HTMLElement>("[data-sponsor-card]");
-    const smartBusUrl = "https://wa.me/5531992074309?text=";
+    const smartBusCommercialUrl = "https://wa.me/5531992074309?text=";
+    const playStoreUrl = "https://play.google.com/store/apps/details?id=com.reginattosi.smartbus";
 
-    [mobileCards[1], mobileCards[2]].forEach((card) => {
-      within(card).getAllByRole("link").forEach((link) => {
-        expect(link.getAttribute("href")).toContain(smartBusUrl);
-        expect(link.getAttribute("href")).not.toContain("553133333065");
-      });
+    within(mobileCards[1]).getAllByRole("link").forEach((link) => {
+      expect(link.getAttribute("href")).toContain(smartBusCommercialUrl);
+      expect(link.getAttribute("href")).not.toContain("553133333065");
     });
+
+    within(mobileCards[2]).getAllByRole("link").forEach((link) => {
+      expect(link).toHaveAttribute("href", playStoreUrl);
+    });
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Ver patrocinador 3" })[1]);
+    expect(screen.getByAltText("Banner desktop do Patrocinador 03").closest("a")).toHaveAttribute(
+      "href",
+      playStoreUrl,
+    );
   });
 });
