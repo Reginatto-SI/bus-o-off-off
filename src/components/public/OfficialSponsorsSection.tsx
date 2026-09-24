@@ -93,6 +93,10 @@ const SPONSOR_COMMERCIAL_URL =
   }) ??
   "https://wa.me/5531992074309?text=Ol%C3%A1!%20Quero%20conhecer%20os%20espa%C3%A7os%20de%20Patrocinadores%20Oficiais%20do%20SmartBus%20BR.";
 
+// O terceiro banner institucional divulga o aplicativo oficial do SmartBus na Google Play.
+const SMARTBUS_GOOGLE_PLAY_URL =
+  "https://play.google.com/store/apps/details?id=com.reginattosi.smartbus";
+
 const AEG_WHATSAPP_MESSAGE =
   "Olá! Gostaria de saber mais sobre o Seguro Viagem da AEG Corretora de Seguros. Conheci a empresa pela página do SmartBus BR.";
 const AEG_WHATSAPP_URL = buildWhatsappWaMeLink({
@@ -128,7 +132,7 @@ const OFFICIAL_SPONSOR_SLOTS: OfficialSponsorRealCard[] = [
     imageSrc: `/sponsors/patrocinador-${id}-mobile.png`,
     desktopImageSrc: `/sponsors/patrocinador-${id}-desktop.png`,
     mobileImageSrc: `/sponsors/patrocinador-${id}-mobile.png`,
-    href: SPONSOR_COMMERCIAL_URL,
+    href: id === "03" ? SMARTBUS_GOOGLE_PLAY_URL : SPONSOR_COMMERCIAL_URL,
     alt: `Banner do Patrocinador ${id}`,
     desktopAlt: `Banner desktop do Patrocinador ${id}`,
     mobileAlt: `Banner mobile do Patrocinador ${id}`,
