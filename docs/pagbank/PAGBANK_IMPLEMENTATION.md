@@ -1,5 +1,26 @@
 # PagBank no SmartBus — checkpoint atual
 
+## Manutenção — 2026-09-24: e-mail real do comprador no checkout
+
+- O checkout público passou a solicitar um único e-mail obrigatório no bloco do
+  comprador, com validação compartilhada de formato; passageiros não recebem
+  campo de e-mail individual.
+- Migration aditiva incluiu `sales.customer_email` nullable, preservando vendas
+  históricas. Novas compras públicas persistem o valor normalizado na venda,
+  sem alteração de RLS ou de isolamento por `company_id`.
+- A criação PIX PagBank relê e valida `sales.customer_email` antes de qualquer
+  chamada ao provedor e envia esse valor como `customer.email`; ausência ou
+  formato inválido retorna `customer_email_invalid`, sem fallback fictício e sem
+  expor o endereço em logs ou erros.
+- Asaas, taxa, split, Order, idempotência, webhook, confirmação e tickets não
+  foram alterados. Produção PagBank continua bloqueada.
+- Pendências observadas no piloto, registradas sem correção nesta manutenção:
+  venda permanecer aguardando pagamento e lock do assento não ser liberado
+  imediatamente após recusa na criação da cobrança.
+- Homologação manual PIX Sandbox na Empresa Padrão (Teste) continua pendente:
+  passagem R$ 100,00, taxa R$ 6,00, total R$ 106,00, empresa R$ 100,00 e
+  SmartBus R$ 6,00.
+
 ## Manutenção — 2026-09-23: integridade do Order PIX (Fase 1.1)
 
 - A validação do split ecoado pelo PagBank agora exige igualdade integral: mesma

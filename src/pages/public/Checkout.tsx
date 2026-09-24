@@ -44,6 +44,10 @@ import { toast } from "sonner";
 import { formatCurrencyBRL } from "@/lib/currency";
 import { getTripSeatOccupancyRpc } from "@/lib/tripSeatOccupancyRpc";
 import { formatPhoneBR } from "@/lib/phone";
+import {
+  isValidCustomerEmail,
+  normalizeCustomerEmail,
+} from "../../../supabase/functions/_shared/customer-email";
 import { usePageMeta } from "@/lib/usePageMeta";
 import { useRuntimePaymentEnvironment } from "@/hooks/use-runtime-payment-environment";
 import {
@@ -304,6 +308,8 @@ export default function Checkout() {
     null,
   );
   const [payerIndex, setPayerIndex] = useState(0);
+  // O e-mail é único por compra e não integra os dados individuais dos passageiros.
+  const [customerEmail, setCustomerEmail] = useState("");
   const [openPassengerIdx, setOpenPassengerIdx] = useState<number | null>(0);
   const [eventFees, setEventFees] = useState<EventFeeInput[]>([]);
   const [eventTicketTypes, setEventTicketTypes] = useState<EventTicketType[]>([]);
@@ -1120,6 +1126,13 @@ export default function Checkout() {
         "O responsável pelo pagamento precisa ter CPF válido";
     }
 
+    // Checkout público novo exige o contato real do comprador, independentemente do gateway.
+    if (!customerEmail.trim()) {
+      newErrors.customer_email = "Informe o e-mail do comprador";
+    } else if (!isValidCustomerEmail(customerEmail)) {
+      newErrors.customer_email = "Informe um e-mail válido";
+    }
+
     if (Object.keys(newErrors).length > 0) {
       console.warn("[checkout] passenger_validation_failed", {
         stage: "validate_passengers_before_insert",
@@ -1572,6 +1585,8 @@ export default function Checkout() {
         customer_name: payer.name.trim(),
         customer_cpf: payer.cpf.replace(/\D/g, ""),
         customer_phone: payer.phone.replace(/\D/g, ""),
+        // Persiste a fonte usada pelo backend; a cobrança nunca confia no valor vindo da invocação.
+        customer_email: normalizeCustomerEmail(customerEmail),
         quantity,
         unit_price: event.unit_price ?? 0,
         gross_amount: grossAmount,
@@ -2522,13 +2537,13 @@ export default function Checkout() {
               })}
             </div>
 
-            {/* Payer selection */}
-            {passengers.length > 1 && (
-              <div className="space-y-3 bg-muted/30 rounded-lg p-4 border">
+            {/* Dados únicos do comprador; passageiros continuam sem campo de e-mail individual. */}
+            <div className="space-y-3 bg-muted/30 rounded-lg p-4 border">
                 <h3 className="text-sm font-semibold flex items-center gap-2">
                   <User className="h-4 w-4 text-primary" />
-                  Responsável pelo pagamento
+                  Dados do comprador
                 </h3>
+              {passengers.length > 1 && (
                 <RadioGroup
                   value={String(payerIndex)}
                   onValueChange={(v) => setPayerIndex(Number(v))}
@@ -2556,8 +2571,37 @@ export default function Checkout() {
                     );
                   })}
                 </RadioGroup>
+              )}
+              <div className="space-y-1.5">
+                <Label htmlFor="customer-email" className="text-sm">
+                  E-mail
+                </Label>
+                <Input
+                  id="customer-email"
+                  type="email"
+                  value={customerEmail}
+                  onChange={(event) => {
+                    setCustomerEmail(event.target.value);
+                    setErrors((previous) => {
+                      const next = { ...previous };
+                      delete next.customer_email;
+                      return next;
+                    });
+                  }}
+                  placeholder="seu@email.com"
+                  autoComplete="email"
+                  inputMode="email"
+                  maxLength={254}
+                  aria-invalid={Boolean(errors.customer_email)}
+                  aria-describedby={errors.customer_email ? "customer-email-error" : undefined}
+                />
+                {errors.customer_email && (
+                  <p id="customer-email-error" className="text-xs text-destructive">
+                    {errors.customer_email}
+                  </p>
+                )}
               </div>
-            )}
+            </div>
 
             <div className="h-1" />
           </>

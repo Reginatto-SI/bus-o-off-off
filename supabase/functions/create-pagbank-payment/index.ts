@@ -37,6 +37,7 @@ import { pagbankSecretNames, resolvePagbankCredentialForSale } from "../_shared/
 import { resolvePagbankSplitRecipients } from "../_shared/pagbank/split-recipients.ts";
 import { buildPagbankFixedSplitPlan } from "../_shared/pagbank/split-plan.ts";
 import { finalizeConfirmedPayment } from "../_shared/payment-finalization.ts";
+import { isValidCustomerEmail, normalizeCustomerEmail } from "../_shared/customer-email.ts";
 
 const SOURCE = "create-pagbank-payment";
 const corsHeaders = {
@@ -104,6 +105,14 @@ Deno.serve(async (req) => {
     if (sale.payment_gateway !== "pagbank") {
       return json({ error: "Esta venda não usa PagBank.", error_code: "gateway_mismatch" }, 409);
     }
+    // A venda é a única fonte do e-mail; bloqueia antes de qualquer chamada ao PagBank.
+    if (!isValidCustomerEmail(sale.customer_email)) {
+      return json({
+        error: "A venda não possui um e-mail válido do comprador.",
+        error_code: "customer_email_invalid",
+      }, 422);
+    }
+    const customerEmail = normalizeCustomerEmail(sale.customer_email);
     const environment = assertPagbankEnvironmentAllowed(sale.payment_environment);
     const { data: company, error: companyError } = await supabaseAdmin
       .from("companies")
@@ -376,7 +385,7 @@ Deno.serve(async (req) => {
       name: String(sale.customer_name ?? "Cliente").slice(0, 60),
       tax_id: onlyDigits(sale.customer_cpf),
     };
-    if (sale.customer_email) customer.email = sale.customer_email;
+    customer.email = customerEmail;
     if (phone.length >= 10) {
       customer.phones = [{ country: "55", area: phone.slice(0, 2), number: phone.slice(2), type: "MOBILE" }];
     }
