@@ -88,7 +88,8 @@ export function buildPagbankIdempotencyKey(params: {
   environment: PagbankEnvironment;
   operation: "create_pix";
 }): string {
-  return `pagbank:${params.companyId}:${params.saleId}:${params.environment}:${params.operation}`;
+  // O PagBank aceita somente caracteres de palavra e hífen neste header.
+  return `pagbank_${params.companyId}_${params.saleId}_${params.environment}_${params.operation}`;
 }
 
 export type PagbankNormalizedStatus = "pending" | "paid" | "failed" | "canceled" | "unknown";
