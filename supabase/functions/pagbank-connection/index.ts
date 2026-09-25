@@ -174,6 +174,40 @@ Deno.serve(async (req) => {
       }, probe.ok ? 200 : 409);
     }
 
+    // Diagnóstico read-only de identidade: confirma se o token salvo pertence
+    // à conta external_account_id cadastrada (GET /accounts/{id} oficial).
+    // Não cria cobrança, não altera estado financeiro, não expõe o token.
+    if (action === "whoami") {
+      assertPagbankEnvironmentAllowed(environment);
+      const connection = await loadCurrentConnection(supabaseAdmin, { companyId, environment });
+      if (!connection) return json({ error: "Nenhuma conta PagBank Sandbox cadastrada nesta empresa.", error_code: "pagbank_connection_missing" }, 409);
+      if (!connection.external_account_id) return json({ error: "Conexão sem conta externa cadastrada.", error_code: "pagbank_account_missing" }, 409);
+      const credential = await resolveCredentialFromConnection(supabaseAdmin, connection, "query");
+      const baseUrl = environment === "sandbox" ? "https://sandbox.api.pagseguro.com" : "https://api.pagseguro.com";
+      let probe: { ok: boolean; status: number | null; indeterminate: boolean };
+      try {
+        const res = await fetch(`${baseUrl}/accounts/${connection.external_account_id}`, {
+          method: "GET",
+          headers: { Authorization: `Bearer ${credential.accessToken}`, Accept: "application/json" },
+        });
+        await res.text().catch(() => "");
+        probe = { ok: res.ok, status: res.status, indeterminate: false };
+      } catch {
+        probe = { ok: false, status: null, indeterminate: true };
+      }
+      logPaymentTrace("info", "pagbank-connection", "whoami_probe", {
+        company_id: companyId, connection_id: connection.id, identity_ok: probe.ok, http_status: probe.status,
+      });
+      return json({
+        ok: probe.ok,
+        identity_matches: probe.ok,
+        http_status: probe.status,
+        account_masked: maskIdentifier(connection.external_account_id),
+        error: probe.ok ? undefined : "O token salvo não pertence à conta cadastrada (ou o PagBank recusou a consulta).",
+        error_code: probe.ok ? undefined : "pagbank_identity_mismatch",
+      }, probe.ok ? 200 : 409);
+    }
+
     if (action === "set_gateway") {
       const gateway = body?.gateway === "pagbank" ? "pagbank" : body?.gateway === "asaas" ? "asaas" : null;
       if (!gateway) return json({ error: "gateway inválido" }, 400);
