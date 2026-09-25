@@ -24,6 +24,7 @@ import {
 } from "../_shared/checkout-financial-integrity.ts";
 import { ensureSaleTermsAcceptance, getPayloadTermsAcceptance } from "../_shared/sale-terms-acceptance.ts";
 // Reempacotamento intencional: este entrypoint depende do helper compartilhado de idempotência PagBank.
+// Redeploy 2026-09-25: força novo bundle com a chave de idempotência sem dois-pontos (formato pagbank_<company>_<sale>_<env>_<op>).
 import {
   PAGBANK_PIX_EXPIRATION_MINUTES,
   PagbankError,
