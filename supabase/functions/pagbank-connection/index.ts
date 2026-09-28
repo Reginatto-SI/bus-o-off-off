@@ -24,7 +24,10 @@ import {
   missingPagbankSecrets,
   pagbankSecretNames,
   resolveCredentialFromConnection,
+  resolvePlatformAccessToken,
+  resolvePlatformConnectCredentials,
 } from "../_shared/pagbank/credentials.ts";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
