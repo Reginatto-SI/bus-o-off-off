@@ -7,12 +7,14 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { logPaymentTrace } from "../_shared/payment-observability.ts";
 import {
   PAGBANK_ALLOWED_ENVIRONMENTS,
+  PAGBANK_API_BASE_URLS,
   PAGBANK_CONNECT_AUTHORIZE_URLS,
   PAGBANK_CONNECT_SCOPES,
   PagbankError,
   assertPagbankEnvironmentAllowed,
   maskIdentifier,
 } from "../_shared/pagbank/core.ts";
+
 import { probePagbankAuth } from "../_shared/pagbank/client.ts";
 import { encryptSecret, isEncryptionConfigured } from "../_shared/pagbank/crypto.ts";
 import { classifyRequestOrigin, resolveEffectivePaymentEnvironment } from "../_shared/payment-environment-policy.ts";
