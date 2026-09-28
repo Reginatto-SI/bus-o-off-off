@@ -1,7 +1,8 @@
 // @ts-nocheck — arquivo Deno (edge function).
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Administração da conexão PagBank por empresa (autenticado, admin da empresa).
-// Ações: status | save_sandbox_token | connect_start | disconnect | set_gateway.
+// Ações: status | validate | whoami | save_sandbox_token | connect_start |
+// connect_sms_start | connect_sms_confirm | disconnect | set_gateway.
 // Nunca retorna tokens; apenas status, conta mascarada e diagnóstico.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { logPaymentTrace } from "../_shared/payment-observability.ts";
