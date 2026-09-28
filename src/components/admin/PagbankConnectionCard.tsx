@@ -172,6 +172,42 @@ export function PagbankConnectionCard({ companyId, canEdit, isDeveloper, environ
     }
   };
 
+  const startSmsAuthorization = async () => {
+    if (!canEdit) return;
+    setBusy('connect_sms_start');
+    try {
+      const { data, errorMessage } = await callConnection<{ authorization_id?: string; phone_masked?: string | null }>({
+        action: 'connect_sms_start',
+        company_id: companyId,
+        email: smsEmail.trim(),
+        bank_branch: smsBranch.trim(),
+        account_number: smsAccountNumber.trim(),
+      });
+      if (errorMessage || !data?.authorization_id) {
+        toast.error(isDeveloper ? errorMessage ?? 'A autorização por SMS não foi iniciada.' : 'Não foi possível concluir a operação.');
+        return;
+      }
+      setSmsAuthorizationId(data.authorization_id);
+      toast.success(data.phone_masked ? `Código enviado para ${data.phone_masked}.` : 'Código de autorização solicitado.');
+    } catch {
+      toast.error('Não foi possível solicitar a autorização por SMS.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const confirmSmsAuthorization = async () => {
+    if (!smsAuthorizationId) return;
+    const ok = await run('connect_sms_confirm', {
+      email: smsEmail.trim(),
+      authorization_id: smsAuthorizationId,
+      sms_code: smsCode.trim(),
+    }, 'Conta PagBank autorizada por SMS e vinculada a esta empresa.');
+    if (ok) setSmsAuthorizationId(null);
+  };
+
+
+
   const connection = status?.connection ?? null;
   const isConnected = connection?.status === 'connected';
   const gateway = loadError ? null : status?.company_gateway ?? null;
