@@ -110,6 +110,11 @@ export function PagbankConnectionCard({ companyId, canEdit, isDeveloper, environ
   const [disconnectOpen, setDisconnectOpen] = useState(false);
   const [sandboxToken, setSandboxToken] = useState('');
   const [sandboxAccountId, setSandboxAccountId] = useState('');
+  const [smsEmail, setSmsEmail] = useState('');
+  const [smsBranch, setSmsBranch] = useState('0001');
+  const [smsAccountNumber, setSmsAccountNumber] = useState('00000000-1');
+  const [smsAuthorizationId, setSmsAuthorizationId] = useState<string | null>(null);
+  const [smsCode, setSmsCode] = useState('123456');
 
   const refresh = useCallback(async () => {
     setLoading(true);
