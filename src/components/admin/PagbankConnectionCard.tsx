@@ -360,6 +360,28 @@ export function PagbankConnectionCard({ companyId, canEdit, isDeveloper, environ
               {canEdit && isConnected && <Button type="button" variant="outline" size="sm" disabled={unavailable || !status?.platform_ready.connect || !status?.platform_ready.encryption} onClick={() => void run('connect_start')}>Renovar autorização PagBank</Button>}
             </div>
             {canEdit && <details className="rounded-lg border bg-background">
+              <summary className="cursor-pointer px-4 py-3 text-sm font-medium">Conectar via SMS (Sandbox)</summary>
+              <div className="px-4 pb-4 space-y-3">
+                <p className="text-sm text-muted-foreground">Autorização oficial do PagBank sem a tela de login. Vincula a conta apenas a esta empresa e não altera o provedor das novas vendas.</p>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="space-y-1"><Label htmlFor="pagbank-sms-email">E-mail da conta vendedora</Label><Input id="pagbank-sms-email" type="email" autoComplete="off" value={smsEmail} onChange={e => setSmsEmail(e.target.value)} placeholder="conta@exemplo.com" /></div>
+                  <div className="space-y-1"><Label htmlFor="pagbank-sms-branch">Agência</Label><Input id="pagbank-sms-branch" autoComplete="off" value={smsBranch} onChange={e => setSmsBranch(e.target.value)} /></div>
+                  <div className="space-y-1"><Label htmlFor="pagbank-sms-account">Conta</Label><Input id="pagbank-sms-account" autoComplete="off" value={smsAccountNumber} onChange={e => setSmsAccountNumber(e.target.value)} /></div>
+                </div>
+                <p className="text-xs text-muted-foreground">Agência e conta já vêm com os valores de simulação do Sandbox.</p>
+                <Button type="button" size="sm" variant="secondary" disabled={unavailable || !status?.platform_ready.encryption || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(smsEmail.trim())} onClick={() => void startSmsAuthorization()}>
+                  {busy === 'connect_sms_start' && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Solicitar autorização por SMS
+                </Button>
+                {smsAuthorizationId && <div className="space-y-3 rounded-md border bg-muted/30 p-3">
+                  <div className="space-y-1 max-w-xs"><Label htmlFor="pagbank-sms-code">Código recebido</Label><Input id="pagbank-sms-code" autoComplete="one-time-code" inputMode="numeric" value={smsCode} onChange={e => setSmsCode(e.target.value)} /></div>
+                  <p className="text-xs text-muted-foreground">No Sandbox, o código de simulação é 123456.</p>
+                  <Button type="button" size="sm" disabled={unavailable || smsCode.trim().length < 4} onClick={() => void confirmSmsAuthorization()}>
+                    {busy === 'connect_sms_confirm' && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Confirmar conexão
+                  </Button>
+                </div>}
+              </div>
+            </details>}
+            {canEdit && <details className="rounded-lg border bg-background">
               <summary className="cursor-pointer px-4 py-3 text-sm font-medium">Alternativa de teste: token manual PagBank</summary>
               <div className="px-4 pb-4 space-y-3">
                 <p className="text-sm text-muted-foreground">Use somente a conta Sandbox da empresa vendedora. Salvar não altera o provedor nem o ambiente das vendas.</p>
