@@ -353,7 +353,7 @@ export function PagbankConnectionCard({ companyId, canEdit, isDeveloper, environ
                 <p className="text-xs text-muted-foreground">Recebedor SmartBus: {status.capabilities.marketplace_account_configured ? 'configurado' : 'pendente'} · Webhook: {status.platform_ready.webhook ? 'configurado (não comprova entrega)' : 'pendente'}</p>
               </> : <p className="text-sm text-muted-foreground">{loadError ?? 'Aguardando consulta da conexão.'}</p>}
               {connection?.last_error && <p className="text-xs text-destructive">Último erro: {connection.last_error}</p>}
-              {connection && <p className="text-xs text-muted-foreground">Modo: {connection.credential_mode === 'connect_oauth' ? 'Autorização PagBank' : 'Token Sandbox manual'}</p>}
+              {connection && <p className="text-xs text-muted-foreground">Modo: {connection.credential_mode === 'connect_oauth' ? 'Autorização PagBank (navegador)' : connection.credential_mode === 'connect_sms' ? 'Autorização PagBank (SMS)' : 'Token Sandbox manual'}</p>}
               {status && !status.platform_ready.split && <p className="text-xs text-muted-foreground">Recebedor da plataforma: configurar PAGBANK_MARKETPLACE_ACCOUNT_ID_SANDBOX.</p>}
               {status && !status.platform_ready.webhook && <p className="text-xs text-muted-foreground">Webhook: configurar PAGBANK_WEBHOOK_TOKEN_SANDBOX no cofre de segredos.</p>}
               {status && !status.platform_ready.encryption && <p className="text-xs text-destructive">Proteção das credenciais ainda não configurada no servidor.</p>}
