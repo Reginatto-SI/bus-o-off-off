@@ -318,6 +318,122 @@ Deno.serve(async (req) => {
       return json({ ok: true, authorize_url: url.toString(), expires_in_seconds: 600 });
     }
 
+    // Connect via SMS (oficial PagBank): alternativa à tela de autorização do
+    // navegador. Gera a MESMA credencial delegada do Connect, registrada com
+    // credential_mode = "connect_sms" para preservar a origem na auditoria.
+    if (action === "connect_sms_start" || action === "connect_sms_confirm") {
+      assertPagbankEnvironmentAllowed(environment);
+      if (!isEncryptionConfigured()) {
+        throw new PagbankError("pagbank_configuration_missing", "Chave de criptografia não configurada.", 409);
+      }
+      const platform = await resolvePlatformConnectCredentials(supabaseAdmin, environment);
+      const platformToken = resolvePlatformAccessToken(environment);
+      if (!platform.clientId || !platform.clientSecret || !platformToken) {
+        throw new PagbankError("pagbank_configuration_missing", "A autorização PagBank ainda não está configurada na plataforma.", 409, {
+          missing: [
+            !platform.clientId && pagbankSecretNames(environment).clientId,
+            !platform.clientSecret && pagbankSecretNames(environment).clientSecret,
+            !platformToken && pagbankSecretNames(environment).platformToken,
+          ].filter(Boolean),
+        });
+      }
+      const connectHeaders = {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: `Bearer ${platformToken}`,
+        X_CLIENT_ID: platform.clientId,
+        X_CLIENT_SECRET: platform.clientSecret,
+      };
+      const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return json({ error: "Informe o e-mail da conta PagBank de testes da empresa vendedora.", error_code: "pagbank_email_invalid" }, 400);
+      }
+
+      if (action === "connect_sms_start") {
+        // Sandbox: dados bancários simulados oficiais do PagBank.
+        const bankBranch = typeof body?.bank_branch === "string" && body.bank_branch.trim() ? body.bank_branch.trim() : "0001";
+        const accountNumber = typeof body?.account_number === "string" && body.account_number.trim() ? body.account_number.trim() : "00000000-1";
+        const res = await fetch(`${PAGBANK_API_BASE_URLS[environment]}/oauth2/authorize/sms`, {
+          method: "POST",
+          headers: connectHeaders,
+          body: JSON.stringify({
+            bank_branch: bankBranch,
+            account_number: accountNumber,
+            email,
+            scope: PAGBANK_CONNECT_SCOPES.join(" "),
+          }),
+        }).catch(() => null);
+        const payload = res ? await res.json().catch(() => null) : null;
+        const authorizationId = typeof payload?.id === "string" ? payload.id : null;
+        if (!res?.ok || !authorizationId) {
+          logPaymentTrace("warn", "pagbank-connection", "connect_sms_start_failed", {
+            company_id: companyId, environment, http_status: res?.status ?? null,
+          });
+          return json({
+            error: "O PagBank não aceitou a solicitação de autorização por SMS. Confira os dados da conta de testes.",
+            error_code: "pagbank_sms_authorize_failed",
+            http_status: res?.status ?? null,
+          }, 409);
+        }
+        logPaymentTrace("info", "pagbank-connection", "connect_sms_started", { company_id: companyId, environment });
+        return json({
+          ok: true,
+          authorization_id: authorizationId,
+          phone_masked: typeof payload?.phone === "string" ? maskIdentifier(payload.phone) : null,
+        });
+      }
+
+      const authorizationId = typeof body?.authorization_id === "string" ? body.authorization_id.trim() : "";
+      const smsCode = typeof body?.sms_code === "string" ? body.sms_code.trim() : "";
+      if (!authorizationId || !smsCode) {
+        return json({ error: "Solicite o SMS e informe o código recebido.", error_code: "pagbank_sms_input_invalid" }, 400);
+      }
+      const tokenRes = await fetch(`${PAGBANK_API_BASE_URLS[environment]}/oauth2/token`, {
+        method: "POST",
+        headers: connectHeaders,
+        body: JSON.stringify({ grant_type: "sms", authorization_id: authorizationId, sms_code: smsCode }),
+      }).catch(() => null);
+      const tokenBody = tokenRes ? await tokenRes.json().catch(() => null) : null;
+      if (!tokenRes?.ok || typeof tokenBody?.access_token !== "string") {
+        logPaymentTrace("warn", "pagbank-connection", "connect_sms_token_failed", {
+          company_id: companyId, environment, http_status: tokenRes?.status ?? null,
+        });
+        return json({
+          error: "O PagBank não confirmou a autorização por SMS. Solicite um novo código e tente de novo.",
+          error_code: "pagbank_sms_token_failed",
+          http_status: tokenRes?.status ?? null,
+        }, 409);
+      }
+      const accountId = typeof tokenBody.account_id === "string" ? tokenBody.account_id : null;
+      const now = new Date().toISOString();
+      const previous = await loadCurrentConnection(supabaseAdmin, { companyId, environment });
+      if (previous) {
+        const sameAccount = Boolean(accountId) && previous.external_account_id === accountId;
+        await supabaseAdmin.from("payment_gateway_connections")
+          .update(sameAccount
+            ? { is_current: false, superseded_by_rotation: true }
+            : { is_current: false, revoked_at: now, status: "revoked", pix_ready: false, split_ready: false })
+          .eq("id", previous.id).eq("company_id", companyId);
+      }
+      const { data: created, error: insertError } = await supabaseAdmin.from("payment_gateway_connections").insert({
+        company_id: companyId, gateway: "pagbank", environment, status: "connected", credential_mode: "connect_sms",
+        external_account_id: accountId, external_account_email: email,
+        access_token_enc: await encryptSecret(tokenBody.access_token),
+        refresh_token_enc: typeof tokenBody.refresh_token === "string" ? await encryptSecret(tokenBody.refresh_token) : null,
+        token_expires_at: typeof tokenBody.expires_in === "number" ? new Date(Date.now() + tokenBody.expires_in * 1000).toISOString() : null,
+        scopes: typeof tokenBody.scope === "string" ? tokenBody.scope.split(/\s+/) : PAGBANK_CONNECT_SCOPES,
+        // Capacidades (PIX/divisão) continuam comprovadas apenas por cobrança real.
+        pix_ready: false, last_validated_at: now, connected_at: now, is_current: true, credential_generation: 1,
+        last_error: accountId ? null : "account_id_missing_in_token_response",
+      }).select("*").single();
+      if (insertError) return json({ error: insertError.message }, 500);
+      logPaymentTrace("info", "pagbank-connection", "connect_sms_connected", {
+        company_id: companyId, connection_id: created.id, has_account: Boolean(accountId),
+      });
+      return json({ ok: true, connection: publicConnection(created) });
+    }
+
+
     if (action === "disconnect") {
       const now = new Date().toISOString();
       await supabaseAdmin.from("payment_gateway_connections")
