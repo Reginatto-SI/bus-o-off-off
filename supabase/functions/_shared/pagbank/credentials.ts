@@ -185,7 +185,7 @@ export async function resolveCredentialFromConnection(
   }
 
   const expiresAt = connection.token_expires_at ? Date.parse(connection.token_expires_at) : null;
-  const needsRefresh = connection.credential_mode === "connect_oauth" && expiresAt != null && expiresAt - Date.now() < 60_000;
+  const needsRefresh = isPagbankConnectCredentialMode(connection.credential_mode) && expiresAt != null && expiresAt - Date.now() < 60_000;
   if (needsRefresh) {
     accessToken = await refreshConnectToken(supabaseAdmin, connection);
   }
