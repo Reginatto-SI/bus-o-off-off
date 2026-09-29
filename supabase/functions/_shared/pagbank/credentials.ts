@@ -115,8 +115,21 @@ export type ResolvedPagbankCredential = {
   environment: PagbankEnvironment;
 };
 
+/**
+ * Modos de credencial Connect. `connect_oauth` (autorização pelo navegador) e
+ * `connect_sms` (autorização por SMS, oficial do PagBank) são credenciais
+ * delegadas equivalentes: mesmo uso em pagamentos e mesma renovação por refresh
+ * token. O modo é preservado apenas para auditoria da origem da autorização.
+ */
+export const PAGBANK_CONNECT_CREDENTIAL_MODES = ["connect_oauth", "connect_sms"] as const;
+
+export function isPagbankConnectCredentialMode(mode: string | null | undefined): boolean {
+  return mode === "connect_oauth" || mode === "connect_sms";
+}
+
 /** `create` exige conexão corrente e conectada; `query` preserva vendas antigas. */
 export type PagbankCredentialPurpose = "create" | "query";
+
 
 /**
  * Resolve o access token válido da conexão da venda. Renova via refresh token
@@ -172,7 +185,7 @@ export async function resolveCredentialFromConnection(
   }
 
   const expiresAt = connection.token_expires_at ? Date.parse(connection.token_expires_at) : null;
-  const needsRefresh = connection.credential_mode === "connect_oauth" && expiresAt != null && expiresAt - Date.now() < 60_000;
+  const needsRefresh = isPagbankConnectCredentialMode(connection.credential_mode) && expiresAt != null && expiresAt - Date.now() < 60_000;
   if (needsRefresh) {
     accessToken = await refreshConnectToken(supabaseAdmin, connection);
   }
