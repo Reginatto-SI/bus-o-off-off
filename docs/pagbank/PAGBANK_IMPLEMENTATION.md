@@ -355,3 +355,9 @@ funcional.
 - Retorno de navegacao: o callback le `return_origin` do state ANTES da marcacao de uso unico, de modo que erros e states expirados tambem retornam para `/admin/empresa?tab=pagamentos` na origem correta (antes caiam no dominio de Producao, que redirecionava para `/admin/eventos` por falta de sessao).
 - Sem migration, sem novo secret, sem alteracao de aplicacao Connect, client_id, client_secret, account_id da plataforma, split, cobranca, confirmacao ou Asaas. PagBank segue restrito a Sandbox.
 - `NAO COMPROVADO` ate o proximo teste real: conclusao do vinculo com a conta vendedora Sandbox (status `connected` + `external_account_id`).
+
+## Checkpoint 2026-10-01 — correções pós-piloto PIX
+- PIX: leitura de `charges[0].qr_code` (formato real do Sandbox), mantendo formatos anteriores.
+- Split: quando o Order traz só o link `rel: SPLIT` (`SPLI_...`), consulta `GET /splits/{id}` com o token da plataforma e confere recebedores/valores pela regra integral; falha na leitura = não confirmado.
+- Webhook: tenta token da conexão, do ambiente e da plataforma; registra presença de `x-authenticity-token` / `x-payload-signature` (sem valores). Confirmação continua por consulta autoritativa.
+- Próximo: nova venda piloto PIX (aguardando autorização do responsável).

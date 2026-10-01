@@ -131,7 +131,8 @@ export function extractPagbankPixArtifacts(order: any): PagbankPixArtifacts {
   const qr = Array.isArray(order?.qr_codes) ? order.qr_codes[0] : null;
   const charge = Array.isArray(order?.charges) ? order.charges[0] : null;
   const chargePix = charge?.payment_method?.pix ?? null;
-  const chargeQr = chargePix?.qr_code ?? chargePix ?? null;
+  // Formato observado no Sandbox (Order com divisão + PIX): `charges[0].qr_code`.
+  const chargeQr = chargePix?.qr_code ?? (charge?.qr_code && typeof charge.qr_code === "object" ? charge.qr_code : null) ?? chargePix ?? null;
   const links: any[] = Array.isArray(qr?.links)
     ? qr.links
     : Array.isArray(chargeQr?.links)
@@ -160,6 +161,8 @@ export function extractPagbankPixArtifacts(order: any): PagbankPixArtifacts {
     qrImageUrl: typeof imageLink?.href === "string" ? imageLink.href : null,
     expiresAt: typeof qr?.expiration_date === "string"
       ? qr.expiration_date
+      : typeof chargeQr?.expiration_date === "string"
+        ? chargeQr.expiration_date
       : typeof chargePix?.expiration_date === "string"
         ? chargePix.expiration_date
         : null,
@@ -187,6 +190,37 @@ export function extractPagbankSplitReceivers(order: any): PagbankSplitEcho {
     }
   }
   return out;
+}
+
+/**
+ * O PagBank não replica `splits.receivers` no corpo do Order: confirma a divisão
+ * criando um recurso `SPLI_...` referenciado em `charges[].links` (rel SPLIT).
+ */
+export function extractPagbankSplitLinkIds(order: any): string[] {
+  const charges: any[] = Array.isArray(order?.charges) ? order.charges : [];
+  const ids: string[] = [];
+  for (const charge of charges) {
+    const links: any[] = Array.isArray(charge?.links) ? charge.links : [];
+    for (const link of links) {
+      if (String(link?.rel ?? "").toUpperCase() !== "SPLIT" || typeof link?.href !== "string") continue;
+      const match = link.href.match(/SPLI_[A-Za-z0-9-]+/);
+      if (match && !ids.includes(match[0])) ids.push(match[0]);
+    }
+  }
+  return ids;
+}
+
+/**
+ * Anexa ao Order (cópia) os recebedores lidos do recurso Split consultado,
+ * para que a conferência integral use a mesma regra do formato inline.
+ */
+export function attachPagbankSplitToOrder(order: any, split: any): any {
+  const receivers = Array.isArray(split?.receivers) ? split.receivers : null;
+  if (!receivers || !Array.isArray(order?.charges) || order.charges.length === 0) return order;
+  const charges = order.charges.map((charge: any, index: number) =>
+    index === 0 ? { ...charge, splits: { ...(charge?.splits ?? {}), method: split?.method, receivers } } : charge
+  );
+  return { ...order, charges };
 }
 
 export type PagbankSplitReconciliation =

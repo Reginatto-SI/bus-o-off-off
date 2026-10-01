@@ -12,7 +12,7 @@ import {
   sha256Hex,
   verifyPagbankWebhookSignature,
 } from "../_shared/pagbank/core.ts";
-import { pagbankSecretNames, loadConnectionById } from "../_shared/pagbank/credentials.ts";
+import { pagbankSecretNames, loadConnectionById, resolvePlatformAccessToken } from "../_shared/pagbank/credentials.ts";
 import { decryptSecret } from "../_shared/pagbank/crypto.ts";
 import { isPagbankError, syncPagbankSaleStatus } from "../_shared/pagbank/status-sync.ts";
 
@@ -67,8 +67,27 @@ Deno.serve(async (req) => {
     : null;
   const environment = sale.payment_environment;
   const envToken = Deno.env.get(pagbankSecretNames(environment).webhookToken) ?? null;
-  const token = (await decryptSecret(connection?.webhook_token_enc)) ?? envToken;
-  const signature = await verifyPagbankWebhookSignature({ rawBody, token, receivedSignature });
+  // Candidatos em ordem: token de webhook da conexão, do ambiente e, para
+  // conexões Connect (sem token próprio), o token da aplicação/plataforma.
+  const candidates = [
+    { source: "connection", token: await decryptSecret(connection?.webhook_token_enc) },
+    { source: "environment", token: envToken },
+    { source: "platform", token: resolvePlatformAccessToken(environment) },
+  ].filter((c) => Boolean(c.token));
+  let signature: any = { valid: false, reason: candidates.length ? "mismatch" : "missing_token" };
+  let tokenSource: string | null = null;
+  if (!receivedSignature) signature = { valid: false, reason: "missing_signature" };
+  for (const c of receivedSignature ? candidates : []) {
+    const r = await verifyPagbankWebhookSignature({ rawBody, token: c.token, receivedSignature });
+    if (r.valid) { signature = r; tokenSource = c.source; break; }
+  }
+  const headerPresence = {
+    x_authenticity_token: Boolean(receivedSignature),
+    x_payload_signature: Boolean(req.headers.get("x-payload-signature")),
+  };
+  logPaymentTrace(signature.valid ? "info" : "warn", SOURCE, "signature_check", {
+    sale_id: sale.id, valid: signature.valid, reason: signature.reason, token_source: tokenSource, headers: headerPresence,
+  });
   const rawBodyHash = await sha256Hex(rawBody);
   const eventKey = buildPagbankWebhookEventKey(payload) ?? `${art.orderId ?? "unknown"}:${rawBodyHash.slice(0, 16)}`;
   const externalAccountId = connection?.external_account_id ?? sale.external_account_id ?? "";
@@ -78,7 +97,7 @@ Deno.serve(async (req) => {
       supabaseAdmin, saleId: sale.id, companyId: sale.company_id, paymentEnvironment: environment, environmentDecisionSource: "sale",
       provider: "pagbank", direction: "incoming_webhook", eventType: "webhook_rejected", paymentId: art.orderId, externalReference: sale.id,
       httpStatus: 401, processingStatus: "unauthorized", resultCategory: "rejected", incidentCode: `pagbank_signature_${signature.reason}`,
-      message: "Webhook PagBank rejeitado: assinatura inválida ou token ausente.", payloadJson: { event_key: eventKey, status: art.rawStatus },
+      message: "Webhook PagBank rejeitado: assinatura inválida ou token ausente.", payloadJson: { event_key: eventKey, status: art.rawStatus, headers: headerPresence, candidates: candidates.map((c) => c.source) },
     });
     return respond(401, { error: "invalid_signature" });
   }
