@@ -33,9 +33,11 @@ import {
   extractPagbankPixArtifacts,
   normalizePagbankStatus,
   validatePagbankPixOrder,
+  extractPagbankSplitLinkIds,
+  attachPagbankSplitToOrder,
 } from "../_shared/pagbank/core.ts";
-import { findPagbankOrdersByReference, getPagbankOrder, pagbankRequest, toPagbankError } from "../_shared/pagbank/client.ts";
-import { pagbankSecretNames, resolvePagbankCredentialForSale } from "../_shared/pagbank/credentials.ts";
+import { findPagbankOrdersByReference, getPagbankOrder, getPagbankSplit, pagbankRequest, toPagbankError } from "../_shared/pagbank/client.ts";
+import { pagbankSecretNames, resolvePagbankCredentialForSale, resolvePlatformAccessToken } from "../_shared/pagbank/credentials.ts";
 import { resolvePagbankSplitRecipients } from "../_shared/pagbank/split-recipients.ts";
 import { buildPagbankFixedSplitPlan } from "../_shared/pagbank/split-plan.ts";
 import { finalizeConfirmedPayment } from "../_shared/payment-finalization.ts";
@@ -311,7 +313,23 @@ Deno.serve(async (req) => {
 
     // Gate único para respostas do POST e Orders recuperadas por reference_id.
     // Falha preserva qualquer ID externo encontrado e nunca autoriza novo Order.
-    const requireUsableOrder = async (order: any, paymentAttemptId: string) => {
+    const requireUsableOrder = async (rawOrder: any, paymentAttemptId: string) => {
+      // Split confirmado pelo recurso SPLI_ (link rel SPLIT), lido com o token
+      // da plataforma. Falha na leitura = split não confirmado (fail closed).
+      let order = rawOrder;
+      const hasInlineReceivers = Array.isArray(rawOrder?.charges)
+        && rawOrder.charges.some((c: any) => Array.isArray(c?.splits?.receivers));
+      const splitIds = extractPagbankSplitLinkIds(rawOrder);
+      if (!hasInlineReceivers && splitIds.length === 1) {
+        const platformToken = resolvePlatformAccessToken(environment);
+        const splitRes = platformToken
+          ? await getPagbankSplit({ environment, accessToken: platformToken, splitId: splitIds[0] })
+          : null;
+        logPaymentTrace(splitRes?.ok ? "info" : "warn", SOURCE, "split_lookup", {
+          sale_id: sale.id, split_id: splitIds[0], http_status: splitRes?.status ?? null, platform_token: Boolean(platformToken),
+        });
+        if (splitRes?.ok && splitRes.data) order = attachPagbankSplitToOrder(rawOrder, splitRes.data);
+      }
       const validation = validatePagbankPixOrder({
         order,
         expectedReferenceId: sale.id,
