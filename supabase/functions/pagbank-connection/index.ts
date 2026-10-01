@@ -261,6 +261,35 @@ Deno.serve(async (req) => {
         ...(internalBase ? [await attempt("internal_seller_token", `${internalBase}/splits/${encodeURIComponent(splitId)}`, credential.accessToken)] : []),
       ];
 
+      // Quando um order_id é informado, mostra os links de divisão exatamente
+      // como o PagBank os devolve e tenta o href literal (sem reconstruir URL).
+      const orderId = typeof body?.order_id === "string" ? body.order_id.trim() : "";
+      let orderLinks: any[] | null = null;
+      if (/^ORDE_[A-Za-z0-9-]+$/.test(orderId)) {
+        try {
+          const res = await fetch(`${base}/orders/${encodeURIComponent(orderId)}`, {
+            method: "GET",
+            headers: { Accept: "application/json", Authorization: `Bearer ${credential.accessToken}` },
+          });
+          const parsed = JSON.parse((await res.text()) || "null");
+          const charges = Array.isArray(parsed?.charges) ? parsed.charges : [];
+          orderLinks = [];
+          for (const charge of charges) {
+            for (const link of Array.isArray(charge?.links) ? charge.links : []) {
+              orderLinks.push({ rel: link?.rel, method: link?.method, href: link?.href });
+            }
+          }
+          const splitLink = orderLinks.find((l: any) => String(l?.rel ?? "").toUpperCase() === "SPLIT");
+          if (splitLink?.href) {
+            results.push(await attempt("href_seller_token", splitLink.href, credential.accessToken));
+            if (platformToken) results.push(await attempt("href_platform_token", splitLink.href, platformToken));
+            results.push(await attempt("href_no_auth", splitLink.href, null));
+          }
+        } catch { orderLinks = null; }
+      }
+
+
+
       logPaymentTrace("info", "pagbank-connection", "split_probe", {
         company_id: companyId,
         connection_id: connection.id,
