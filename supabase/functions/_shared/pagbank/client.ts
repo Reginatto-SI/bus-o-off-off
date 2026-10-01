@@ -142,3 +142,13 @@ export function probePagbankAuth(params: { environment: PagbankEnvironment; acce
     path: "/public-keys/card",
   });
 }
+
+/** Consulta o recurso Split (exige token da plataforma/marketplace, não do vendedor). */
+export function getPagbankSplit(params: { environment: PagbankEnvironment; accessToken: string; splitId: string }) {
+  return pagbankRequest({
+    environment: params.environment,
+    accessToken: params.accessToken,
+    method: "GET",
+    path: `/splits/${encodeURIComponent(params.splitId)}`,
+  });
+}
