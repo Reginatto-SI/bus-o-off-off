@@ -214,6 +214,63 @@ Deno.serve(async (req) => {
       }, probe.ok ? 200 : 409);
     }
 
+    // Diagnóstico somente leitura: descobre qual credencial consegue ler o recurso
+    // Split (`SPLI_...`). Não cria, altera nem cancela nada; não retorna tokens.
+    if (action === "split_probe") {
+      assertPagbankEnvironmentAllowed(environment);
+      const splitId = typeof body?.split_id === "string" ? body.split_id.trim() : "";
+      if (!/^SPLI_[A-Za-z0-9-]+$/.test(splitId)) return json({ error: "split_id inválido" }, 400);
+      const connection = await loadCurrentConnection(supabaseAdmin, { companyId, environment });
+      if (!connection) return json({ error: "Nenhuma conexão PagBank nesta empresa.", error_code: "pagbank_connection_missing" }, 409);
+      const credential = await resolveCredentialFromConnection(supabaseAdmin, connection, "query");
+      const platformToken = resolvePlatformAccessToken(environment);
+      const base = PAGBANK_API_BASE_URLS[environment];
+      const internalBase = environment === "sandbox"
+        ? "https://internal.sandbox.api.pagseguro.com"
+        : null;
+
+      const attempt = async (label: string, url: string, token: string | null) => {
+        try {
+          const res = await fetch(url, {
+            method: "GET",
+            headers: {
+              Accept: "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+          });
+          const text = await res.text().catch(() => "");
+          let receivers: number | null = null;
+          let amounts: number[] | null = null;
+          try {
+            const parsed = text ? JSON.parse(text) : null;
+            if (Array.isArray(parsed?.receivers)) {
+              receivers = parsed.receivers.length;
+              amounts = parsed.receivers.map((r: any) => Number(r?.amount?.value ?? r?.amount ?? 0));
+            }
+          } catch { /* resposta não-JSON: só o status importa aqui */ }
+          return { label, http_status: res.status, ok: res.ok, receivers, amounts };
+        } catch {
+          return { label, http_status: null, ok: false, receivers: null, amounts: null };
+        }
+      };
+
+      const results = [
+        await attempt("seller_connect_token", `${base}/splits/${encodeURIComponent(splitId)}`, credential.accessToken),
+        ...(platformToken ? [await attempt("platform_token", `${base}/splits/${encodeURIComponent(splitId)}`, platformToken)] : []),
+        ...(internalBase ? [await attempt("internal_no_auth", `${internalBase}/splits/${encodeURIComponent(splitId)}`, null)] : []),
+        ...(internalBase ? [await attempt("internal_seller_token", `${internalBase}/splits/${encodeURIComponent(splitId)}`, credential.accessToken)] : []),
+      ];
+
+      logPaymentTrace("info", "pagbank-connection", "split_probe", {
+        company_id: companyId,
+        connection_id: connection.id,
+        results: results.map((r) => ({ label: r.label, http_status: r.http_status })),
+      });
+      return json({ ok: true, split_id: splitId, results });
+    }
+
+
+
     if (action === "set_gateway") {
       const gateway = body?.gateway === "pagbank" ? "pagbank" : body?.gateway === "asaas" ? "asaas" : null;
       if (!gateway) return json({ error: "gateway inválido" }, 400);
