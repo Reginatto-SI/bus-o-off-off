@@ -295,7 +295,7 @@ Deno.serve(async (req) => {
         connection_id: connection.id,
         results: results.map((r) => ({ label: r.label, http_status: r.http_status })),
       });
-      return json({ ok: true, split_id: splitId, results });
+      return json({ ok: true, split_id: splitId, results, order_links: orderLinks });
     }
 
 
