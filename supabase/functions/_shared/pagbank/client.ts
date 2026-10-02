@@ -143,7 +143,7 @@ export function probePagbankAuth(params: { environment: PagbankEnvironment; acce
   });
 }
 
-/** Consulta o recurso Split (exige token da plataforma/marketplace, não do vendedor). */
+/** Consulta o recurso Split com o token do recebedor primário (conta que criou a Order). */
 export function getPagbankSplit(params: { environment: PagbankEnvironment; accessToken: string; splitId: string }) {
   return pagbankRequest({
     environment: params.environment,

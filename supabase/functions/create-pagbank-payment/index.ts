@@ -315,18 +315,17 @@ Deno.serve(async (req) => {
     // Falha preserva qualquer ID externo encontrado e nunca autoriza novo Order.
     const requireUsableOrder = async (rawOrder: any, paymentAttemptId: string) => {
       // Split confirmado pelo recurso SPLI_ (link rel SPLIT), lido com o token
-      // da plataforma. Falha na leitura = split não confirmado (fail closed).
+      // do recebedor primário: a MESMA credencial da venda que criou a Order.
+      // Sem fallback para outra conta. Falha na leitura = não confirmado.
       let order = rawOrder;
       const hasInlineReceivers = Array.isArray(rawOrder?.charges)
         && rawOrder.charges.some((c: any) => Array.isArray(c?.splits?.receivers));
       const splitIds = extractPagbankSplitLinkIds(rawOrder);
       if (!hasInlineReceivers && splitIds.length === 1) {
-        const platformToken = resolvePlatformAccessToken(environment);
-        const splitRes = platformToken
-          ? await getPagbankSplit({ environment, accessToken: platformToken, splitId: splitIds[0] })
-          : null;
+        const splitRes = await getPagbankSplit({ environment, accessToken: credential.accessToken, splitId: splitIds[0] });
         logPaymentTrace(splitRes?.ok ? "info" : "warn", SOURCE, "split_lookup", {
-          sale_id: sale.id, split_id: splitIds[0], http_status: splitRes?.status ?? null, platform_token: Boolean(platformToken),
+          sale_id: sale.id, split_id: splitIds[0], http_status: splitRes?.status ?? null,
+          connection_id: credential.connection.id, credential_source: "sale_primary_seller",
         });
         if (splitRes?.ok && splitRes.data) order = attachPagbankSplitToOrder(rawOrder, splitRes.data);
       }
