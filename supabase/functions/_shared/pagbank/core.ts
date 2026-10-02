@@ -25,6 +25,7 @@ export const PAGBANK_CONNECT_SCOPES = [
   "payments.read",
   "payments.create",
   "accounts.read",
+  "payments.split.read",
 ] as const;
 
 export const PAGBANK_PIX_EXPIRATION_MINUTES = 30;
