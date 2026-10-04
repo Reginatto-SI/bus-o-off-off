@@ -95,21 +95,43 @@ Deno.serve(async (req) => {
 
   const accountId = typeof tokenBody.account_id === "string" ? tokenBody.account_id : null;
   const now = new Date().toISOString();
-  await supabaseAdmin.from("payment_gateway_connections")
-    .update({ is_current: false, revoked_at: now, status: "revoked" })
-    .eq("company_id", stateRow.company_id).eq("gateway", "pagbank").eq("environment", environment).eq("is_current", true);
-  const { error } = await supabaseAdmin.from("payment_gateway_connections").insert({
+  // Ordem segura: 1) persiste a nova conexão ainda NÃO corrente; 2) só então
+  // retira a anterior; 3) promove a nova. Falha antes do passo 2 preserva a
+  // conexão funcional existente intacta.
+  const { data: created, error } = await supabaseAdmin.from("payment_gateway_connections").insert({
     company_id: stateRow.company_id, gateway: "pagbank", environment, status: "connected", credential_mode: "connect_oauth",
     external_account_id: accountId,
     access_token_enc: await encryptSecret(tokenBody.access_token),
     refresh_token_enc: typeof tokenBody.refresh_token === "string" ? await encryptSecret(tokenBody.refresh_token) : null,
     token_expires_at: typeof tokenBody.expires_in === "number" ? new Date(Date.now() + tokenBody.expires_in * 1000).toISOString() : null,
-    scopes: typeof tokenBody.scope === "string" ? tokenBody.scope.split(/\s+/) : PAGBANK_CONNECT_SCOPES,
+    // Somente scopes efetivamente devolvidos pelo PagBank; nunca os solicitados.
+    scopes: typeof tokenBody.scope === "string" ? tokenBody.scope.split(/\s+/).filter(Boolean) : null,
     // Capacidades (PIX/split) só são comprovadas por cobrança real aceita.
-    pix_ready: false, last_validated_at: now, connected_at: now, is_current: true, credential_generation: 1,
+    pix_ready: false, last_validated_at: now, connected_at: now, is_current: false, credential_generation: 1,
     last_error: accountId ? null : "account_id_missing_in_token_response",
-  });
-  if (error) return adminRedirect("error", "persist_failed", returnOrigin);
+  }).select("id").single();
+  if (error || !created) return adminRedirect("error", "persist_failed", returnOrigin);
+
+  const { data: previous } = await supabaseAdmin.from("payment_gateway_connections")
+    .select("id, external_account_id")
+    .eq("company_id", stateRow.company_id).eq("gateway", "pagbank").eq("environment", environment).eq("is_current", true)
+    .maybeSingle();
+  if (previous) {
+    const sameAccount = Boolean(accountId) && previous.external_account_id === accountId;
+    await supabaseAdmin.from("payment_gateway_connections")
+      .update(sameAccount
+        ? { is_current: false, superseded_by_rotation: true }
+        : { is_current: false, revoked_at: now, status: "revoked", pix_ready: false, split_ready: false })
+      .eq("id", previous.id).eq("company_id", stateRow.company_id);
+  }
+  const { error: promoteError } = await supabaseAdmin.from("payment_gateway_connections")
+    .update({ is_current: true }).eq("id", created.id).eq("company_id", stateRow.company_id);
+  if (promoteError) {
+    // Restaura a anterior para não deixar a empresa sem conexão corrente.
+    if (previous) await supabaseAdmin.from("payment_gateway_connections")
+      .update({ is_current: true, superseded_by_rotation: false, revoked_at: null, status: "connected" }).eq("id", previous.id);
+    return adminRedirect("error", "persist_failed", returnOrigin);
+  }
   logPaymentTrace("info", "pagbank-connect-callback", "connected", { company_id: stateRow.company_id, has_account: Boolean(accountId) });
   return adminRedirect(accountId ? "connected" : "connected_without_account", undefined, returnOrigin);
 });
