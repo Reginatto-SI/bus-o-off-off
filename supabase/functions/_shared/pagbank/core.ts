@@ -87,7 +87,7 @@ export function buildPagbankIdempotencyKey(params: {
   companyId: string;
   saleId: string;
   environment: PagbankEnvironment;
-  operation: "create_pix";
+  operation: "create_pix" | "create_credit_card";
 }): string {
   // O PagBank aceita somente caracteres de palavra e hífen neste header.
   return `pagbank_${params.companyId}_${params.saleId}_${params.environment}_${params.operation}`;
@@ -396,6 +396,64 @@ export function validatePagbankPixOrder(params: {
   return { ok: true, artifacts, split };
 }
 
+
+export type PagbankCardOrderValidation =
+  | { ok: true; artifacts: PagbankPixArtifacts; splitStatus: "confirmed" | "accepted_unverified" | "not_expected"; splitId: string | null }
+  | {
+    ok: false;
+    errorCode: "pagbank_split_not_confirmed" | "pagbank_order_response_incomplete" | "pagbank_card_declined";
+    reason: string;
+    artifacts: PagbankPixArtifacts;
+    splitId: string | null;
+  };
+
+/**
+ * Gate do Order de cartão. Mesma referência/IDs do PIX. Split:
+ * - recebedores visíveis (inline ou GET /splits) → conferência integral obrigatória;
+ * - sem recebedores visíveis, mas com exatamente um recurso SPLI_ (rel SPLIT)
+ *   → "accepted_unverified": aceito pelo provedor, consulta detalhada pendente
+ *   de homologação (não marca capacidade de split como comprovada).
+ * Cartão é capturado na criação; por isso a ausência total de split é registrada
+ * como falha para reconciliação, nunca como venda paga.
+ */
+export function validatePagbankCardOrder(params: {
+  order: any;
+  expectedReferenceId: string;
+  expectedReceivers: Array<{ accountId: string; amountCents: number }>;
+  expectedTotalCents: number;
+}): PagbankCardOrderValidation {
+  const artifacts = extractPagbankPixArtifacts(params.order);
+  const splitIds = extractPagbankSplitLinkIds(params.order);
+  const splitId = splitIds.length === 1 ? splitIds[0] : null;
+  const referenceId = typeof params.order?.reference_id === "string" ? params.order.reference_id : null;
+  if (!artifacts.orderId || referenceId !== params.expectedReferenceId || !artifacts.chargeId) {
+    return {
+      ok: false, errorCode: "pagbank_order_response_incomplete",
+      reason: !artifacts.orderId ? "order_id_missing" : !artifacts.chargeId ? "charge_id_missing" : "reference_id_mismatch",
+      artifacts, splitId,
+    };
+  }
+  const charge = params.order.charges[0];
+  if (charge?.amount?.value !== params.expectedTotalCents) {
+    return { ok: false, errorCode: "pagbank_order_response_incomplete", reason: "charge_amount_mismatch", artifacts, splitId };
+  }
+  const normalized = normalizePagbankStatus(artifacts.rawStatus);
+  if (normalized === "failed" || normalized === "canceled") {
+    return { ok: false, errorCode: "pagbank_card_declined", reason: `charge_${String(artifacts.rawStatus).toLowerCase()}`, artifacts, splitId };
+  }
+  if (params.expectedReceivers.length === 0) {
+    return { ok: true, artifacts, splitStatus: "not_expected", splitId };
+  }
+  if (extractPagbankSplitReceivers(params.order).length > 0) {
+    const split = reconcilePagbankSplit(params.order, params.expectedReceivers, params.expectedTotalCents);
+    if (!split.ok) return { ok: false, errorCode: "pagbank_split_not_confirmed", reason: split.reason, artifacts, splitId };
+    return { ok: true, artifacts, splitStatus: "confirmed", splitId };
+  }
+  if (!splitId) {
+    return { ok: false, errorCode: "pagbank_split_not_confirmed", reason: splitIds.length > 1 ? "multiple_split_links" : "split_link_missing", artifacts, splitId };
+  }
+  return { ok: true, artifacts, splitStatus: "accepted_unverified", splitId };
+}
 
 /** Identificador do evento para dedup: charge id + status (PagBank não envia event id próprio no Order). */
 export function buildPagbankWebhookEventKey(order: any): string | null {

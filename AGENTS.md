@@ -55,3 +55,5 @@ Reutilize a arquitetura e os componentes existentes. Não crie fluxos paralelos 
 - Cada venda permanece vinculada ao gateway que originou sua cobrança.
 - Mudanças de banco relacionadas a multi-gateway devem priorizar evolução aditiva e compatível, evitando mudanças destrutivas enquanto Asaas for rede de segurança.
 - Reverter código não desfaz pagamentos, webhooks, split ou efeitos externos já executados; por isso alterações financeiras devem permanecer previsíveis, auditáveis e graduais.
+
+- PagBank cartão: criptografar no navegador com o SDK oficial e enviar só o cartão criptografado ao `create-pagbank-payment`; uma única cobrança PagBank por venda (índice único em `payment_attempts`). Why: evita escopo PCI e segunda cobrança ao trocar de meio.

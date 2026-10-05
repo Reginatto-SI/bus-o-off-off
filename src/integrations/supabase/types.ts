@@ -1683,6 +1683,8 @@ export type Database = {
         Row: {
           amount_cents: number | null
           attempt_count: number
+          card_brand: string | null
+          card_last_digits: string | null
           company_id: string
           connection_id: string | null
           created_at: string
@@ -1704,12 +1706,15 @@ export type Database = {
           pix_qr_image_url: string | null
           pix_qr_text: string | null
           sale_id: string
+          split_status: string | null
           state: string
           updated_at: string
         }
         Insert: {
           amount_cents?: number | null
           attempt_count?: number
+          card_brand?: string | null
+          card_last_digits?: string | null
           company_id: string
           connection_id?: string | null
           created_at?: string
@@ -1731,12 +1736,15 @@ export type Database = {
           pix_qr_image_url?: string | null
           pix_qr_text?: string | null
           sale_id: string
+          split_status?: string | null
           state?: string
           updated_at?: string
         }
         Update: {
           amount_cents?: number | null
           attempt_count?: number
+          card_brand?: string | null
+          card_last_digits?: string | null
           company_id?: string
           connection_id?: string | null
           created_at?: string
@@ -1758,6 +1766,7 @@ export type Database = {
           pix_qr_image_url?: string | null
           pix_qr_text?: string | null
           sale_id?: string
+          split_status?: string | null
           state?: string
           updated_at?: string
         }
