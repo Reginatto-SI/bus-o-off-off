@@ -24,6 +24,7 @@ import {
 } from "../_shared/checkout-financial-integrity.ts";
 import { ensureSaleTermsAcceptance, getPayloadTermsAcceptance } from "../_shared/sale-terms-acceptance.ts";
 // Reempacotamento intencional: este entrypoint depende do helper compartilhado de idempotência PagBank.
+// Redeploy 2026-10-05: cartão de crédito 1x (Sandbox).
 // Redeploy 2026-09-25: força novo bundle com a chave de idempotência sem dois-pontos (formato pagbank_<company>_<sale>_<env>_<op>).
 import {
   PAGBANK_PIX_EXPIRATION_MINUTES,
@@ -33,6 +34,7 @@ import {
   extractPagbankPixArtifacts,
   normalizePagbankStatus,
   validatePagbankPixOrder,
+  validatePagbankCardOrder,
   extractPagbankSplitLinkIds,
   attachPagbankSplitToOrder,
 } from "../_shared/pagbank/core.ts";
@@ -41,6 +43,7 @@ import { pagbankSecretNames, resolvePagbankCredentialForSale, resolvePlatformAcc
 import { resolvePagbankSplitRecipients } from "../_shared/pagbank/split-recipients.ts";
 import { buildPagbankFixedSplitPlan } from "../_shared/pagbank/split-plan.ts";
 import { finalizeConfirmedPayment } from "../_shared/payment-finalization.ts";
+import { syncPagbankSaleStatus } from "../_shared/pagbank/status-sync.ts";
 import { isValidCustomerEmail, normalizeCustomerEmail } from "../_shared/customer-email.ts";
 
 const SOURCE = "create-pagbank-payment";
@@ -59,7 +62,10 @@ function json(payload: Record<string, unknown>, status: number) {
 function attemptToPublic(attempt: any) {
   return {
     gateway: "pagbank",
-    payment_method: "pix",
+    payment_method: attempt.operation === "create_credit_card" ? "credit_card" : "pix",
+    card: attempt.operation === "create_credit_card"
+      ? { last_digits: attempt.card_last_digits ?? null, brand: attempt.card_brand ?? null }
+      : null,
     attempt_id: attempt.id,
     state: attempt.state,
     normalized_status: attempt.normalized_status,
@@ -91,10 +97,29 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const saleId = typeof body?.sale_id === "string" ? body.sale_id : null;
     const paymentMethod = body?.payment_method ?? "pix";
+    const action = body?.action === "card_public_key" ? "card_public_key" : "create";
     const termsAcceptance = getPayloadTermsAcceptance(body?.terms_acceptance);
     if (!saleId) return json({ error: "sale_id is required", error_code: "sale_id_required" }, 400);
-    if (paymentMethod !== "pix") {
-      return json({ error: "PagBank aceita somente PIX nesta fase.", error_code: "payment_method_not_supported" }, 400);
+    if (paymentMethod !== "pix" && paymentMethod !== "credit_card") {
+      return json({ error: "Meio de pagamento não suportado.", error_code: "payment_method_not_supported" }, 400);
+    }
+    const isCard = paymentMethod === "credit_card";
+    // Cartão: somente o valor criptografado pelo SDK oficial PagBank no navegador.
+    // PAN/CVV nunca chegam aqui; o cartão criptografado nunca é persistido nem logado.
+    let cardInput: { encrypted: string; holderName: string; lastDigits: string | null; brand: string | null } | null = null;
+    if (isCard && action === "create") {
+      const c = body?.card ?? {};
+      const encrypted = typeof c.encrypted === "string" ? c.encrypted.trim() : "";
+      const holderName = typeof c.holder_name === "string" ? c.holder_name.trim().replace(/\s+/g, " ") : "";
+      const lastDigits = typeof c.last_digits === "string" && /^[0-9]{4}$/.test(c.last_digits) ? c.last_digits : null;
+      const brand = typeof c.brand === "string" && /^[a-z]{2,20}$/i.test(c.brand) ? c.brand.toLowerCase() : null;
+      if (!/^[A-Za-z0-9+/=]{100,2048}$/.test(encrypted)) {
+        return json({ error: "Dados do cartão inválidos.", error_code: "card_encrypted_invalid" }, 400);
+      }
+      if (holderName.length < 3 || holderName.length > 30 || /[0-9]/.test(holderName)) {
+        return json({ error: "Nome do titular inválido.", error_code: "card_holder_invalid" }, 400);
+      }
+      cardInput = { encrypted, holderName, lastDigits, brand };
     }
 
     const { data: saleRow, error: saleError } = await supabaseAdmin
@@ -125,12 +150,45 @@ Deno.serve(async (req) => {
       .single();
     if (companyError || !company) return json({ error: "Empresa não encontrada.", error_code: "company_not_found" }, 404);
 
+    if (action === "card_public_key") {
+      // Chave pública RSA da conta vendedora da venda (dado público, sem segredo).
+      if (sale.status !== "reservado" && sale.status !== "pendente_pagamento") {
+        return json({ error: "A venda não está aguardando pagamento.", error_code: "sale_status_invalid" }, 409);
+      }
+      const cred = await resolvePagbankCredentialForSale(supabaseAdmin, { sale });
+      const pk = await pagbankRequest({ environment, accessToken: cred.accessToken, method: "GET", path: "/public-keys/card" });
+      const publicKey = typeof pk.data?.public_key === "string" ? pk.data.public_key : null;
+      if (!pk.ok || !publicKey) {
+        logPaymentTrace("warn", SOURCE, "card_public_key_failed", { sale_id: sale.id, http_status: pk.status ?? null });
+        return json({ error: "Não foi possível preparar o pagamento com cartão.", error_code: "card_public_key_unavailable" }, 502);
+      }
+      return json({ public_key: publicKey, environment }, 200);
+    }
+
+    const operation = isCard ? "create_credit_card" : "create_pix";
     const idempotencyKey = buildPagbankIdempotencyKey({
       companyId: sale.company_id,
       saleId: sale.id,
       environment,
-      operation: "create_pix",
+      operation,
     });
+    // Uma única cobrança PagBank por venda: trocar de meio nunca gera outra cobrança.
+    const { data: otherAttempt } = await supabaseAdmin
+      .from("payment_attempts")
+      .select("id, operation, external_order_id")
+      .eq("sale_id", sale.id)
+      .eq("company_id", sale.company_id)
+      .eq("gateway", "pagbank")
+      .neq("operation", operation)
+      .maybeSingle();
+    if (otherAttempt) {
+      return json({
+        error: "Esta compra já possui uma cobrança com outro meio de pagamento.",
+        error_code: "payment_method_locked",
+        message: "Esta compra já possui uma cobrança com outro meio de pagamento.",
+        detail: { order_id: otherAttempt.external_order_id ?? null },
+      }, 409);
+    }
 
     // 1) Recuperação idempotente: tentativa existente nunca gera novo Order.
     const { data: existing } = await supabaseAdmin
@@ -199,6 +257,14 @@ Deno.serve(async (req) => {
         throw new PagbankError("pagbank_indeterminate", "Ainda não foi possível confirmar a cobrança anterior. Aguarde alguns segundos.", 504);
       }
       // Comprovadamente inexistente: reutiliza a MESMA chave e payload abaixo (attempt_count+1).
+      // Cartão: o payload criptografado muda a cada tentativa, então não há
+      // "mesmo payload" — exige reconciliação manual, nunca nova cobrança.
+      if (isCard && !recoveredOrder) {
+        throw new PagbankError("pagbank_order_needs_reconciliation", "Estamos verificando o pagamento anterior desta compra. Não faremos nova cobrança.", 409);
+      }
+    }
+    if (isCard && existing && existing.state === "failed" && !existing.external_order_id) {
+      throw new PagbankError("pagbank_order_needs_reconciliation", "O pagamento anterior desta compra não foi concluído. Não faremos nova cobrança automaticamente.", 409, { previous_error: existing.error_code ?? null });
     }
     // Tentativa falha que JÁ carrega Order externo (ex.: split não confirmado ou
     // QR ausente) nunca autoriza um segundo Order: exige consulta/reconciliação.
@@ -329,6 +395,35 @@ Deno.serve(async (req) => {
         });
         if (splitRes?.ok && splitRes.data) order = attachPagbankSplitToOrder(rawOrder, splitRes.data);
       }
+      if (isCard) {
+        const cv = validatePagbankCardOrder({
+          order,
+          expectedReferenceId: sale.id,
+          expectedReceivers: splitPlan.receivers.map((r) => ({ accountId: r.accountId, amountCents: r.amountCents })),
+          expectedTotalCents: splitPlan.totalCents,
+        });
+        if (cv.ok) return { ...cv.artifacts, splitStatus: cv.splitStatus, splitId: cv.splitId };
+        await supabaseAdmin.from("payment_attempts").update({
+          state: "failed",
+          external_order_id: cv.artifacts.orderId,
+          external_charge_id: cv.artifacts.chargeId,
+          external_status_raw: cv.artifacts.rawStatus,
+          normalized_status: normalizePagbankStatus(cv.artifacts.rawStatus),
+          error_code: cv.errorCode,
+          error_message_sanitized: cv.reason.slice(0, 500),
+        }).eq("id", paymentAttemptId).eq("company_id", sale.company_id);
+        await logCriticalPaymentIssue({
+          supabaseAdmin, source: SOURCE, errorCode: cv.errorCode, saleId: sale.id, companyId: sale.company_id,
+          paymentEnvironment: environment, paymentId: cv.artifacts.orderId,
+          detail: `method=credit_card;reason=${cv.reason};status=${cv.artifacts.rawStatus ?? "none"};split_id=${cv.splitId ?? "none"}`,
+        });
+        const msg = cv.errorCode === "pagbank_card_declined"
+          ? "O pagamento com cartão não foi aprovado. Nenhuma passagem foi emitida."
+          : "O pagamento com cartão exige verificação antes de emitir a passagem.";
+        throw new PagbankError(cv.errorCode, msg, cv.errorCode === "pagbank_card_declined" ? 402 : 409, {
+          reason: cv.reason, order_id: cv.artifacts.orderId,
+        });
+      }
       const validation = validatePagbankPixOrder({
         order,
         expectedReferenceId: sale.id,
@@ -423,7 +518,25 @@ Deno.serve(async (req) => {
     // Com divisão: formato oficial "Pedido com divisão de pagamento com PIX"
     // (charges[].payment_method.type = PIX + charges[].splits).
     // Sem divisão: pedido com QR Code simples.
-    const orderPayload = splitPlan.payload
+    const orderPayload = isCard
+      ? {
+        ...baseOrder,
+        charges: [{
+          reference_id: sale.id,
+          description: `Passagem ${String(sale.event?.name ?? "").slice(0, 40)}`.trim(),
+          amount: { value: splitPlan.totalCents, currency: "BRL" },
+          payment_method: {
+            type: "CREDIT_CARD",
+            installments: 1,
+            capture: true,
+            soft_descriptor: "SMARTBUS",
+            card: { encrypted: cardInput!.encrypted, store: false },
+            holder: { name: cardInput!.holderName, tax_id: onlyDigits(sale.customer_cpf) },
+          },
+          ...(splitPlan.payload ? { splits: splitPlan.payload } : {}),
+        }],
+      }
+      : splitPlan.payload
       ? {
         ...baseOrder,
         charges: [{
@@ -440,7 +553,9 @@ Deno.serve(async (req) => {
       };
     const payloadHash = await (async () => {
       // Hash estável: a expiração muda a cada tentativa e não define a operação.
-      const stable = JSON.stringify(orderPayload).replace(/"expiration_date":"[^"]*"/g, '"expiration_date":"*"');
+      const stable = JSON.stringify(orderPayload)
+        .replace(/"expiration_date":"[^"]*"/g, '"expiration_date":"*"')
+        .replace(/"encrypted":"[^"]*"/g, '"encrypted":"*"');
       const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(stable));
       return Array.from(new Uint8Array(h)).map((b) => b.toString(16).padStart(2, "0")).join("");
     })();
@@ -455,8 +570,9 @@ Deno.serve(async (req) => {
     } else {
       const { data: inserted, error: insertError } = await supabaseAdmin.from("payment_attempts").insert({
         sale_id: sale.id, company_id: sale.company_id, connection_id: credential.connection.id, gateway: "pagbank",
-        environment, operation: "create_pix", idempotency_key: idempotencyKey, payload_hash: payloadHash,
+        environment, operation, idempotency_key: idempotencyKey, payload_hash: payloadHash,
         state: "pending", external_reference: sale.id, amount_cents: splitPlan.totalCents,
+        card_last_digits: cardInput?.lastDigits ?? null, card_brand: cardInput?.brand ?? null,
       }).select("id").single();
       if (insertError) {
         // 23505 = outra requisição concorrente já criou a tentativa.
@@ -466,8 +582,8 @@ Deno.serve(async (req) => {
     }
     await logSaleIntegrationEvent({
       supabaseAdmin, saleId: sale.id, companyId: sale.company_id, paymentEnvironment: environment, environmentDecisionSource: "sale",
-      provider: "pagbank", direction: "outgoing_request", eventType: "create_pix", externalReference: sale.id,
-      processingStatus: "requested", resultCategory: "started", message: "Criando Order PIX no PagBank.",
+      provider: "pagbank", direction: "outgoing_request", eventType: operation, externalReference: sale.id,
+      processingStatus: "requested", resultCategory: "started", message: isCard ? "Criando Order de cartão no PagBank." : "Criando Order PIX no PagBank.",
       payloadJson: { idempotency_key: idempotencyKey, amount_cents: splitPlan.totalCents, split_mode: splitPlan.mode, split_receivers: splitPlan.receivers.map((r) => ({ kind: r.kind, amount_cents: r.amountCents })) },
     });
 
@@ -498,18 +614,24 @@ Deno.serve(async (req) => {
     const art = await requireUsableOrder(res.data, attemptId);
     const normalized = normalizePagbankStatus(art.rawStatus ?? "WAITING");
 
-    const { data: finalAttempt } = await supabaseAdmin.from("payment_attempts").update({
+    const { data: finalAttempt } = await supabaseAdmin.from("payment_attempts").update(isCard ? {
+      state: "succeeded", external_order_id: art.orderId, external_charge_id: art.chargeId, external_status_raw: art.rawStatus,
+      normalized_status: normalized, split_status: (art as any).splitStatus ?? null,
+    } : {
       state: "succeeded", external_order_id: art.orderId, external_charge_id: art.chargeId, external_status_raw: art.rawStatus ?? "WAITING",
       normalized_status: normalized, pix_qr_text: art.qrText, pix_qr_image_url: art.qrImageUrl, pix_expires_at: art.expiresAt ?? expiresAt.toISOString(),
     }).eq("id", attemptId).eq("company_id", sale.company_id).select("*").single();
 
     // Capacidades comprovadas por cobrança real (nunca por chamada genérica).
-    await supabaseAdmin.from("payment_gateway_connections").update({
-      pix_ready: true,
-      split_ready: splitPlan.receivers.length > 0 ? true : credential.connection.split_ready,
-      capabilities_verified_at: new Date().toISOString(),
-      last_error: null,
-    }).eq("id", credential.connection.id).eq("company_id", sale.company_id);
+    // Cartão com split "aceito, consulta pendente" não comprova split_ready.
+    if (!isCard) {
+      await supabaseAdmin.from("payment_gateway_connections").update({
+        pix_ready: true,
+        split_ready: splitPlan.receivers.length > 0 ? true : credential.connection.split_ready,
+        capabilities_verified_at: new Date().toISOString(),
+        last_error: null,
+      }).eq("id", credential.connection.id).eq("company_id", sale.company_id);
+    }
 
     // Snapshot financeiro da venda (mesmas colunas do Asaas, sem tocar asaas_*).
     const { error: saleUpdateError } = await supabaseAdmin.from("sales").update({
@@ -533,15 +655,29 @@ Deno.serve(async (req) => {
     }
     await logSaleIntegrationEvent({
       supabaseAdmin, saleId: sale.id, companyId: sale.company_id, paymentEnvironment: environment, environmentDecisionSource: "sale",
-      provider: "pagbank", direction: "outgoing_request", eventType: "create_pix", paymentId: art.orderId, externalReference: sale.id, httpStatus: res.status,
-      processingStatus: "success", resultCategory: "success", message: "Order PIX criado no PagBank.",
-      payloadJson: { idempotency_key: idempotencyKey }, responseJson: { order_id: art.orderId, charge_id: art.chargeId, status: art.rawStatus, has_qr: Boolean(art.qrText) }, durationMs: Date.now() - startedAt,
+      provider: "pagbank", direction: "outgoing_request", eventType: operation, paymentId: art.orderId, externalReference: sale.id, httpStatus: res.status,
+      processingStatus: "success", resultCategory: "success", message: isCard ? "Order de cartão criado no PagBank." : "Order PIX criado no PagBank.",
+      payloadJson: { idempotency_key: idempotencyKey },
+      responseJson: isCard
+        ? { order_id: art.orderId, charge_id: art.chargeId, status: art.rawStatus, split_status: (art as any).splitStatus ?? null, split_id: (art as any).splitId ?? null, installments: 1 }
+        : { order_id: art.orderId, charge_id: art.chargeId, status: art.rawStatus, has_qr: Boolean(art.qrText) },
+      durationMs: Date.now() - startedAt,
     });
     await logSaleOperationalEvent({
       supabaseAdmin, saleId: sale.id, companyId: sale.company_id, action: "payment_created", source: SOURCE, result: "success",
       paymentEnvironment: environment, detail: `pagbank_order=${art.orderId}`,
     });
 
+    // Cartão: a resposta da criação não finaliza sozinha. Confirmação por
+    // consulta direta do Order (mesma rotina do fallback) → finalização comum.
+    if (isCard && normalized === "paid") {
+      const synced = await syncPagbankSaleStatus(supabaseAdmin, {
+        sale: { id: sale.id, company_id: sale.company_id, status: sale.status, payment_environment: environment, payment_connection_id: sale.payment_connection_id },
+        source: "verify-payment-status",
+        eventType: "pagbank_card_confirm_on_create",
+      });
+      return json({ ...attemptToPublic(synced.attempt ?? finalAttempt), payment_status: synced.paymentStatus }, 200);
+    }
     return json(attemptToPublic(finalAttempt), 200);
   } catch (error) {
     if (error instanceof PagbankError) {

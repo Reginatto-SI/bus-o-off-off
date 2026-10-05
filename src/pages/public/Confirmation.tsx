@@ -577,6 +577,8 @@ export default function Confirmation() {
   const isAwaitingPayment = isPendingPayment || (sale.status === 'reservado' && (paymentSuccess || isAsaasReturn || isPagbankReturn));
   // Gateway congelado na venda decide a experiência de pagamento (PagBank = PIX dentro do SmartBus).
   const isPagbankSale = (sale as { payment_gateway?: string | null }).payment_gateway === 'pagbank';
+  // Cartão PagBank nunca exibe painel PIX (evita qualquer tentativa de outra cobrança).
+  const isPagbankPixSale = isPagbankSale && (sale as { payment_method?: string | null }).payment_method !== 'credit_card';
   const isInstalledAppContext = isInstalledAppPaymentContext();
   // Exibimos a ação somente quando existe cobrança Asaas vinculada e venda ainda aguardando pagamento.
   const canReopenAsaasInvoice = isAwaitingPayment && !isPagbankSale && Boolean(sale.asaas_payment_id);
@@ -706,7 +708,7 @@ export default function Confirmation() {
                 </>
               )}
             </>
-          ) : isAwaitingPayment && !pollingTimedOut && isPagbankSale ? (
+          ) : isAwaitingPayment && !pollingTimedOut && isPagbankPixSale ? (
             <>
               <h1 className="text-2xl font-bold text-foreground mb-2">Falta só o pagamento</h1>
               <p className="text-muted-foreground">

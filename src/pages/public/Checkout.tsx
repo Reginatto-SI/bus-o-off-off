@@ -64,6 +64,8 @@ import {
   pagbankFailureAllowsSaleRollback,
   resolvePagbankCheckoutAvailability,
 } from "@/lib/pagbankCheckoutAvailability";
+import { encryptCardWithPagbank, validateCardForm, type CardFormValues } from "@/lib/pagbankCardEncryption";
+import { PagbankCardFields } from "@/components/public/PagbankCardFields";
 
 // ---- CPF validation helpers ----
 function isValidCpf(cpf: string): boolean {
@@ -350,7 +352,10 @@ export default function Checkout() {
         ? Boolean(companyPixStatus?.sandboxReady)
         : false;
   // PagBank nesta fase: somente PIX (cartão fora do escopo).
-  const isCreditCardAvailable = !isPagbankGateway;
+  // PagBank: cartão (1x) usa a mesma disponibilidade da conexão (Sandbox, conectada).
+  const isCreditCardAvailable = !isPagbankGateway || isPixReadyForCurrentEnvironment;
+  // Dados do cartão apenas em memória desta tela; nunca persistidos nem logados.
+  const [cardForm, setCardForm] = useState<CardFormValues>({ holderName: "", number: "", expiry: "", cvv: "" });
   const hasConfiguredPlatformFee =
     Number.isFinite(companyPlatformFeePercent) && companyPlatformFeePercent > 0;
 
@@ -410,10 +415,7 @@ export default function Checkout() {
   );
 
   useEffect(() => {
-    if (isPagbankGateway) {
-      if (paymentMethod !== "pix") setPaymentMethod("pix");
-      return;
-    }
+    if (isPagbankGateway) return;
     if (paymentMethod === "pix" && runtimePaymentEnvironment && !isPixReadyForCurrentEnvironment) {
       // Comentário de suporte: evita que o comprador descubra indisponibilidade do Pix apenas no fim.
       setPaymentMethod("credit_card");
@@ -1374,6 +1376,14 @@ export default function Checkout() {
       return;
     }
 
+    if (isPagbankGateway && paymentMethod === "credit_card") {
+      const cardError = validateCardForm(cardForm);
+      if (cardError) {
+        toast.error(cardError);
+        return;
+      }
+    }
+
     if (!isPagbankGateway && paymentMethod === "pix" && runtimePaymentEnvironment && !isPixReadyForCurrentEnvironment) {
       toast.error(
         "Pix indisponível para esta empresa no momento. Escolha cartão de crédito para concluir a compra.",
@@ -1835,10 +1845,38 @@ export default function Checkout() {
 
     // === Step 4 (PagBank): gera o PIX no backend e segue para a confirmação com QR ===
     if (isPagbankGateway) {
+      const isCardPayment = paymentMethod === "credit_card";
+      let encryptedCard: Awaited<ReturnType<typeof encryptCardWithPagbank>> | null = null;
+      if (isCardPayment) {
+        // Antes de qualquer cobrança: chave pública da conta vendedora + criptografia
+        // no navegador. Falha aqui garante que nenhum Order foi criado → rollback seguro.
+        try {
+          const { data: pkData, error: pkError } = await supabase.functions.invoke("create-pagbank-payment", {
+            body: { sale_id: sale.id, payment_method: "credit_card", action: "card_public_key" },
+          });
+          if (pkError || typeof pkData?.public_key !== "string") throw new Error("card_public_key_unavailable");
+          encryptedCard = await encryptCardWithPagbank(pkData.public_key, cardForm);
+        } catch (cardPrepError) {
+          console.error("[checkout] pagbank_card_prepare_failed", {
+            saleId: sale.id, reason: cardPrepError instanceof Error ? cardPrepError.message.split(":")[0] : "unknown",
+          });
+          await supabase.from("seat_locks").delete().eq("sale_id", sale.id);
+          await supabase.from("sale_passengers").delete().eq("sale_id", sale.id);
+          await supabase.from("sales").delete().eq("id", sale.id);
+          toast.error("Não foi possível validar os dados do cartão. Confira e tente novamente.");
+          setSubmitting(false);
+          setPaymentCheckoutStatus("idle");
+          return;
+        }
+      }
       try {
         const { data: pagbankData, error: pagbankError } = await supabase.functions.invoke("create-pagbank-payment", {
-          body: { sale_id: sale.id, payment_method: "pix", terms_acceptance: termsAcceptancePayload },
+          body: isCardPayment
+            ? { sale_id: sale.id, payment_method: "credit_card", card: encryptedCard, terms_acceptance: termsAcceptancePayload }
+            : { sale_id: sale.id, payment_method: "pix", terms_acceptance: termsAcceptancePayload },
         });
+        encryptedCard = null;
+        if (isCardPayment) setCardForm({ holderName: "", number: "", expiry: "", cvv: "" });
         let pagbankErrorBody = pagbankData;
         if (pagbankError && !pagbankErrorBody) {
           try {
@@ -1848,7 +1886,7 @@ export default function Checkout() {
           }
         }
         const pagbankErrorCode = pagbankErrorBody?.error_code;
-        if (!pagbankError && pagbankData?.pix?.qr_text) {
+        if (!pagbankError && (pagbankData?.pix?.qr_text || (isCardPayment && pagbankData?.order_id))) {
           setSubmitting(false);
           setPaymentCheckoutStatus("idle");
           navigate(`/confirmacao/${sale.id}?retorno=pagbank`);
@@ -1888,7 +1926,7 @@ export default function Checkout() {
         toast.error(
           typeof pagbankErrorBody?.message === "string" && pagbankErrorBody.message.trim()
             ? pagbankErrorBody.message
-            : "Não foi possível gerar o PIX agora. Tente novamente.",
+            : isCardPayment ? "Não foi possível concluir o pagamento com cartão. Tente novamente." : "Não foi possível gerar o PIX agora. Tente novamente.",
         );
       } catch (pagbankException) {
         console.error("[checkout] create_pagbank_payment_exception", { saleId: sale.id, error: pagbankException });
@@ -2647,12 +2685,15 @@ export default function Checkout() {
                   <div className="space-y-1">
                     <p className="font-semibold">Cartão de crédito</p>
                     <p className="text-sm text-muted-foreground">
-                      Pagamento seguro com cartão de crédito.
+                      {isPagbankGateway ? "Pagamento à vista (1x) com cartão de crédito." : "Pagamento seguro com cartão de crédito."}
                     </p>
                   </div>
                 </label>
               )}
             </RadioGroup>
+            {isPagbankGateway && paymentMethod === "credit_card" && (
+              <PagbankCardFields value={cardForm} onChange={setCardForm} disabled={submitting} />
+            )}
             {!isPixReadyForCurrentEnvironment && runtimePaymentEnvironment && (
               <p className="text-xs text-amber-700">
                 O Pix foi temporariamente desabilitado para este evento porque a conta da empresa ainda não está pronta para recebimento no ambiente atual.

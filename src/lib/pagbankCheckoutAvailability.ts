@@ -67,6 +67,7 @@ export const PAGBANK_ORDER_MAY_EXIST_CODES: readonly string[] = [
   "pagbank_pix_artifact_missing",
   "pagbank_order_response_incomplete",
   "pagbank_order_needs_reconciliation",
+  "pagbank_card_declined",
 ];
 
 export function pagbankFailureAllowsSaleRollback(params: {

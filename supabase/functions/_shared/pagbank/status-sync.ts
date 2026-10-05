@@ -36,7 +36,9 @@ export async function syncPagbankSaleStatus(supabaseAdmin: any, params: {
     .eq("sale_id", sale.id)
     .eq("company_id", sale.company_id)
     .eq("gateway", "pagbank")
-    .eq("operation", "create_pix")
+    // Uma única cobrança PagBank por venda (índice único), PIX ou cartão.
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (!attempt || !attempt.external_order_id) {
