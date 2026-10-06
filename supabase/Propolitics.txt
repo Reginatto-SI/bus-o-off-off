@@ -1,0 +1,39 @@
+# CREDENCIAIS PAGBANK SANDBOX — SOMENTE TESTES
+# Arquivo criado intencionalmente para permitir testes pelo Codex.
+# NÃO usar em Produção.
+
+## Aplicação SmartBus / Marketplace
+client_id=cedb1abb-8bc9-4d3a-9ef1-ee54db457e5a
+marketplace_account_id=ACCO_6D195F1C-7EAD-48D6-B8F1-DF551566CFCD
+redirect_uri=https://cdrcyjrvurrphnceromd.supabase.co/functions/v1/pagbank-connect-callback
+marketplace_email=comercial@smartbus.com.br
+marketplace_token=0ac13d96-edc9-48e8-8a09-0b0cbec8f0b4efe857404700b8a1fd8d24d2c0f48a57757c-5bca-46c0-bb5c-12222510bd70
+
+## Vendedor / Seller Sandbox
+seller_email=edimarreginato@gmail.com
+seller_account_id=ACCO_C441E21F-2C34-4B2A-AA90-3308EAA6D480
+seller_token=4a6f3be6-5c41-4c79-b765-2f6aa0985be0b0bb86ba4265b5bf0b16ed0ed90f3c509a3b-6d2d-4b6e-8922-d34c419251e7
+
+## PagBank Sandbox
+base_url=https://sandbox.api.pagseguro.com
+
+## Documentação Postman
+postman_docs=https://documenter.getpostman.com/view/10863174/TVetc6HV#85847723-074e-4276-9f34-1c1235c19023
+
+## Observação sobre Connect SMS
+# O access_token/refresh_token da conexão connect_sms NÃO estão neste arquivo,
+# porque no SmartBus eles permanecem criptografados no banco e não foram expostos
+# em texto claro. Estes dados acima são as credenciais de teste já disponíveis
+# no repositório para testes diretos contra a API Sandbox.
+
+## IDs reais já usados em testes Sandbox
+
+# PIX
+pix_order_id=ORDE_3DF26723-A68D-4392-B47F-530DCB34B630
+pix_charge_id=CHAR_DDB650E1-FABA-4E1B-875E-2806E486DACD
+pix_split_id=SPLI_2D316D1D-5709-4EAC-980D-36F098E0B780
+
+# CARTÃO
+card_order_id=ORDE_7591B58A-C658-45BC-9C9B-710FB3897ED5
+card_charge_id=CHAR_6D914E89-4519-4988-9378-136EF7853FF3
+card_split_id=SPLI_29AC8034-CA53-4003-AB39-ECCA4D34B19E
