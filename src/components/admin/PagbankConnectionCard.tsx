@@ -27,6 +27,7 @@ type ConnectionStatus = {
     last_validated_at: string | null;
     last_error: string | null;
     connected_at: string | null;
+    webhook_token_configured?: boolean;
   } | null;
   marketplace_configured?: boolean;
   capabilities?: {
@@ -109,6 +110,7 @@ export function PagbankConnectionCard({ companyId, canEdit, isDeveloper, environ
   const [pendingGateway, setPendingGateway] = useState<Gateway | null>(null);
   const [disconnectOpen, setDisconnectOpen] = useState(false);
   const [sandboxToken, setSandboxToken] = useState('');
+  const [webhookToken, setWebhookToken] = useState('');
   const [sandboxAccountId, setSandboxAccountId] = useState('');
   const [smsEmail, setSmsEmail] = useState('');
   const [smsBranch, setSmsBranch] = useState('0001');
@@ -161,6 +163,7 @@ export function PagbankConnectionCard({ companyId, canEdit, isDeveloper, environ
       }
       if (successMessage) toast.success(successMessage);
       if (action === 'save_sandbox_token') setSandboxToken('');
+      if (action === 'save_webhook_token') setWebhookToken('');
       // Configuration is saved by the existing endpoint, never by the company form.
       await refresh();
       return true;
@@ -359,6 +362,21 @@ export function PagbankConnectionCard({ companyId, canEdit, isDeveloper, environ
               {status && !status.platform_ready.encryption && <p className="text-xs text-destructive">Proteção das credenciais ainda não configurada no servidor.</p>}
               {canEdit && isConnected && <Button type="button" variant="outline" size="sm" disabled={unavailable || !status?.platform_ready.connect || !status?.platform_ready.encryption} onClick={() => void run('connect_start')}>Renovar autorização PagBank</Button>}
             </div>
+            {canEdit && environment === 'sandbox' && connection && (
+              <div className="rounded-lg border bg-background p-4 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="pagbank-webhook-token">Token de autenticação do webhook</Label>
+                  <Badge variant={connection.webhook_token_configured ? 'secondary' : 'outline'}>{connection.webhook_token_configured ? 'Configurado' : 'Não configurado'}</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">Cole o token da conta vendedora PagBank Sandbox. O valor salvo nunca é exibido.</p>
+                <div className="flex flex-wrap gap-2">
+                  <Input id="pagbank-webhook-token" type="password" autoComplete="off" className="max-w-sm" value={webhookToken} onChange={e => setWebhookToken(e.target.value)} placeholder={connection.webhook_token_configured ? 'Substituir token configurado' : 'Token de autenticação'} />
+                  <Button type="button" size="sm" variant="secondary" disabled={unavailable || !status?.platform_ready.encryption || webhookToken.trim().length < 20} onClick={() => void run('save_webhook_token', { token: webhookToken.trim() }, 'Token de webhook salvo.')}>
+                    {busy === 'save_webhook_token' && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Salvar token
+                  </Button>
+                </div>
+              </div>
+            )}
             {canEdit && <details className="rounded-lg border bg-background">
               <summary className="cursor-pointer px-4 py-3 text-sm font-medium">Conectar via SMS (Sandbox)</summary>
               <div className="px-4 pb-4 space-y-3">

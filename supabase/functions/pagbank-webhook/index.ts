@@ -61,20 +61,21 @@ Deno.serve(async (req) => {
     return respond(202, { received: true, matched: false });
   }
 
-  // 2) Assinatura com o token da conexão congelada na venda (fallback: token do ambiente).
+  // 2) Assinatura. Venda vinculada a uma conexão: SOMENTE o token de webhook
+  // dessa conexão (sem fallback para ambiente/plataforma). Venda legada sem
+  // conexão congelada: token do ambiente e, por fim, o da plataforma.
   const connection = sale.payment_connection_id
     ? await loadConnectionById(supabaseAdmin, { connectionId: sale.payment_connection_id, companyId: sale.company_id })
     : null;
   const environment = sale.payment_environment;
-  const envToken = Deno.env.get(pagbankSecretNames(environment).webhookToken) ?? null;
-  // Candidatos em ordem: token de webhook da conexão, do ambiente e, para
-  // conexões Connect (sem token próprio), o token da aplicação/plataforma.
-  const candidates = [
-    { source: "connection", token: await decryptSecret(connection?.webhook_token_enc) },
-    { source: "environment", token: envToken },
-    { source: "platform", token: resolvePlatformAccessToken(environment) },
-  ].filter((c) => Boolean(c.token));
-  let signature: any = { valid: false, reason: candidates.length ? "mismatch" : "missing_token" };
+  const candidates = (sale.payment_connection_id
+    ? [{ source: "connection", token: await decryptSecret(connection?.webhook_token_enc) }]
+    : [
+      { source: "environment", token: Deno.env.get(pagbankSecretNames(environment).webhookToken) ?? null },
+      { source: "platform", token: resolvePlatformAccessToken(environment) },
+    ]).filter((c) => Boolean(c.token));
+  const missingReason = sale.payment_connection_id ? "connection_webhook_token_missing" : "missing_token";
+  let signature: any = { valid: false, reason: candidates.length ? "mismatch" : missingReason };
   let tokenSource: string | null = null;
   if (!receivedSignature) signature = { valid: false, reason: "missing_signature" };
   for (const c of receivedSignature ? candidates : []) {
