@@ -53,6 +53,8 @@ function publicConnection(c: any) {
     last_error: c.last_error,
     connected_at: c.connected_at,
     token_expires_at: c.token_expires_at,
+    // Somente o estado; o token de webhook nunca sai do backend.
+    webhook_token_configured: Boolean(c.webhook_token_enc),
   };
 }
 
@@ -318,6 +320,22 @@ Deno.serve(async (req) => {
       if (error) return json({ error: error.message }, 500);
       logPaymentTrace("info", "pagbank-connection", "company_gateway_changed", { company_id: companyId, gateway, user_id: userId });
       return json({ ok: true, company_gateway: gateway });
+    }
+
+    // Cadastra o token de autenticidade do webhook (x-authenticity-token) SOMENTE
+    // em webhook_token_enc da conexão Sandbox atual. Nunca retorna nem registra o token.
+    if (action === "save_webhook_token") {
+      assertPagbankEnvironmentAllowed(environment);
+      if (!isEncryptionConfigured()) throw new PagbankError("pagbank_configuration_missing", "Chave de criptografia não configurada.", 409);
+      const token = typeof body?.token === "string" ? body.token.trim() : "";
+      if (token.length < 20 || token.length > 512 || /\s/.test(token)) return json({ error: "Token de webhook inválido.", error_code: "pagbank_webhook_token_invalid" }, 400);
+      const connection = await loadCurrentConnection(supabaseAdmin, { companyId, environment });
+      if (!connection) return json({ error: "Nenhuma conexão PagBank Sandbox atual nesta empresa.", error_code: "pagbank_connection_missing" }, 409);
+      const { error } = await supabaseAdmin.from("payment_gateway_connections")
+        .update({ webhook_token_enc: await encryptSecret(token) })
+        .eq("id", connection.id).eq("company_id", companyId).eq("gateway", "pagbank").eq("environment", environment).eq("is_current", true);
+      if (error) return json({ error: "Não foi possível salvar o token de webhook." }, 500);
+      return json({ ok: true, connection_id: connection.id, webhook_token_configured: true });
     }
 
     if (action === "save_sandbox_token") {
