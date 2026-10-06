@@ -1,0 +1,25 @@
+Aplicação criada e validada no ambiente de testes do PagBank (API oficial, nada de intermediária):
+
+- client_id: `cedb1abb-8bc9-4d3a-9ef1-ee54db457e5a`
+- account_id da conta SmartBus: `ACCO_6D195F1C-7EAD-48D6-B8F1-DF551566CFCD`
+- Endereço de retorno: `https://cdrcyjrvurrphnceromd.supabase.co/functions/v1/pagbank-connect-callback`
+- Criação: HTTP 201. Consulta de conferência: HTTP 200, com nome SmartBus, site oficial e o mesmo endereço de retorno.
+- Os dois identificadores acima ficaram salvos como configuração do backend (`PAGBANK_CLIENT_ID_SANDBOX` e `PAGBANK_MARKETPLACE_ACCOUNT_ID_SANDBOX`), com valores reais do PagBank.
+
+
+
+Dados da Empresa que Vende Passagem: 
+- client_id: `cedb1abb-8bc9-4d3a-9ef1-ee54db457e5a`
+- account_id da conta SmartBus: `ACCO_6D195F1C-7EAD-48D6-B8F1-DF551566CFCD`
+E-mail:comercial@smartbus.com.br
+Token:0ac13d96-edc9-48e8-8a09-0b0cbec8f0b4efe857404700b8a1fd8d24d2c0f48a57757c-5bca-46c0-bb5c-12222510bd70
+
+
+
+Dados do Vendedor: 
+E-mail:edimarreginato@gmail.com
+Token: 4a6f3be6-5c41-4c79-b765-2f6aa0985be0b0bb86ba4265b5bf0b16ed0ed90f3c509a3b-6d2d-4b6e-8922-d34c419251e7
+Dados do Vendedor: 
+Campo a informar: Account ID / external_account_id
+Valor:
+ACCO_C441E21F-2C34-4B2A-AA90-3308EAA6D480
