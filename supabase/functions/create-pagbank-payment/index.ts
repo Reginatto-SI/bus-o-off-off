@@ -433,7 +433,7 @@ Deno.serve(async (req) => {
         })),
         expectedTotalCents: splitPlan.totalCents,
       });
-      if (validation.ok) return validation.artifacts;
+      if (validation.ok) return { ...validation.artifacts, splitStatus: validation.splitStatus, splitId: validation.splitId };
 
       const splitIssues = validation.split && !validation.split.ok ? validation.split.issues : [];
       await supabaseAdmin.from("payment_attempts").update({
@@ -475,6 +475,7 @@ Deno.serve(async (req) => {
         external_charge_id: art.chargeId,
         external_status_raw: art.rawStatus,
         normalized_status: normalizePagbankStatus(art.rawStatus),
+        ...(!isCard ? { split_status: art.splitStatus } : {}),
         pix_qr_text: art.qrText,
         pix_qr_image_url: art.qrImageUrl,
         pix_expires_at: art.expiresAt,
@@ -487,7 +488,11 @@ Deno.serve(async (req) => {
         environmentDecisionSource: "sale", provider: "pagbank", direction: "outgoing_request",
         eventType: "create_pix_recovered", paymentId: art.orderId, externalReference: sale.id,
         processingStatus: "success", resultCategory: "success", message: "Order recuperado e validado após resultado indeterminado.",
-        payloadJson: { idempotency_key: idempotencyKey }, responseJson: { order_id: art.orderId, status: art.rawStatus, split_validated: true, has_qr: true },
+        payloadJson: { idempotency_key: idempotencyKey }, responseJson: {
+          order_id: art.orderId, status: art.rawStatus,
+          split_validated: isCard ? true : art.splitStatus === "confirmed", has_qr: isCard ? true : Boolean(art.qrText),
+          ...(!isCard ? { split_status: art.splitStatus, split_id: art.splitId } : {}),
+        },
       });
       return json({ ...attemptToPublic(recovered), recovered: true }, 200);
     }
@@ -620,14 +625,15 @@ Deno.serve(async (req) => {
     } : {
       state: "succeeded", external_order_id: art.orderId, external_charge_id: art.chargeId, external_status_raw: art.rawStatus ?? "WAITING",
       normalized_status: normalized, pix_qr_text: art.qrText, pix_qr_image_url: art.qrImageUrl, pix_expires_at: art.expiresAt ?? expiresAt.toISOString(),
+      split_status: art.splitStatus,
     }).eq("id", attemptId).eq("company_id", sale.company_id).select("*").single();
 
     // Capacidades comprovadas por cobrança real (nunca por chamada genérica).
-    // Cartão com split "aceito, consulta pendente" não comprova split_ready.
+    // Split "aceito, consulta pendente" não comprova split_ready (PIX ou cartão).
     if (!isCard) {
       await supabaseAdmin.from("payment_gateway_connections").update({
         pix_ready: true,
-        split_ready: splitPlan.receivers.length > 0 ? true : credential.connection.split_ready,
+        ...(art.splitStatus === "confirmed" ? { split_ready: true } : {}),
         capabilities_verified_at: new Date().toISOString(),
         last_error: null,
       }).eq("id", credential.connection.id).eq("company_id", sale.company_id);
@@ -660,7 +666,7 @@ Deno.serve(async (req) => {
       payloadJson: { idempotency_key: idempotencyKey },
       responseJson: isCard
         ? { order_id: art.orderId, charge_id: art.chargeId, status: art.rawStatus, split_status: (art as any).splitStatus ?? null, split_id: (art as any).splitId ?? null, installments: 1 }
-        : { order_id: art.orderId, charge_id: art.chargeId, status: art.rawStatus, has_qr: Boolean(art.qrText) },
+        : { order_id: art.orderId, charge_id: art.chargeId, status: art.rawStatus, has_qr: Boolean(art.qrText), split_status: art.splitStatus, split_id: art.splitId },
       durationMs: Date.now() - startedAt,
     });
     await logSaleOperationalEvent({
