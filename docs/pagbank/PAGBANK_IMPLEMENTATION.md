@@ -1,5 +1,10 @@
 # PagBank no SmartBus — checkpoint atual
 
+> **LEIA PRIMEIRO:** antes de qualquer nova investigação PagBank Sandbox, consulte
+> [00_LEIA_PRIMEIRO_PAGBANK_SANDBOX.md](./00_LEIA_PRIMEIRO_PAGBANK_SANDBOX.md).
+> Esse arquivo registra o que já foi testado, o que funcionou, o que falhou e o que NÃO deve ser repetido.
+> Enquanto PIX e cartão Sandbox com Split não estiverem funcionando no fluxo básico, ele tem prioridade operacional sobre hipóteses exploratórias antigas deste documento.
+
 ## Manutenção — 2026-10-06: diagnóstico de recursos com Connect SMS
 
 - `pagbank-connection` ganhou a ação `resource_probe`, preservando os guards
