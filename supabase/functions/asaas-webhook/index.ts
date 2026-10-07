@@ -51,7 +51,7 @@ type ProcessingResult = {
   paymentId?: string | null;
   externalReference?: string | null;
   paymentEnvironment?: PaymentEnvironment | null;
-  environmentDecisionSource?: "sale" | "request" | "host" | null;
+  environmentDecisionSource?: "sale" | "request" | "host" | "company" | null;
   environmentHostDetected?: string | null;
   asaasEventId?: string | null;
   incidentCode?: string | null;
@@ -180,7 +180,7 @@ const ASAAS_SUPPORTED_EVENTS = new Set([
  * Hardening Step 5: sem ambiente persistido, o webhook não processa o evento.
  */
 async function getSaleEnvironment(
-  supabaseAdmin: ReturnType<typeof createClient<any>>,
+  supabaseAdmin: any,
   saleId: string,
 ): Promise<PaymentEnvironment | null> {
   const { data } = await supabaseAdmin
@@ -232,8 +232,22 @@ function validateOfficialWebhookToken(
   };
 }
 
+/** platform_fee sem venda: valida estritamente contra os tokens oficiais configurados. */
+function resolveTokenEnvironmentForMissingPlatformFeeSale(req: Request): {
+  hasConfiguredToken: boolean;
+  tokenValid: boolean;
+  environment: PaymentEnvironment | null;
+} {
+  const validation = validateOfficialWebhookToken(req);
+  return {
+    hasConfiguredToken: validation.hasConfiguredToken,
+    tokenValid: validation.isValid,
+    environment: validation.matchedEnvironment,
+  };
+}
+
 async function registerWebhookEvent(params: {
-  supabaseAdmin: ReturnType<typeof createClient<any>>;
+  supabaseAdmin: any;
   asaasEventId?: string | null;
   eventType?: string | null;
   paymentId?: string | null;
@@ -1182,7 +1196,7 @@ serve(async (req) => {
 });
 
 async function processPlatformFeeWebhook(
-  supabaseAdmin: ReturnType<typeof createClient<any>>,
+  supabaseAdmin: any,
   externalReference: string,
   payment: any,
   eventType: string,
@@ -1326,7 +1340,7 @@ async function processPlatformFeeWebhook(
 }
 
 async function processPaymentConfirmed(
-  supabaseAdmin: ReturnType<typeof createClient<any>>,
+  supabaseAdmin: any,
   sale: any,
   payment: any,
   eventType: string,
@@ -1409,7 +1423,7 @@ async function processPaymentConfirmed(
 }
 
 async function upsertFinancialSnapshot(
-  supabaseAdmin: ReturnType<typeof createClient<any>>,
+  supabaseAdmin: any,
   saleId: string,
   companyId: string,
   sale: any,
@@ -1486,7 +1500,7 @@ async function upsertFinancialSnapshot(
 }
 
 async function processPaymentFailed(
-  supabaseAdmin: ReturnType<typeof createClient<any>>,
+  supabaseAdmin: any,
   sale: any,
   payment: any,
   eventType: string,
@@ -1584,7 +1598,7 @@ async function processPaymentFailed(
       .eq("company_id", sale.company_id);
 
     const hasConsumedBoarding = (ticketsData ?? []).some(
-      (ticket) => (ticket.boarding_status ?? "pendente") !== "pendente",
+      (ticket: any) => (ticket.boarding_status ?? "pendente") !== "pendente",
     );
 
     if (hasConsumedBoarding) {
@@ -1878,7 +1892,7 @@ async function processPaymentFailed(
 }
 
 async function processPaymentRiskInProgress(
-  supabaseAdmin: ReturnType<typeof createClient<any>>,
+  supabaseAdmin: any,
   sale: any,
   payment: any,
   eventType: string,
@@ -1901,7 +1915,7 @@ async function processPaymentRiskInProgress(
     .eq("company_id", sale.company_id);
 
   const hasConsumedBoarding = (ticketsData ?? []).some(
-    (ticket) => (ticket.boarding_status ?? "pendente") !== "pendente",
+    (ticket: any) => (ticket.boarding_status ?? "pendente") !== "pendente",
   );
 
   await logSaleOperationalEvent({
@@ -1948,7 +1962,7 @@ async function processPaymentRiskInProgress(
 }
 
 async function persistIntegrationLog(
-  supabaseAdmin: ReturnType<typeof createClient<any>>,
+  supabaseAdmin: any,
   params: ProcessingResult & { payload: unknown },
 ) {
   await logSaleIntegrationEvent({

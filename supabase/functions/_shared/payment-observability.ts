@@ -66,7 +66,7 @@ export function inferPaymentOwnerType(params: {
 }
 
 export async function logSaleOperationalEvent(params: {
-  supabaseAdmin: ReturnType<typeof createClient<any>>;
+  supabaseAdmin: any;
   saleId?: string | null;
   companyId?: string | null;
   action: string;
@@ -119,7 +119,7 @@ export async function logSaleOperationalEvent(params: {
 }
 
 export async function logSaleIntegrationEvent(params: {
-  supabaseAdmin: ReturnType<typeof createClient<any>>;
+  supabaseAdmin: any;
   saleId?: string | null;
   companyId?: string | null;
   paymentEnvironment?: string | null;
@@ -187,7 +187,7 @@ export async function logSaleIntegrationEvent(params: {
  * e facilitar automação futura sem mudar a lógica de pagamento.
  */
 export async function logCriticalPaymentIssue(params: {
-  supabaseAdmin: ReturnType<typeof createClient<any>>;
+  supabaseAdmin: any;
   source: string;
   errorCode: CriticalPaymentErrorCode;
   saleId?: string | null;
