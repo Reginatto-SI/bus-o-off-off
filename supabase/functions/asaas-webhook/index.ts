@@ -180,7 +180,7 @@ const ASAAS_SUPPORTED_EVENTS = new Set([
  * Hardening Step 5: sem ambiente persistido, o webhook não processa o evento.
  */
 async function getSaleEnvironment(
-  supabaseAdmin: ReturnType<typeof createClient<any>>,
+  supabaseAdmin: any,
   saleId: string,
 ): Promise<PaymentEnvironment | null> {
   const { data } = await supabaseAdmin
@@ -247,7 +247,7 @@ function resolveTokenEnvironmentForMissingPlatformFeeSale(req: Request): {
 }
 
 async function registerWebhookEvent(params: {
-  supabaseAdmin: ReturnType<typeof createClient<any>>;
+  supabaseAdmin: any;
   asaasEventId?: string | null;
   eventType?: string | null;
   paymentId?: string | null;
@@ -1196,7 +1196,7 @@ serve(async (req) => {
 });
 
 async function processPlatformFeeWebhook(
-  supabaseAdmin: ReturnType<typeof createClient<any>>,
+  supabaseAdmin: any,
   externalReference: string,
   payment: any,
   eventType: string,
@@ -1340,7 +1340,7 @@ async function processPlatformFeeWebhook(
 }
 
 async function processPaymentConfirmed(
-  supabaseAdmin: ReturnType<typeof createClient<any>>,
+  supabaseAdmin: any,
   sale: any,
   payment: any,
   eventType: string,
@@ -1423,7 +1423,7 @@ async function processPaymentConfirmed(
 }
 
 async function upsertFinancialSnapshot(
-  supabaseAdmin: ReturnType<typeof createClient<any>>,
+  supabaseAdmin: any,
   saleId: string,
   companyId: string,
   sale: any,
@@ -1500,7 +1500,7 @@ async function upsertFinancialSnapshot(
 }
 
 async function processPaymentFailed(
-  supabaseAdmin: ReturnType<typeof createClient<any>>,
+  supabaseAdmin: any,
   sale: any,
   payment: any,
   eventType: string,
@@ -1892,7 +1892,7 @@ async function processPaymentFailed(
 }
 
 async function processPaymentRiskInProgress(
-  supabaseAdmin: ReturnType<typeof createClient<any>>,
+  supabaseAdmin: any,
   sale: any,
   payment: any,
   eventType: string,
@@ -1962,7 +1962,7 @@ async function processPaymentRiskInProgress(
 }
 
 async function persistIntegrationLog(
-  supabaseAdmin: ReturnType<typeof createClient<any>>,
+  supabaseAdmin: any,
   params: ProcessingResult & { payload: unknown },
 ) {
   await logSaleIntegrationEvent({
