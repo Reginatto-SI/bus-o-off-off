@@ -161,6 +161,7 @@ export async function resolveCredentialFromConnection(
   supabaseAdmin: SupabaseAdminClient,
   connection: PagbankConnectionRow,
   purpose: PagbankCredentialPurpose = "create",
+  options: { allowRefresh?: boolean } = {},
 ): Promise<ResolvedPagbankCredential> {
   // Identidade lógica × credencial:
   // - nova cobrança exige a conexão corrente e conectada;
@@ -187,6 +188,9 @@ export async function resolveCredentialFromConnection(
   const expiresAt = connection.token_expires_at ? Date.parse(connection.token_expires_at) : null;
   const needsRefresh = isPagbankConnectCredentialMode(connection.credential_mode) && expiresAt != null && expiresAt - Date.now() < 60_000;
   if (needsRefresh) {
+    if (options.allowRefresh === false) {
+      throw new PagbankError("pagbank_auth_failed", "A credencial Connect precisa ser renovada; o diagnóstico somente leitura não renova tokens.", 409);
+    }
     accessToken = await refreshConnectToken(supabaseAdmin, connection);
   }
 

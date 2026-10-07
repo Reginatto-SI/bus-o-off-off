@@ -1,5 +1,49 @@
 # PagBank no SmartBus — checkpoint atual
 
+## Manutenção — 2026-10-06: diagnóstico de recursos com Connect SMS
+
+- `pagbank-connection` ganhou a ação `resource_probe`, preservando os guards
+  existentes de autenticação, admin/developer e vínculo à empresa. Exige gateway
+  PagBank, ambiente efetivo Sandbox e conexão corrente, conectada, `connect_sms`.
+- Reutiliza `loadCurrentConnection` e `resolveCredentialFromConnection` com
+  `allowRefresh: false`. Token próximo de expirar interrompe o diagnóstico com
+  `pagbank_credential_requires_refresh`; nenhuma renovação ou escrita é feita.
+  Os demais consumidores do resolvedor mantêm o comportamento anterior.
+- Aceita `order_id`, `charge_id` e `split_id` opcionais (ao menos um). Executa
+  somente GET nos caminhos oficiais `/orders/{id}`, `/charges/{id}`,
+  `/orders?charge_id={id}` e `/splits/{id}`, exclusivamente no Sandbox.
+- Não usa token manual/plataforma como fallback, não segue links externos nem
+  redirecionamentos, não acessa hosts internos e não cria cobranças. Retorna
+  apenas modo de credencial, HTTP, classificação de origem/erro, IDs, status,
+  presença de link SPLIT e quantidade/valores dos recebedores quando disponíveis.
+- Validação local: 347 testes passaram (35 novos), TypeScript do app e da Edge
+  Function, lint dos arquivos novos, build e `git diff --check` passaram. O lint
+  global mantém os 239 erros e 66 avisos preexistentes; os dois arquivos backend
+  editados já tinham `@ts-nocheck`, também apontado pelo lint.
+- Pendente: implantar a função e executar o diagnóstico com sessão autorizada no
+  runtime Supabase. O Codex não possui as credenciais runtime; modo da conexão,
+  `is_current` e resultados reais dos recursos PIX/cartão não foram verificados.
+  Não foi possível concluir se a negativa está isolada ao Split.
+
+Invocar `pagbank-connection` com a sessão de um admin/developer autorizado, usando
+`company_id` da Empresa Padrão (Teste). Exemplo de corpo para os IDs PIX fornecidos:
+
+```json
+{
+  "action": "resource_probe",
+  "company_id": "<UUID da Empresa Padrão (Teste)>",
+  "order_id": "ORDE_3DF26723-A68D-4392-B47F-530DCB34B630",
+  "charge_id": "CHAR_DDB650E1-FABA-4E1B-875E-2806E486DACD",
+  "split_id": "SPLI_2D316D1D-5709-4EAC-980D-36F098E0B780"
+}
+```
+
+Para cartão, substituir pelos IDs `ORDE_7591B58A-C658-45BC-9C9B-710FB3897ED5`,
+`CHAR_6D914E89-4519-4988-9378-136EF7853FF3` e
+`SPLI_29AC8034-CA53-4003-AB39-ECCA4D34B19E`. HTTP 200 da função indica que o
+diagnóstico foi executado; avaliar os `http_status`, `ok` e `error_code` individuais
+em `results`. HTTP 409 indica um pré-requisito ausente, sem mudança de estado.
+
 ## Manutenção — 2026-09-24: formato da chave de idempotência
 
 - A chave da criação PIX passou de componentes separados por `:` para
