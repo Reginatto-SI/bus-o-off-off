@@ -6,7 +6,7 @@
 >
 > **Objetivo atual é simples:** fazer **PIX e cartão de crédito funcionarem em Sandbox com Split**, ponta a ponta, antes de buscar uma integração "perfeita".
 
-Atualizado em: **2026-10-06**
+Atualizado em: **2026-10-07**
 
 ---
 
@@ -381,3 +381,17 @@ O foco é somente:
 - **emissão única da passagem**.
 
 Só depois desse fluxo básico comprovado os demais recursos entram em uma nova fase.
+
+---
+
+## 12. Correção local do bloqueio PIX — 2026-10-07
+
+**O que mudou e por quê:** o gate PIX rejeitava com `pagbank_split_not_confirmed` uma Order válida com QR e um único Split referenciado apenas porque os recebedores não estavam visíveis. Agora, como no cartão, aceita essa resposta como `accepted_unverified`, após validar referência, IDs, total da cobrança e soma do plano esperado. O QR continua obrigatório. Se os recebedores estiverem visíveis, a conferência integral continua obrigatória; divergências, Split totalmente ausente e múltiplos Splits continuam bloqueados.
+
+O estado é registrado na coluna existente `payment_attempts.split_status` e nos logs, tanto na criação quanto na recuperação por referência. `accepted_unverified` não torna a conciliação bem-sucedida, não marca `split_ready` como comprovado e não é registrado como Split validado. A confirmação financeira continua dependendo da consulta autoritativa da Order. Não houve alteração na consulta GET Split, nas credenciais, na conexão/OAuth, no cartão ou no webhook.
+
+**O que os testes locais provaram:** 184 testes relevantes passaram em 11 arquivos, com 18 testes novos e ajuste do teste que exigia o bloqueio antigo. Foram cobertos QR obrigatório, Split único sem detalhes, Split ausente ou múltiplo, referência/valores/soma divergentes, recebedores parcialmente visíveis, cartão, assinatura de webhook e integridade financeira. Os testes da Edge Function, com banco e PagBank simulados, comprovaram retorno do QR, persistência de `accepted_unverified` sem comprovar `split_ready`, recuperação sem nova Order e reutilização com finalização após consulta da Order `PAID`. TypeScript do app, `deno check` da Edge Function, build, lint dos testes alterados e `git diff --check` passaram. A revisão confirmou que a lógica de webhook e de confirmação financeira permaneceu idêntica à `main`.
+
+**Ainda não comprovado:** nenhuma venda real Sandbox foi executada nesta etapa. Não registrar PIX como funcionando antes desse teste. O próximo passo mínimo é validar no runtime Sandbox a exibição do QR, o pagamento de teste, a consulta da Order e a finalização com emissão única da passagem. A conciliação detalhada dos recebedores continua pendente para outra fase.
+
+**Não repetir nesta etapa:** investigação de credenciais, conexão/OAuth, webhook ou GET Split. A limitação já documentada de leitura do Split não deve voltar a bloquear a prova do fluxo PIX básico.

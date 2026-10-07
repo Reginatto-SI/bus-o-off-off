@@ -333,6 +333,8 @@ export type PagbankPixOrderValidation =
     ok: true;
     artifacts: PagbankPixArtifacts;
     split: PagbankSplitReconciliation;
+    splitStatus: "confirmed" | "accepted_unverified" | "not_expected";
+    splitId: string | null;
   }
   | {
     ok: false;
@@ -344,8 +346,8 @@ export type PagbankPixOrderValidation =
 
 /**
  * Gate único de utilizabilidade do Order PIX. Criação e recuperação precisam
- * comprovar a mesma referência, IDs mínimos, split integral e artefato PIX antes
- * de persistir a tentativa como `succeeded`.
+ * validar a mesma referência, IDs mínimos e artefato PIX. Um único Split
+ * referenciado sem recebedores visíveis é aceito, mas permanece não conciliado.
  */
 export function validatePagbankPixOrder(params: {
   order: any;
@@ -375,7 +377,13 @@ export function validatePagbankPixOrder(params: {
   }
 
   const split = reconcilePagbankSplit(params.order, params.expectedReceivers, params.expectedTotalCents);
-  if (!split.ok) {
+  const splitIds = extractPagbankSplitLinkIds(params.order);
+  const splitId = splitIds.length === 1 ? splitIds[0] : null;
+  if (splitIds.length > 1) {
+    return { ok: false, errorCode: "pagbank_split_not_confirmed", reason: "multiple_split_links", artifacts, split };
+  }
+  const acceptedUnverified = !split.ok && split.echoed.length === 0 && splitId != null;
+  if (!split.ok && !acceptedUnverified) {
     return {
       ok: false,
       errorCode: "pagbank_split_not_confirmed",
@@ -383,6 +391,16 @@ export function validatePagbankPixOrder(params: {
       artifacts,
       split,
     };
+  }
+  if (acceptedUnverified) {
+    // Sem detalhes do Split, conferir o total da própria cobrança é obrigatório.
+    // A presença de um SPLI_ nunca transforma a conciliação acima em `ok`.
+    if (params.order.charges.length !== 1 || params.order.charges[0]?.amount?.value !== params.expectedTotalCents) {
+      return { ok: false, errorCode: "pagbank_order_response_incomplete", reason: "charge_amount_mismatch", artifacts, split };
+    }
+    if (params.expectedReceivers.reduce((sum, receiver) => sum + receiver.amountCents, 0) !== params.expectedTotalCents) {
+      return { ok: false, errorCode: "pagbank_split_not_confirmed", reason: "sum_mismatch", artifacts, split };
+    }
   }
   if (!artifacts.qrText) {
     return {
@@ -393,7 +411,7 @@ export function validatePagbankPixOrder(params: {
       split,
     };
   }
-  return { ok: true, artifacts, split };
+  return { ok: true, artifacts, split, splitId, splitStatus: split.ok ? split.reason : "accepted_unverified" };
 }
 
 
