@@ -51,7 +51,7 @@ type ProcessingResult = {
   paymentId?: string | null;
   externalReference?: string | null;
   paymentEnvironment?: PaymentEnvironment | null;
-  environmentDecisionSource?: "sale" | "request" | "host" | null;
+  environmentDecisionSource?: "sale" | "request" | "host" | "company" | null;
   environmentHostDetected?: string | null;
   asaasEventId?: string | null;
   incidentCode?: string | null;
@@ -229,6 +229,20 @@ function validateOfficialWebhookToken(
     isValid: Boolean(matchedToken),
     matchedEnvironment: matchedToken?.environment ?? null,
     configuredSecretNames: configuredTokens.map((entry) => entry.secretName),
+  };
+}
+
+/** platform_fee sem venda: valida estritamente contra os tokens oficiais configurados. */
+function resolveTokenEnvironmentForMissingPlatformFeeSale(req: Request): {
+  hasConfiguredToken: boolean;
+  tokenValid: boolean;
+  environment: PaymentEnvironment | null;
+} {
+  const validation = validateOfficialWebhookToken(req);
+  return {
+    hasConfiguredToken: validation.hasConfiguredToken,
+    tokenValid: validation.isValid,
+    environment: validation.matchedEnvironment,
   };
 }
 
