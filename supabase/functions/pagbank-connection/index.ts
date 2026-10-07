@@ -1,7 +1,7 @@
 // @ts-nocheck — arquivo Deno (edge function).
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Administração da conexão PagBank por empresa (autenticado, admin da empresa).
-// Ações: status | validate | whoami | save_sandbox_token | connect_start |
+// Ações: status | validate | whoami | split_probe | resource_probe | save_sandbox_token | connect_start |
 // connect_sms_start | connect_sms_confirm | disconnect | set_gateway.
 // Nunca retorna tokens; apenas status, conta mascarada e diagnóstico.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
@@ -17,6 +17,7 @@ import {
 } from "../_shared/pagbank/core.ts";
 
 import { probePagbankAuth } from "../_shared/pagbank/client.ts";
+import { probePagbankResources } from "../_shared/pagbank/resource-probe.ts";
 import { encryptSecret, isEncryptionConfigured } from "../_shared/pagbank/crypto.ts";
 import { classifyRequestOrigin, resolveEffectivePaymentEnvironment } from "../_shared/payment-environment-policy.ts";
 import {
@@ -214,6 +215,21 @@ Deno.serve(async (req) => {
         error: probe.ok ? undefined : "O token salvo não pertence à conta cadastrada (ou o PagBank recusou a consulta).",
         error_code: probe.ok ? undefined : "pagbank_identity_mismatch",
       }, probe.ok ? 200 : 409);
+    }
+
+    // Mesmo guard de admin/vínculo à empresa acima; somente Sandbox e Connect SMS.
+    if (action === "resource_probe") {
+      const probe = await probePagbankResources(supabaseAdmin, {
+        companyId, companyGateway: company.payment_gateway,
+        environment: effectiveCompanyEnvironment,
+        ids: { order_id: body?.order_id, charge_id: body?.charge_id, split_id: body?.split_id, environment: body?.environment },
+      });
+      logPaymentTrace("info", "pagbank-connection", "resource_probe", {
+        company_id: companyId, credential_mode: probe.body.credential_mode,
+        error_code: "error_code" in probe.body ? probe.body.error_code : null,
+        results: "results" in probe.body ? probe.body.results.map(({ resource, http_status, error_code }) => ({ resource, http_status, error_code })) : [],
+      });
+      return json(probe.body, probe.status);
     }
 
     // Diagnóstico somente leitura: descobre qual credencial consegue ler o recurso
