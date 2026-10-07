@@ -1598,7 +1598,7 @@ async function processPaymentFailed(
       .eq("company_id", sale.company_id);
 
     const hasConsumedBoarding = (ticketsData ?? []).some(
-      (ticket) => (ticket.boarding_status ?? "pendente") !== "pendente",
+      (ticket: any) => (ticket.boarding_status ?? "pendente") !== "pendente",
     );
 
     if (hasConsumedBoarding) {
@@ -1915,7 +1915,7 @@ async function processPaymentRiskInProgress(
     .eq("company_id", sale.company_id);
 
   const hasConsumedBoarding = (ticketsData ?? []).some(
-    (ticket) => (ticket.boarding_status ?? "pendente") !== "pendente",
+    (ticket: any) => (ticket.boarding_status ?? "pendente") !== "pendente",
   );
 
   await logSaleOperationalEvent({

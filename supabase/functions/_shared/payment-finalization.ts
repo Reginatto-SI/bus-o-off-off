@@ -142,7 +142,7 @@ export async function createTicketsFromPassengersShared(
     };
   }
 
-  const ticketInserts = passengers.map((p: Record<string, unknown>, index) => {
+  const ticketInserts = passengers.map((p: Record<string, unknown>, index: number) => {
     const benefitApplied = Boolean(p.benefit_applied);
     const benefitProgramName = (p.benefit_program_name as string | null) ?? null;
     const discountAmount = Number(p.discount_amount ?? 0);
