@@ -319,3 +319,65 @@ A fase básica PagBank Sandbox será considerada concluída quando:
 **Primeiro fazer funcionar. Depois endurecer, reconciliar e homologar tudo que faltar.**
 
 Não transformar uma limitação acessória do Sandbox em bloqueio para provar o fluxo essencial.
+
+
+---
+
+## 11. Regra permanente de aprendizado — alimentar este arquivo a cada teste
+
+Este arquivo é a memória operacional obrigatória da integração PagBank Sandbox.
+
+A partir de agora, sempre que ocorrer qualquer um destes casos:
+
+- teste novo;
+- erro novo;
+- hipótese descartada;
+- endpoint que não funciona;
+- credencial que não serve para determinado fluxo;
+- comportamento confirmado;
+- armadilha descoberta;
+- correção aplicada;
+- decisão de simplificação;
+
+este documento deve ser atualizado antes de abrir uma nova frente de investigação.
+
+### Cada atualização deve registrar no mínimo
+
+1. **o que foi testado**;
+2. **qual era o objetivo**;
+3. **qual foi o resultado real**;
+4. **o que ficou comprovado**;
+5. **o que foi descartado**;
+6. **o que NÃO deve ser repetido**;
+7. **qual é o próximo passo mínimo**.
+
+### Regra contra repetição
+
+Nenhuma IA, desenvolvedor ou ferramenta deve repetir um teste já registrado como inconclusivo, bloqueado ou desnecessário sem existir uma evidência nova concreta que justifique repetir.
+
+Se houver nova evidência, registrar primeiro por que o teste antigo precisa ser reaberto.
+
+### Regra de escopo para a fase básica
+
+Até PIX e cartão Sandbox com Split passarem de ponta a ponta:
+
+- não ampliar arquitetura;
+- não criar novos modos de credencial;
+- não adicionar boleto;
+- não adicionar recorrência;
+- não adicionar parcelamento;
+- não adicionar 3DS;
+- não exigir webhook para concluir a prova funcional;
+- não exigir conciliação detalhada de Split;
+- não abrir Produção.
+
+O foco é somente:
+
+- **PIX à vista**;
+- **cartão de crédito em pagamento único**;
+- **Split entre empresa vendedora e SmartBus**;
+- **consulta autoritativa da Order para confirmar pagamento**;
+- **finalização idempotente da venda**;
+- **emissão única da passagem**.
+
+Só depois desse fluxo básico comprovado os demais recursos entram em uma nova fase.
