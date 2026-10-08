@@ -410,3 +410,33 @@ O estado é registrado na coluna existente `payment_attempts.split_status` e nos
 **Ainda não comprovado:** nenhuma venda real Sandbox foi executada nesta etapa. Não registrar PIX como funcionando antes desse teste. O próximo passo mínimo é validar no runtime Sandbox a exibição do QR, o pagamento de teste, a consulta da Order e a finalização com emissão única da passagem. A conciliação detalhada dos recebedores continua pendente para outra fase.
 
 **Não repetir nesta etapa:** investigação de credenciais, conexão/OAuth, webhook ou GET Split. A limitação já documentada de leitura do Split não deve voltar a bloquear a prova do fluxo PIX básico.
+
+
+---
+
+## 13. PIX Sandbox — confirmação de pagamento e emissão de passagens (2026-10-08)
+
+Consulta somente leitura ao banco conectado ao Lovable após o teste real da PR #769:
+
+- Venda: `0a90f91f-08d5-41e7-a395-60fc860c8bfc`.
+- Order: `ORDE_CE74C7E6-3B91-4AEE-BF0B-22DDDF6DAF09`.
+- Charge: `CHAR_2AF06611-4D1F-4646-8550-C30305EAC952`.
+- Split: `SPLI_31CBB3C9-9213-4DA7-A9FA-389B89873930`.
+- QR Code PIX R$ 106,00 exibido no checkout, confirmado no teste funcional anterior.
+- `sales.status = pago`.
+- `payment_attempts.external_status_raw = PAID`, `normalized_status = paid`, `state = succeeded`.
+- `payment_attempts.split_status = accepted_unverified` — **não** comprova reconciliação detalhada do Split.
+- Apenas **1** registro em `payment_attempts` para a venda.
+- **2 passagens emitidas** em `tickets`, uma de ida (assento 53, número `SB-001699`) e outra de volta (`VOLTA-1`, número `SB-001700`), ambas registradas no mesmo instante. São dois trechos diferentes; a quantidade não indica duplicação.
+
+### O que ficou comprovado
+
+Criação da Order PIX Sandbox com Split único referenciado, apresentação do QR Code, registro posterior de pagamento `PAID` no SmartBus, atualização da venda para `pago` e emissão de duas passagens para dois trechos distintos. A prova ocorreu sem precisar de consulta detalhada `GET /splits/{id}`.
+
+### Limites da prova
+
+Esta auditoria verificou o **estado persistido no banco**, não executou nova consulta HTTP ao PagBank. A origem exata da confirmação (consulta autoritativa ou outro mecanismo) e a idempotência sob reprocessamento ainda precisam de verificação específica; não afirmar que foram comprovadas somente por esta leitura. O Split permanece `accepted_unverified`, sem valores dos recebedores conciliados.
+
+### Não repetir / próximo passo mínimo
+
+Não voltar a OAuth, troca de credenciais, GET Split, GET Charge ou investigação de assinatura de webhook para provar o PIX básico. Preservar o caso PIX como marco funcional real. Próximo passo: validar cartão de crédito Sandbox com Split no mesmo fluxo mínimo, sem ampliar escopo; em revisão separada, confirmar a origem da atualização `PAID` e a idempotência da finalização.
