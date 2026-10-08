@@ -207,6 +207,21 @@ O cartão já possui tratamento mais simples: quando há um único `SPLI_...` e 
 
 Não marcar Split como reconciliado. Apenas permitir o fluxo básico.
 
+### Resultado após PR #769 — teste de 2026-10-08
+
+Criação PIX Sandbox com Split e exibição do QR foi comprovada.
+
+- sale: `0a90f91f-08d5-41e7-a395-60fc860c8bfc`
+- Order: `ORDE_CE74C7E6-3B91-4AEE-BF0B-22DDDF6DAF09`
+- Charge: `CHAR_2AF06611-4D1F-4646-8550-C30305EAC952`
+- Split: `SPLI_31CBB3C9-9213-4DA7-A9FA-389B89873930` (único)
+- `split_status = accepted_unverified`; tentativa `succeeded`; status externo `WAITING`
+- QR Code e copia-e-cola exibidos na confirmação; venda `pendente_pagamento`
+- Conexão: `connect_sms` `824df77f…`, seller `…D480`
+- Webhook inicial (WAITING) rejeitado 401 — problema conhecido da seção 6, não investigado.
+
+PIX **ainda não** concluído de ponta a ponta: falta pagamento e Order `PAID`.
+
 ---
 
 ## 6. Webhook — conhecido, mas NÃO é prioridade para liberar o básico
