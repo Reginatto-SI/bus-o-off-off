@@ -547,3 +547,43 @@ Não usar o token direto do vendedor para validar Orders marketplace/Connect e n
 Essa nova evidência não resolve sozinha a assinatura do webhook, mas reduz a hipótese de que o token direto do seller seja o segredo correto para validar notificações do fluxo marketplace. A investigação do webhook deve manter separados: token direto do seller, access token Connect e segredo/token específico de webhook/documentação do provedor.
 
 Não alterar credenciais nem conexão corrente com base nesses logs.
+
+
+---
+
+## 18. Webhook PagBank 401 — auditoria Codex sem causa comprovada (2026-10-09)
+
+A auditoria do código e dos testes não comprovou a causa exata do `401 pagbank_signature_mismatch`. Nenhuma correção foi aplicada por hipótese.
+
+### Evidências confirmadas
+
+- O webhook real observado usa `x-authenticity-token`.
+- Não há evidência suficiente para migrar esse fluxo para `x-payload-signature`.
+- A implementação atual calcula SHA-256 sobre `token + "-" + payload`.
+- O corpo é lido com `req.text()`; não há reserialização JSON, embora eventual BOM fosse removido.
+- Não há evidência de BOM nem prova byte a byte da entrega real.
+- A validação usa exclusivamente `webhook_token_enc` da conexão vinculada.
+- Não está comprovado que esse valor corresponda ao segredo efetivamente usado pelo PagBank para assinar a entrega.
+- A confirmação por consulta autoritativa da Order continua funcionando e não foi alterada.
+
+### O que ficou descartado nesta etapa
+
+- não migrar automaticamente para `x-payload-signature`;
+- não desativar validação;
+- não aceitar fallback inseguro;
+- não trocar credenciais por tentativa;
+- não alterar idempotência nem finalização financeira.
+
+### Validação da auditoria
+
+- 365 testes existentes passaram;
+- 31 testes auxiliares passaram;
+- build passou;
+- TypeScript passou;
+- `git diff --check` passou.
+
+### Próximo teste mínimo
+
+Confirmar com o PagBank qual segredo/contexto assina uma entrega específica do webhook de Orders e, se possível, comparar os bytes originais usados na origem com os bytes recebidos no runtime, sem expor credenciais ou payloads sensíveis.
+
+Até existir essa evidência, manter o webhook rejeitando assinaturas inválidas e continuar usando a consulta autoritativa da Order como fallback seguro.
