@@ -587,3 +587,49 @@ A auditoria do código e dos testes não comprovou a causa exata do `401 pagbank
 Confirmar com o PagBank qual segredo/contexto assina uma entrega específica do webhook de Orders e, se possível, comparar os bytes originais usados na origem com os bytes recebidos no runtime, sem expor credenciais ou payloads sensíveis.
 
 Até existir essa evidência, manter o webhook rejeitando assinaturas inválidas e continuar usando a consulta autoritativa da Order como fallback seguro.
+
+
+---
+
+## 19. Pesquisa GitHub — assinatura webhook Connect e próximo diagnóstico (2026-10-09)
+
+Foi realizada pesquisa aprofundada em implementações públicas no GitHub para o header `x-authenticity-token`, incluindo projetos que integram PagBank Orders e um projeto com arquitetura OAuth/Connect multiempresa.
+
+### Consenso encontrado para Orders sem Connect
+
+Diversas implementações independentes reproduzem a mesma regra publicada pelo PagBank:
+
+`SHA-256(token_da_conta + "-" + payload_bruto)`
+
+O token citado nas cópias da documentação oficial é o **token da conta fornecido via iBanking**. O payload deve ser exatamente o corpo bruto recebido, sem reserialização. Implementações públicas também mostram que isso é SHA-256 simples, não HMAC.
+
+### Ponto ainda ambíguo sob Connect
+
+O repositório público `12-apps/shared-packages` documenta explicitamente a mesma lacuna encontrada no SmartBus: em uma conexão PagBank Connect, o provedor entrega `access_token/refresh_token`, mas a documentação de autenticidade fala no token direto da conta. Eles classificam como não comprovado qual segredo realmente assina a entrega Connect.
+
+Os candidatos considerados por esse projeto são:
+
+- token direto da conta vendedora;
+- access token Connect;
+- token direto da plataforma;
+- webhook token configurado;
+- client secret da aplicação Connect.
+
+O commit público `c5e0bc470104cc8931565da42c10321944a3ef8b` criou um diagnóstico específico para descobrir o assinante comparando, em memória, uma entrega real contra todos os candidatos, sem fazer nova chamada ao PagBank.
+
+### Situação do SmartBus
+
+O webhook atual preserva `rawBody` com `req.text()` e calcula a fórmula correta, mas para vendas vinculadas a uma conexão testa somente o valor armazenado em `connection.webhook_token_enc`. Os logs persistidos guardam presença do header e hash do corpo, não o corpo bruto nem a assinatura apresentada; portanto as entregas antigas não possuem dados suficientes para a comparação offline completa.
+
+### Próximo teste mínimo recomendado
+
+Em Sandbox e somente para diagnóstico, comparar **em memória** uma nova entrega real contra os candidatos que já existirem de forma segura no backend. Registrar apenas:
+
+- qual rótulo de candidato coincidiu; ou
+- `none` se nenhum coincidiu.
+
+Não persistir nem logar segredo, assinatura recebida, payload bruto ou hashes derivados de cada segredo.
+
+Esse diagnóstico não deve aceitar o webhook, não deve confirmar venda e não deve alterar a regra atual de segurança. O comportamento permanece fail-closed até existir uma correspondência comprovada.
+
+Se nenhum candidato coincidir, a próxima hipótese passa a ser diferença nos bytes efetivamente recebidos/runtime, e não deve ser corrigida por tentativa.
