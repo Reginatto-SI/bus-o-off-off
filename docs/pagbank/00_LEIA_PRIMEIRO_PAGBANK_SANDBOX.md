@@ -456,3 +456,26 @@ Uma venda pelo checkout público normal, sem alteração de código, conexão `c
 - `sales.status = pago`; 1 registro em `payment_attempts`; 2 passagens (ida assento 52 `SB-001701`, volta `SB-001702`); bloqueios liberados; sem duplicidade.
 
 **Comprovado:** o fluxo básico Sandbox de PIX + cartão de crédito à vista com Split foi comprovado. Nenhuma alteração de código foi necessária. Pendentes (fora deste marco): webhook autenticado e conciliação detalhada do Split.
+
+---
+
+## 15. Cartão de crédito Sandbox — recusa controlada (2026-10-09)
+
+Venda pelo checkout público normal, sem alteração de código, conexão `connect_sms` atual (seller `…D480`), cartão oficial de recusa PagBank (Visa final 0766, criptografado no navegador):
+
+- Venda: `bb2d3ab9-4977-410f-9902-e9281a01bcb9`.
+- Order: `ORDE_642A69DB-3413-499D-8731-357770DFB74A`.
+- Charge: `CHAR_98E2FF04-AF52-4B65-8280-8A96D0DF64A1`.
+- Split referenciado: `SPLI_89C48132-53BF-4381-B118-DE053EC3DF02`.
+- Status externo: `DECLINED`.
+- `payment_attempts`: 1 registro, `state = failed`, `error_code = pagbank_card_declined`, detalhe `charge_declined`.
+- `sales.status = pendente_pagamento` (não `pago`); 0 passagens; nenhuma segunda cobrança; nenhuma confirmação por consulta.
+- Interface: redireciona para a confirmação, que mostra "Aguardando confirmação do pagamento" / "Aguardando Pagamento", sem passagem. Não há mensagem explícita de recusa (o texto ainda cita "Asaas") — ponto de UX, não de integridade financeira.
+
+### Fase básica PagBank Sandbox concluída
+
+- PIX aprovado com Split;
+- cartão à vista aprovado com Split;
+- cartão recusado sem finalização indevida.
+
+Pendências fora deste marco: webhook autenticado, conciliação detalhada do Split e mensagem clara de recusa ao comprador.
