@@ -12,7 +12,8 @@ import {
   sha256Hex,
   verifyPagbankWebhookSignature,
 } from "../_shared/pagbank/core.ts";
-import { pagbankSecretNames, loadConnectionById, resolvePlatformAccessToken } from "../_shared/pagbank/credentials.ts";
+import { pagbankSecretNames, loadConnectionById, loadCurrentPlatformApplication, resolvePlatformAccessToken } from "../_shared/pagbank/credentials.ts";
+import { diagnosePagbankWebhookSignature } from "../_shared/pagbank/webhook-signature-diagnostic.ts";
 import { decryptSecret } from "../_shared/pagbank/crypto.ts";
 import { isPagbankError, syncPagbankSaleStatus } from "../_shared/pagbank/status-sync.ts";
 
@@ -94,11 +95,32 @@ Deno.serve(async (req) => {
   const externalAccountId = connection?.external_account_id ?? sale.external_account_id ?? "";
 
   if (!signature.valid) {
+    // Diagnóstico Sandbox (somente leitura, em memória): não altera a rejeição abaixo.
+    let signatureDiagnostic: any = null;
+    if (environment === "sandbox" && receivedSignature) {
+      try {
+        const app = await loadCurrentPlatformApplication(supabaseAdmin, "sandbox").catch(() => null);
+        signatureDiagnostic = await diagnosePagbankWebhookSignature({
+          rawBody,
+          receivedSignature,
+          candidates: [
+            { name: "connect_access_token", token: await decryptSecret(connection?.access_token_enc).catch(() => null) },
+            { name: "connection_webhook_token", token: await decryptSecret(connection?.webhook_token_enc).catch(() => null) },
+            { name: "platform_account_token", token: resolvePlatformAccessToken("sandbox") },
+            { name: "application_client_secret", token: (await decryptSecret(app?.client_secret_enc).catch(() => null)) ?? Deno.env.get(pagbankSecretNames("sandbox").clientSecret) ?? null },
+            { name: "environment_webhook_token", token: Deno.env.get(pagbankSecretNames("sandbox").webhookToken) ?? null },
+          ],
+        });
+      } catch {
+        signatureDiagnostic = { matched_candidate: "error", compared_candidates: [] };
+      }
+      logPaymentTrace("info", SOURCE, "signature_diagnostic", { sale_id: sale.id, order_id: art.orderId, ...signatureDiagnostic });
+    }
     await logSaleIntegrationEvent({
       supabaseAdmin, saleId: sale.id, companyId: sale.company_id, paymentEnvironment: environment, environmentDecisionSource: "sale",
       provider: "pagbank", direction: "incoming_webhook", eventType: "webhook_rejected", paymentId: art.orderId, externalReference: sale.id,
       httpStatus: 401, processingStatus: "unauthorized", resultCategory: "rejected", incidentCode: `pagbank_signature_${signature.reason}`,
-      message: "Webhook PagBank rejeitado: assinatura inválida ou token ausente.", payloadJson: { event_key: eventKey, status: art.rawStatus, headers: headerPresence, candidates: candidates.map((c) => c.source) },
+      message: "Webhook PagBank rejeitado: assinatura inválida ou token ausente.", payloadJson: { event_key: eventKey, status: art.rawStatus, headers: headerPresence, candidates: candidates.map((c) => c.source), signature_diagnostic: signatureDiagnostic },
     });
     return respond(401, { error: "invalid_signature" });
   }
