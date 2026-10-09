@@ -485,3 +485,33 @@ Pendências fora deste marco: webhook autenticado e conciliação detalhada do S
 Foi corrigida a inconsistência visual identificada no teste negativo: quando o checkout PagBank recebe `pagbank_card_declined`, a navegação sinaliza explicitamente a recusa e a tela de confirmação mostra “Pagamento não aprovado”, sem sugerir que a cobrança ainda está aguardando confirmação. A tela também deixa de exibir textos específicos do Asaas em vendas PagBank.
 
 A correção é exclusivamente de UX: não altera criação de Order/Charge, Split, confirmação financeira, status da venda, webhook, credenciais, banco ou emissão de passagens.
+
+
+---
+
+## 16. Portal do Desenvolvedor SmartBus — log 404 com token da plataforma (2026-10-09)
+
+Foi identificado no Portal do Desenvolvedor Sandbox da conta SmartBus um log de:
+
+- método: `GET`;
+- recurso: `/orders/ORDE_7591B58A-C658-45BC-9C9B-710FB3897ED5`;
+- resposta: `404 NOT_FOUND`;
+- autenticação feita com o token direto da conta/portal SmartBus.
+
+Esse mesmo Order já havia sido consultado com sucesso no fluxo marketplace usando a conexão `connect_sms` do vendedor e retornado `200 / PAID`.
+
+### O que ficou comprovado
+
+O token direto do Portal do Desenvolvedor SmartBus e o `access_token` delegado da conexão Connect do vendedor pertencem a contextos diferentes. Para consultar/criar Orders em nome do vendedor conectado, deve ser usado o token vinculado àquele vendedor via Connect.
+
+Portanto, um `404` no Portal do Desenvolvedor da SmartBus ao consultar uma Order criada em nome do vendedor **não indica falha da Order nem falha do checkout**. Ele indica que a requisição foi feita no contexto de credencial errado para aquele recurso.
+
+### Não repetir
+
+- não usar o token direto do Portal do Desenvolvedor SmartBus para validar Orders marketplace criadas em nome do vendedor;
+- não interpretar esses `404` como perda ou inexistência da Order sem antes consultar com a conexão `connect_sms` correta;
+- não trocar a conexão corrente do vendedor por causa desse log.
+
+### Próximo passo mínimo
+
+Com PIX, cartão aprovado e cartão recusado já comprovados, a próxima frente é a homologação segura do webhook PagBank. Antes de alterar a validação, comparar o comportamento real recebido no SmartBus com a documentação oficial vigente e determinar qual modelo de assinatura se aplica ao webhook de Orders nesta integração.
