@@ -633,3 +633,13 @@ Não persistir nem logar segredo, assinatura recebida, payload bruto ou hashes d
 Esse diagnóstico não deve aceitar o webhook, não deve confirmar venda e não deve alterar a regra atual de segurança. O comportamento permanece fail-closed até existir uma correspondência comprovada.
 
 Se nenhum candidato coincidir, a próxima hipótese passa a ser diferença nos bytes efetivamente recebidos/runtime, e não deve ser corrigida por tentativa.
+
+---
+
+## 16. Diagnóstico da credencial que assina o webhook Connect (2026-10-09)
+
+- Implantado em `pagbank-webhook` (somente Sandbox, somente quando a assinatura já foi rejeitada).
+- Compara em memória o `x-authenticity-token` com: `connect_access_token`, `connection_webhook_token`, `platform_account_token`, `application_client_secret`, `environment_webhook_token` — apenas da venda/conexão/ambiente da notificação.
+- Registra só `matched_candidate` e a lista de nomes comparados (`sale_integration_logs.response/payload` → `signature_diagnostic`). Nenhum token, hash, assinatura ou payload é gravado.
+- Nenhuma regra de segurança foi flexibilizada: o webhook continua respondendo 401 e não finaliza venda.
+- **Status: PRONTO PARA TESTE REAL.** O resultado depende de uma nova notificação real; o problema NÃO está resolvido.
