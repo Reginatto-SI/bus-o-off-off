@@ -1908,7 +1908,11 @@ export default function Checkout() {
           });
           setSubmitting(false);
           setPaymentCheckoutStatus("idle");
-          navigate(`/confirmacao/${sale.id}?retorno=pagbank`);
+          const confirmationQuery =
+            isCardPayment && pagbankErrorCode === "pagbank_card_declined"
+              ? "retorno=pagbank&payment=declined"
+              : "retorno=pagbank";
+          navigate(`/confirmacao/${sale.id}?${confirmationQuery}`);
           return;
         }
         console.error("[checkout] create_pagbank_payment_failed", {
