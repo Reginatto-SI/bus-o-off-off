@@ -643,3 +643,62 @@ Se nenhum candidato coincidir, a próxima hipótese passa a ser diferença nos b
 - Registra só `matched_candidate` e a lista de nomes comparados (`sale_integration_logs.response/payload` → `signature_diagnostic`). Nenhum token, hash, assinatura ou payload é gravado.
 - Nenhuma regra de segurança foi flexibilizada: o webhook continua respondendo 401 e não finaliza venda.
 - **Status: PRONTO PARA TESTE REAL.** O resultado depende de uma nova notificação real; o problema NÃO está resolvido.
+
+
+---
+
+## 20. Diagnóstico real de assinatura Connect — nenhum candidato conhecido coincidiu (2026-10-09)
+
+Foi executado um novo teste PIX Sandbox após a publicação do diagnóstico seguro de assinatura.
+
+- Venda: `b6aeeae2-2147-4271-9281-eb1f37d75376`
+- Order: `ORDE_BA5A0B6F-A27C-4AA1-B633-8BF5195DBBA2`
+- Charge: `CHAR_79B79E2D-82E9-43E3-81FB-561FA39FF1E7`
+- Split: `SPLI_13B8D8DF-D676-4B01-8A72-0CA12AE762F4`
+- valor: R$ 106,00
+- conexão: `824df77f-9d91-4c8a-9b18-ea51ba052407`
+- seller: `…D480`
+
+### Resultado do webhook WAITING
+
+O PagBank enviou webhook com `x-authenticity-token` presente e sem `x-payload-signature`.
+
+O diagnóstico comparou, somente em memória:
+
+- `connect_access_token`
+- `connection_webhook_token`
+- `platform_account_token`
+- `application_client_secret`
+
+Resultado:
+
+`matched_candidate = none`
+
+O webhook permaneceu rejeitado com `401 pagbank_signature_mismatch`.
+
+### Resultado do webhook PAID
+
+Após aproximadamente 5 minutos, o PagBank enviou nova notificação `PAID`.
+
+O mesmo conjunto de candidatos foi comparado.
+
+Resultado novamente:
+
+`matched_candidate = none`
+
+O webhook continuou rejeitado com `401 pagbank_signature_mismatch`.
+
+### Confirmação financeira
+
+A Order foi consultada autoritativamente logo depois e retornou `PAID`. A venda foi atualizada para `pago` e a passagem foi emitida normalmente pelo fluxo de fallback seguro.
+
+### Conclusão
+
+Ficou comprovado que, nesta conexão Connect Sandbox, a assinatura real **não corresponde** a nenhum dos quatro candidatos comparados acima.
+
+Isso reduz o problema a duas frentes principais ainda não comprovadas:
+
+1. o PagBank pode estar assinando com o **token direto da conta vendedora** (token da conta/iBanking), que é diferente do `access_token` Connect e não foi usado neste diagnóstico;
+2. pode existir divergência nos bytes exatos do payload usados na origem e recebidos pelo runtime.
+
+Não alterar a segurança do webhook. Não aceitar múltiplos candidatos em produção. O próximo teste deve ser mínimo e servir apenas para distinguir essas duas hipóteses.
