@@ -49,6 +49,7 @@ export default function Confirmation() {
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const paymentSuccess = searchParams.get('payment') === 'success';
+  const paymentDeclined = searchParams.get('payment') === 'declined';
   const isAsaasReturn = searchParams.get('retorno') === 'asaas';
   const isPagbankReturn = searchParams.get('retorno') === 'pagbank';
   const [sale, setSale] = useState<Sale | null>(null);
@@ -579,6 +580,11 @@ export default function Confirmation() {
   const isPagbankSale = (sale as { payment_gateway?: string | null }).payment_gateway === 'pagbank';
   // Cartão PagBank nunca exibe painel PIX (evita qualquer tentativa de outra cobrança).
   const isPagbankPixSale = isPagbankSale && (sale as { payment_method?: string | null }).payment_method !== 'credit_card';
+  const isPagbankCardDeclined =
+    isPagbankSale &&
+    (sale as { payment_method?: string | null }).payment_method === 'credit_card' &&
+    paymentDeclined &&
+    !isPaid;
   const isInstalledAppContext = isInstalledAppPaymentContext();
   // Exibimos a ação somente quando existe cobrança Asaas vinculada e venda ainda aguardando pagamento.
   const canReopenAsaasInvoice = isAwaitingPayment && !isPagbankSale && Boolean(sale.asaas_payment_id);
@@ -708,6 +714,24 @@ export default function Confirmation() {
                 </>
               )}
             </>
+          ) : isPagbankCardDeclined ? (
+            <>
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-4">
+                <AlertCircle className="h-8 w-8 text-red-600" />
+              </div>
+              <h1 className="text-2xl font-bold text-foreground mb-2">Pagamento não aprovado</h1>
+              <p className="text-muted-foreground">
+                O pagamento não foi aprovado. Nenhum pagamento foi concluído. Verifique os dados do cartão ou tente outra forma de pagamento.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-4"
+                onClick={() => window.history.back()}
+              >
+                Tentar novamente
+              </Button>
+            </>
           ) : isAwaitingPayment && !pollingTimedOut && isPagbankPixSale ? (
             <>
               <h1 className="text-2xl font-bold text-foreground mb-2">Falta só o pagamento</h1>
@@ -726,13 +750,15 @@ export default function Confirmation() {
               <p className="text-muted-foreground">
                 Assim que o pagamento for confirmado, sua passagem digital aparecerá automaticamente aqui.
               </p>
-              <p className="text-xs text-muted-foreground mt-2">
-                Após concluir o pagamento no Asaas, volte para esta tela para acompanhar a confirmação.
-              </p>
+              {!isPagbankSale && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Após concluir o pagamento no Asaas, volte para esta tela para acompanhar a confirmação.
+                </p>
+              )}
               <p className="text-xs text-muted-foreground mt-1">
                 Você também pode fechar esta página — sua passagem será gerada mesmo assim quando o pagamento for confirmado.
               </p>
-              {isInstalledAppContext && (
+              {isInstalledAppContext && !isPagbankSale && (
                 <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-left text-sm text-blue-900">
                   <p className="font-medium">Pagamento aberto no Asaas</p>
                   <p className="mt-1">

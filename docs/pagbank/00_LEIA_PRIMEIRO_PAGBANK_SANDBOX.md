@@ -478,4 +478,10 @@ Venda pelo checkout público normal, sem alteração de código, conexão `conne
 - cartão à vista aprovado com Split;
 - cartão recusado sem finalização indevida.
 
-Pendências fora deste marco: webhook autenticado, conciliação detalhada do Split e mensagem clara de recusa ao comprador.
+Pendências fora deste marco: webhook autenticado e conciliação detalhada do Split.
+
+### Correção de UX após o teste de recusa
+
+Foi corrigida a inconsistência visual identificada no teste negativo: quando o checkout PagBank recebe `pagbank_card_declined`, a navegação sinaliza explicitamente a recusa e a tela de confirmação mostra “Pagamento não aprovado”, sem sugerir que a cobrança ainda está aguardando confirmação. A tela também deixa de exibir textos específicos do Asaas em vendas PagBank.
+
+A correção é exclusivamente de UX: não altera criação de Order/Charge, Split, confirmação financeira, status da venda, webhook, credenciais, banco ou emissão de passagens.
