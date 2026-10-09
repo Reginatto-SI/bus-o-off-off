@@ -440,3 +440,19 @@ Esta auditoria verificou o **estado persistido no banco**, não executou nova co
 ### Não repetir / próximo passo mínimo
 
 Não voltar a OAuth, troca de credenciais, GET Split, GET Charge ou investigação de assinatura de webhook para provar o PIX básico. Preservar o caso PIX como marco funcional real. Próximo passo: validar cartão de crédito Sandbox com Split no mesmo fluxo mínimo, sem ampliar escopo; em revisão separada, confirmar a origem da atualização `PAID` e a idempotência da finalização.
+
+---
+
+## 14. Cartão de crédito Sandbox — teste real com Split (2026-10-08)
+
+Uma venda pelo checkout público normal, sem alteração de código, conexão `connect_sms` atual (seller `…D480`), cartão oficial de teste PagBank (Visa final 2097, criptografado no navegador):
+
+- Venda: `e0790200-13d5-4fd8-b770-d981320be1e6`.
+- Order: `ORDE_B20DF8BA-1BDC-4559-8468-0C0073116552`.
+- Charge: `CHAR_852B560D-9B4C-4078-9321-6E7430B80E4F`.
+- Split: `SPLI_7226C60B-4BAD-419D-8412-00D43013863E` (único).
+- `split_status = accepted_unverified` — não comprova conciliação dos recebedores.
+- Status externo `PAID`; confirmação por consulta autoritativa (`pagbank_card_confirm_on_create`), já que o webhook continua rejeitado 401 (problema conhecido).
+- `sales.status = pago`; 1 registro em `payment_attempts`; 2 passagens (ida assento 52 `SB-001701`, volta `SB-001702`); bloqueios liberados; sem duplicidade.
+
+**Comprovado:** o fluxo básico Sandbox de PIX + cartão de crédito à vista com Split foi comprovado. Nenhuma alteração de código foi necessária. Pendentes (fora deste marco): webhook autenticado e conciliação detalhada do Split.
