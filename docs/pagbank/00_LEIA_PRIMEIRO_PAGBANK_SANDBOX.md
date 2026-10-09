@@ -515,3 +515,35 @@ Portanto, um `404` no Portal do Desenvolvedor da SmartBus ao consultar uma Order
 ### Próximo passo mínimo
 
 Com PIX, cartão aprovado e cartão recusado já comprovados, a próxima frente é a homologação segura do webhook PagBank. Antes de alterar a validação, comparar o comportamento real recebido no SmartBus com a documentação oficial vigente e determinar qual modelo de assinatura se aplica ao webhook de Orders nesta integração.
+
+
+---
+
+## 17. Portal do Desenvolvedor do vendedor — contraste entre token direto e Connect (2026-10-09)
+
+Foram localizados logs no Portal do Desenvolvedor Sandbox da própria conta vendedora.
+
+### Evidência 1 — GET de Orders marketplace retorna 404 com token direto do vendedor
+
+O token direto do Portal do Desenvolvedor do vendedor tentou consultar Orders já conhecidas do fluxo marketplace/Connect e recebeu `404 NOT_FOUND`.
+
+Isso reforça que o token direto do seller não possui o mesmo contexto de acesso do `access_token` delegado obtido pela conexão `connect_sms`.
+
+### Evidência 2 — POST /orders direto com o mesmo token retorna 201
+
+Com o token direto do Portal do vendedor, um `POST /orders` PIX simples criou com sucesso uma nova Order própria da conta, retornando `201`, Charge `WAITING` e QR Code. O payload não continha Split e a resposta trouxe `notification_urls: []`.
+
+### Conclusão operacional
+
+Existem dois contextos diferentes de credencial mesmo quando ambos se relacionam ao mesmo vendedor:
+
+- **token direto do Portal do vendedor**: cria/consulta Orders diretas da própria conta;
+- **token delegado Connect (`connect_sms`)**: cria/consulta Orders do fluxo marketplace em nome daquele vendedor.
+
+Não usar o token direto do vendedor para validar Orders marketplace/Connect e não interpretar o `404` como inexistência da Order.
+
+### Relação com o webhook 401
+
+Essa nova evidência não resolve sozinha a assinatura do webhook, mas reduz a hipótese de que o token direto do seller seja o segredo correto para validar notificações do fluxo marketplace. A investigação do webhook deve manter separados: token direto do seller, access token Connect e segredo/token específico de webhook/documentação do provedor.
+
+Não alterar credenciais nem conexão corrente com base nesses logs.
