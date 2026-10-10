@@ -8,6 +8,7 @@ import { logSaleIntegrationEvent } from "../payment-observability.ts";
 import { getPagbankOrder } from "./client.ts";
 import { PagbankError, extractPagbankPixArtifacts, normalizePagbankStatus } from "./core.ts";
 import { resolvePagbankCredentialForSale } from "./credentials.ts";
+import { validatePagbankOrderIntegrity } from "./order-integrity.ts";
 
 export type PagbankSaleForSync = {
   id: string;
@@ -92,7 +93,26 @@ export async function syncPagbankSaleStatus(supabaseAdmin: any, params: {
     return { state: "pending", paymentStatus: sale.status, normalized, rawStatus: art.rawStatus, attempt: updatedAttempt ?? attempt };
   }
 
-  // Somente PAID (capturado) finaliza. Finalização idempotente comum.
+  // PAID só finaliza se a Order identificar exatamente a cobrança desta venda.
+  const integrity = validatePagbankOrderIntegrity(res.data, {
+    saleId: sale.id,
+    saleEnvironment: sale.payment_environment,
+    saleConnectionId: sale.payment_connection_id,
+    credentialEnvironment: credential.environment,
+    attempt,
+  });
+  if (!integrity.ok) {
+    await logSaleIntegrationEvent({
+      supabaseAdmin, saleId: sale.id, companyId: sale.company_id, paymentEnvironment: credential.environment,
+      environmentDecisionSource: "sale", provider: "pagbank", direction: source === "pagbank-webhook" ? "incoming_webhook" : "manual_sync",
+      eventType: "order_integrity_rejected", paymentId: attempt.external_order_id, externalReference: sale.id,
+      httpStatus: 409, processingStatus: "rejected", resultCategory: "rejected", incidentCode: `pagbank_${integrity.reason}`,
+      message: "Order PAID não corresponde à venda; finalização bloqueada.",
+    });
+    return { state: "query_failed", paymentStatus: sale.status, code: `pagbank_${integrity.reason}`, attempt: updatedAttempt ?? attempt };
+  }
+
+  // Somente PAID (capturado) e íntegro finaliza. Finalização idempotente comum.
   const paidAt = (res.data?.charges?.[0]?.paid_at as string | undefined) ?? new Date().toISOString();
   const finalization = await finalizeConfirmedPayment({
     supabaseAdmin,
