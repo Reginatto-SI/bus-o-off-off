@@ -34,3 +34,18 @@ describe("diagnóstico de assinatura do webhook PagBank", () => {
     expect(r.valid).toBe(false);
   });
 });
+
+describe("seller_account_token candidate", () => {
+  it("identifica o token direto da conta sem expor valor", async () => {
+    const { diagnosePagbankWebhookSignature } = await import("../../supabase/functions/_shared/pagbank/webhook-signature-diagnostic.ts");
+    const body = '{"id":"ORDE_X"}';
+    const token = "seller-direct-token";
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${token}-${body}`));
+    const sig = Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+    const r = await diagnosePagbankWebhookSignature({ rawBody: body, receivedSignature: sig, candidates: [
+      { name: "connect_access_token", token: "other" }, { name: "seller_account_token", token },
+    ] });
+    expect(r.matched_candidate).toBe("seller_account_token");
+    expect(JSON.stringify(r)).not.toContain(token);
+  });
+});

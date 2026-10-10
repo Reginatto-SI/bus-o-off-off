@@ -9,7 +9,8 @@ export type SignatureDiagnosticCandidateName =
   | "connection_webhook_token"
   | "platform_account_token"
   | "application_client_secret"
-  | "environment_webhook_token";
+  | "environment_webhook_token"
+  | "seller_account_token";
 
 export type SignatureDiagnosticCandidate = {
   name: SignatureDiagnosticCandidateName;
