@@ -3,7 +3,7 @@ import { validatePagbankOrderIntegrity } from '../../supabase/functions/_shared/
 
 const syncMock = vi.fn();
 vi.mock('../../supabase/functions/_shared/pagbank/status-sync.ts', () => ({
-  syncPagbankSaleStatus: (...a: unknown[]) => syncMock(...a),
+  syncPagbankSaleStatus: async (...a: unknown[]) => { const r = syncMock(...a); if (r?.throws) throw r.throws; return r; },
 }));
 import { evaluatePagbankSale, pagbankSalesToPreserve, recoverPendingPagbankSales } from '../../supabase/functions/cleanup-expired-locks/pagbank-guard.ts';
 
@@ -40,30 +40,30 @@ describe('cleanup e recuperação PagBank', () => {
   beforeEach(() => syncMock.mockReset());
 
   it('PIX pago com navegador fechado: recuperação finaliza', async () => {
-    syncMock.mockResolvedValue({ state: 'paid', finalizationOk: true });
+    syncMock.mockReturnValue({ state: 'paid', finalizationOk: true });
     const n = await recoverPendingPagbankSales(fakeDb({ payment_attempts: [{ sale_id: 'sale-1' }], sales: [sale] }), () => {});
     expect(n).toBe(1);
   });
   it('Order WAITING é preservada', async () => {
-    syncMock.mockResolvedValue({ state: 'pending', normalized: 'pending' });
+    syncMock.mockReturnValue({ state: 'pending', normalized: 'pending' });
     expect((await evaluatePagbankSale({}, sale)).decision).toBe('preserve');
   });
   it('consulta indisponível preserva a venda', async () => {
-    syncMock.mockResolvedValue({ state: 'query_failed', code: 'pagbank_transient_error' });
+    syncMock.mockReturnValue({ state: 'query_failed', code: 'pagbank_transient_error' });
     expect((await evaluatePagbankSale({}, sale)).decision).toBe('preserve');
-    syncMock.mockImplementation(() => Promise.reject({ code: 'timeout' }));
+    syncMock.mockReturnValue({ throws: { code: 'timeout' } });
     expect((await evaluatePagbankSale({}, sale)).decision).toBe('preserve');
   });
   it('PAID com finalização incompleta não libera cancelamento', async () => {
-    syncMock.mockResolvedValue({ state: 'paid', finalizationOk: false });
+    syncMock.mockReturnValue({ state: 'paid', finalizationOk: false });
     expect((await evaluatePagbankSale({}, sale)).decision).toBe('preserve');
   });
   it('recusa/cancelamento oficial libera o cancelamento normal', async () => {
-    syncMock.mockResolvedValue({ state: 'pending', normalized: 'failed' });
+    syncMock.mockReturnValue({ state: 'pending', normalized: 'failed' });
     expect((await evaluatePagbankSale({}, sale)).decision).toBe('allow_cancel');
   });
   it('cleanup com venda pendente: PagBank preservado, não PagBank inalterado', async () => {
-    syncMock.mockResolvedValue({ state: 'pending', normalized: 'pending' });
+    syncMock.mockReturnValue({ state: 'pending', normalized: 'pending' });
     const keep = await pagbankSalesToPreserve(fakeDb({ sales: [sale] }), ['sale-1', 'asaas-1'], () => {});
     expect([...keep]).toEqual(['sale-1']);
   });
@@ -72,7 +72,7 @@ describe('cleanup e recuperação PagBank', () => {
     expect(keep.size).toBe(2);
   });
   it('recuperação apenas consulta: nunca usa criação de cobrança', async () => {
-    syncMock.mockResolvedValue({ state: 'pending', normalized: 'pending' });
+    syncMock.mockReturnValue({ state: 'pending', normalized: 'pending' });
     await recoverPendingPagbankSales(fakeDb({ payment_attempts: [{ sale_id: 'sale-1' }], sales: [sale] }), () => {});
     expect(syncMock).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ eventType: 'pagbank_background_recovery' }));
   });
