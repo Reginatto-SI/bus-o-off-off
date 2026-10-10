@@ -109,6 +109,7 @@ Deno.serve(async (req) => {
             { name: "platform_account_token", token: resolvePlatformAccessToken("sandbox") },
             { name: "application_client_secret", token: (await decryptSecret(app?.client_secret_enc).catch(() => null)) ?? Deno.env.get(pagbankSecretNames("sandbox").clientSecret) ?? null },
             { name: "environment_webhook_token", token: Deno.env.get(pagbankSecretNames("sandbox").webhookToken) ?? null },
+            { name: "seller_account_token", token: Deno.env.get("PAGBANK_SELLER_ACCOUNT_TOKEN_SANDBOX_DIAGNOSTIC") ?? null },
           ],
         });
       } catch {
