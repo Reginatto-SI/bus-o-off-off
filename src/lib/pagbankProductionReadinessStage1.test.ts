@@ -51,7 +51,7 @@ describe('cleanup e recuperação PagBank', () => {
   it('consulta indisponível preserva a venda', async () => {
     syncMock.mockResolvedValue({ state: 'query_failed', code: 'pagbank_transient_error' });
     expect((await evaluatePagbankSale({}, sale)).decision).toBe('preserve');
-    syncMock.mockImplementation(async () => { throw Object.assign(new Error('x'), { code: 'timeout' }); });
+    syncMock.mockImplementation(() => Promise.reject({ code: 'timeout' }));
     expect((await evaluatePagbankSale({}, sale)).decision).toBe('preserve');
   });
   it('PAID com finalização incompleta não libera cancelamento', async () => {
