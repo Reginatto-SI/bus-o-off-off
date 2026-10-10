@@ -8,6 +8,13 @@
       "when": 1791203005978,
       "tag": "0000_pagbank_credit_card_attempts",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791634760310,
+      "tag": "0001_pagbank_atomic_ticket_issuance",
+      "breakpoints": true
     }
   ]
 }

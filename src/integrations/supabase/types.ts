@@ -4302,6 +4302,10 @@ export type Database = {
         Args: { event_row: Database["public"]["Tables"]["events"]["Row"] }
         Returns: boolean
       }
+      issue_sale_tickets_from_staging: {
+        Args: { p_company_id: string; p_sale_id: string }
+        Returns: string
+      }
       mark_asaas_webhook_event_duplicate: {
         Args: {
           p_asaas_event_id: string
