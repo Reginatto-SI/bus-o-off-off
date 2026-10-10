@@ -759,3 +759,16 @@ O token direto da conta vendedora também está descartado como assinante real d
 Com os principais candidatos de credencial testados e todos retornando `none`, a hipótese prioritária passa a ser diferença entre os bytes usados pelo PagBank para gerar a assinatura e os bytes efetivamente entregues ao runtime antes de `req.text()`, ou algum detalhe de transporte/codificação ainda não observado.
 
 Não alterar a segurança do webhook. O próximo diagnóstico deve focar somente na preservação e comparação segura dos bytes recebidos, sem persistir payload bruto ou segredo.
+
+---
+
+## 17. Preparação para Produção — Etapa 1 (2026-10-10)
+
+Implementado (sem tocar webhook, assinatura, OAuth, Connect, Split, credenciais ou liberação de Produção):
+
+- **Emissão única:** função de banco `issue_sale_tickets_from_staging` com trava por venda + índice único `tickets (sale_id, trip_id, passenger_cpf, seat_label)` (vale para itens sem poltrona física e ida/volta). Usada pela finalização comum.
+- **Validação antes de finalizar:** `PAID` só finaliza se Order, `reference_id`, valor (centavos), moeda BRL, ambiente e conexão coincidirem com a venda (`_shared/pagbank/order-integrity.ts`). Divergência é registrada e bloqueia.
+- **Recuperação automática:** o cleanup (cron de 1 min) consulta até 20 vendas PagBank `pendente_pagamento` com Order criada nas últimas 24 h, usando a credencial/ambiente da venda. Só consulta; nunca cria cobrança.
+- **Cleanup protegido:** antes de cancelar venda PagBank com Order, consulta oficial. `PAID` → finaliza; `WAITING`/indisponível/indeterminado → preserva venda e passageiros; `DECLINED`/`CANCELED` → cancelamento normal. Vendas Asaas inalteradas.
+
+Pendente para Produção: webhook autenticado (a função `pagbank-webhook` recebe a mesma finalização no próximo deploy dela), conciliação detalhada do Split, decisão sobre vendas PagBank `WAITING` além de 24 h (hoje ficam preservadas, sem cancelamento automático), homologação e liberação.

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { pagbankSalesToPreserve, recoverPendingPagbankSales } from "./pagbank-guard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -96,6 +97,14 @@ serve(async (req) => {
     );
 
     const nowIso = new Date().toISOString();
+
+    // 0) Recuperação PagBank em segundo plano: não depende do navegador do comprador.
+    // Falha aqui nunca interrompe o cleanup.
+    try {
+      await recoverPendingPagbankSales(supabaseAdmin, (d) => logCleanup("info", { execution_id: executionId, flow: "checkout_publico", ...d }));
+    } catch (e) {
+      logCleanup("warn", { execution_id: executionId, stage: "pagbank_recovery", action: "falhou", reason: (e as Error)?.message ?? "unknown" });
+    }
 
     logCleanup("info", {
       execution_id: executionId,
@@ -228,6 +237,13 @@ serve(async (req) => {
             : `expired_seat_lock_without_active_lock;status=${sale.status}`,
         });
       });
+
+      // 3.0) PagBank com cobrança existente: consulta oficial antes de cancelar (fail-closed).
+      if (cancellableSaleIds.length > 0) {
+        const preserved = await pagbankSalesToPreserve(supabaseAdmin, cancellableSaleIds, (d) =>
+          logCleanup("info", { execution_id: executionId, flow: "checkout_publico", ...d }));
+        cancellableSaleIds = cancellableSaleIds.filter((id) => !preserved.has(id));
+      }
 
       // 3) Cancela somente vendas ainda pendentes E sem lock ativo remanescente.
       // Essa condição evita cancelamento precoce em cenários de lock parcial.
@@ -451,8 +467,12 @@ serve(async (req) => {
         return isCancellable;
       });
 
-      if (orphanCancellableSales.length > 0) {
-        const orphanCancellableIds = orphanCancellableSales.map((sale) => sale.id);
+      const orphanPreserved = orphanCancellableSales.length > 0
+        ? await pagbankSalesToPreserve(supabaseAdmin, orphanCancellableSales.map((s) => s.id), (d) =>
+          logCleanup("info", { execution_id: executionId, flow: "checkout_publico", ...d }))
+        : new Set<string>();
+      if (orphanCancellableSales.some((s) => !orphanPreserved.has(s.id))) {
+        const orphanCancellableIds = orphanCancellableSales.map((sale) => sale.id).filter((id) => !orphanPreserved.has(id));
         const { data: cancelledOrphanSales, error: cancelOrphanError } = await supabaseAdmin
           .from("sales")
           .update({

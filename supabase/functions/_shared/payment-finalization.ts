@@ -190,9 +190,16 @@ export async function createTicketsFromPassengersShared(
     };
   });
 
-  const { error: ticketError } = await supabaseAdmin
-    .from("tickets")
-    .insert(ticketInserts);
+  void ticketInserts; // mapeamento mantido para a trilha de snapshot de benefício acima.
+
+  /**
+   * Emissão única e atômica: a cópia staging → tickets acontece no banco sob trava
+   * transacional por venda, com índice único por venda/trecho/passageiro/lugar.
+   * Confirmações concorrentes (página, recuperação, webhook, retry) não duplicam passagens.
+   * O staging só é limpo na mesma transação, após a inserção bem-sucedida.
+   */
+  const { data: issueResult, error: ticketError } = await supabaseAdmin
+    .rpc("issue_sale_tickets_from_staging", { p_sale_id: saleId, p_company_id: companyId });
 
   if (ticketError) {
     logPaymentTrace("error", "payment-finalization", "ticket_insert_with_benefit_snapshot_failed", {
@@ -206,12 +213,12 @@ export async function createTicketsFromPassengersShared(
     };
   }
 
-  /**
-   * Segurança operacional:
-   * limpeza do staging só ocorre após inserção bem-sucedida em tickets.
-   * Assim evitamos perder snapshot de benefício em caso de falha na cópia.
-   */
-  await supabaseAdmin.from("sale_passengers").delete().eq("sale_id", saleId);
+  if (issueResult === "skipped_existing") {
+    return { status: "skipped_existing", message: `Idempotência aplicada: venda ${saleId} já tinha tickets` };
+  }
+  if (issueResult === "skipped_no_passengers") {
+    return { status: "skipped_no_passengers", message: `Sem sale_passengers para a venda ${saleId}` };
+  }
 
   return {
     status: "created",
