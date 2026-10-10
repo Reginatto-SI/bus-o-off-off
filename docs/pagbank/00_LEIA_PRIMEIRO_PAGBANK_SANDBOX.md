@@ -702,3 +702,60 @@ Isso reduz o problema a duas frentes principais ainda não comprovadas:
 2. pode existir divergência nos bytes exatos do payload usados na origem e recebidos pelo runtime.
 
 Não alterar a segurança do webhook. Não aceitar múltiplos candidatos em produção. O próximo teste deve ser mínimo e servir apenas para distinguir essas duas hipóteses.
+
+
+---
+
+## 21. Token direto do vendedor também descartado como assinante (2026-10-10)
+
+Novo teste PIX Sandbox executado após incluir o token direto da conta vendedora como candidato apenas de diagnóstico.
+
+- Venda: `3e18a3f3-ec64-4e20-ab0d-be6bc66da8af`
+- Order: `ORDE_8D506A8A-85A7-426B-831D-0926D43838FA`
+- Charge: `CHAR_EC31493A-8933-4785-9766-FC103DFFCF6E`
+- Split: `SPLI_34393061-A00A-4B53-ADCB-8FF9EBFCD79A`
+- valor: R$ 106,00
+- conexão: `824df77f-9d91-4c8a-9b18-ea51ba052407`
+- seller: `…D480`
+
+### Resultado WAITING
+
+O webhook chegou com `x-authenticity-token` e sem `x-payload-signature`.
+
+Candidatos comparados somente em memória:
+
+- `connect_access_token`
+- `connection_webhook_token`
+- `platform_account_token`
+- `application_client_secret`
+- `seller_account_token`
+
+Resultado:
+
+`matched_candidate = none`
+
+O webhook permaneceu rejeitado com `401 pagbank_signature_mismatch`.
+
+### Resultado PAID
+
+Após aproximadamente 5 minutos, o PagBank enviou nova notificação `PAID`.
+
+Os mesmos cinco candidatos foram comparados.
+
+Resultado novamente:
+
+`matched_candidate = none`
+
+O webhook continuou rejeitado com `401 pagbank_signature_mismatch`.
+
+### Confirmação financeira
+
+Logo depois, a consulta autoritativa da Order retornou `PAID`. A venda foi atualizada para `pago` e a passagem foi emitida normalmente pelo fallback seguro.
+
+### Conclusão
+
+O token direto da conta vendedora também está descartado como assinante real dessas notificações Connect Sandbox.
+
+Com os principais candidatos de credencial testados e todos retornando `none`, a hipótese prioritária passa a ser diferença entre os bytes usados pelo PagBank para gerar a assinatura e os bytes efetivamente entregues ao runtime antes de `req.text()`, ou algum detalhe de transporte/codificação ainda não observado.
+
+Não alterar a segurança do webhook. O próximo diagnóstico deve focar somente na preservação e comparação segura dos bytes recebidos, sem persistir payload bruto ou segredo.
