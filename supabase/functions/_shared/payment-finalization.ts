@@ -1,4 +1,3 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // deno-lint-ignore no-explicit-any
 type SupabaseAdmin = any;
 import {
@@ -44,6 +43,7 @@ export type SaleConsistencyInspection = {
     payment_confirmed_at: string | null;
     platform_fee_paid_at: string | null;
     payment_environment: string | null;
+    payment_gateway?: string | null;
   } | null;
   ticketsCount: number;
   reason: string;
@@ -56,7 +56,7 @@ export async function inspectSaleConsistency(
   const { data: sale, error: saleError } = await supabaseAdmin
     .from("sales")
     .select(
-      "id, company_id, status, asaas_payment_status, asaas_payment_id, payment_confirmed_at, platform_fee_paid_at, payment_environment",
+      "id, company_id, status, asaas_payment_status, asaas_payment_id, payment_confirmed_at, platform_fee_paid_at, payment_environment, expected_ticket_count, payment_gateway",
     )
     .eq("id", saleId)
     .maybeSingle();
@@ -70,21 +70,28 @@ export async function inspectSaleConsistency(
     };
   }
 
-  const { count: ticketsCount } = await supabaseAdmin
+  const { count: ticketsCount, error: countError } = await supabaseAdmin
     .from("tickets")
     .select("id", { count: "exact", head: true })
     .eq("sale_id", saleId);
 
   const safeTicketsCount = ticketsCount ?? 0;
 
+  const { count: stagedCount, error: stagedError } = await supabaseAdmin
+    .from("sale_passengers").select("id", { count: "exact", head: true }).eq("sale_id", saleId);
+
+  // Staging remanescente nunca significa emissão concluída, mesmo com tickets.
+  const incomplete = countError || stagedError || (stagedCount ?? 0) > 0 ||
+    (sale.expected_ticket_count != null && safeTicketsCount !== sale.expected_ticket_count);
+
   // Etapa 3: critério objetivo e auditável de inconsistência.
   // "pago" sem tickets é estado inconsistente que exige reconciliação.
-  if (sale.status === "pago" && safeTicketsCount <= 0) {
+  if (sale.status === "pago" && (safeTicketsCount <= 0 || incomplete)) {
     return {
       state: "inconsistent_paid_without_ticket",
       sale,
       ticketsCount: safeTicketsCount,
-      reason: `Venda ${saleId} está paga e sem tickets`,
+      reason: `Venda ${saleId} está paga com emissão incompleta`,
     };
   }
 
@@ -110,22 +117,11 @@ export async function createTicketsFromPassengersShared(
   saleId: string,
   companyId: string,
 ): Promise<{ status: TicketCreationStatus; message: string }> {
-  const { count: existingTickets } = await supabaseAdmin
-    .from("tickets")
-    .select("id", { count: "exact", head: true })
-    .eq("sale_id", saleId);
-
-  if ((existingTickets ?? 0) > 0) {
-    return {
-      status: "skipped_existing",
-      message: `Idempotência aplicada: venda ${saleId} já tinha tickets`,
-    };
-  }
-
   const { data: passengers, error: passError } = await supabaseAdmin
     .from("sale_passengers")
     .select("*")
     .eq("sale_id", saleId)
+    .eq("company_id", companyId)
     .order("sort_order");
 
   if (passError) {
@@ -135,14 +131,7 @@ export async function createTicketsFromPassengersShared(
     };
   }
 
-  if (!passengers || passengers.length === 0) {
-    return {
-      status: "skipped_no_passengers",
-      message: `Sem sale_passengers para a venda ${saleId} (fluxo legado/admin)`,
-    };
-  }
-
-  const ticketInserts = passengers.map((p: Record<string, unknown>, index: number) => {
+  const ticketInserts = (passengers ?? []).map((p: Record<string, unknown>, index: number) => {
     const benefitApplied = Boolean(p.benefit_applied);
     const benefitProgramName = (p.benefit_program_name as string | null) ?? null;
     const discountAmount = Number(p.discount_amount ?? 0);
@@ -194,7 +183,7 @@ export async function createTicketsFromPassengersShared(
 
   /**
    * Emissão única e atômica: a cópia staging → tickets acontece no banco sob trava
-   * transacional por venda, com índice único por venda/trecho/passageiro/lugar.
+   * transacional por venda, com identidade única por item do staging.
    * Confirmações concorrentes (página, recuperação, webhook, retry) não duplicam passagens.
    * O staging só é limpo na mesma transação, após a inserção bem-sucedida.
    */
@@ -335,7 +324,8 @@ export async function finalizeConfirmedPayment(params: {
     .select("id", { count: "exact", head: true })
     .eq("sale_id", sale.id);
 
-  if ((ticketsCount ?? 0) <= 0) {
+  const issuanceInspection = await inspectSaleConsistency(supabaseAdmin, sale.id);
+  if (ticketResult.status === "error" || issuanceInspection.state !== "healthy") {
     logPaymentTrace("error", source, "payment_without_tickets", {
       sale_id: sale.id,
       company_id: sale.company_id,
@@ -381,7 +371,8 @@ export async function finalizeConfirmedPayment(params: {
       .select("id", { count: "exact", head: true })
       .eq("sale_id", sale.id);
 
-    if ((retriedTicketsCount ?? 0) > 0) {
+    const retryInspection = await inspectSaleConsistency(supabaseAdmin, sale.id);
+    if (retryTicketResult.status !== "error" && retryInspection.state === "healthy") {
       await logSaleOperationalEvent({
         supabaseAdmin,
         saleId: sale.id,
@@ -427,9 +418,9 @@ export async function finalizeConfirmedPayment(params: {
       ok: false,
       httpStatus: 409,
       state: "inconsistent",
-      message: `Venda ${sale.id} sem tickets após confirmação/reconciliação`,
+      message: `Venda ${sale.id} com emissão incompleta após confirmação/reconciliação`,
       ticketStatus: ticketResult.status,
-      ticketsCount: 0,
+      ticketsCount: retriedTicketsCount ?? 0,
     };
   }
 

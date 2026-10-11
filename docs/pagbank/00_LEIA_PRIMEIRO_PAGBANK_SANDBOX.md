@@ -772,3 +772,72 @@ Implementado (sem tocar webhook, assinatura, OAuth, Connect, Split, credenciais 
 - **Cleanup protegido:** antes de cancelar venda PagBank com Order, consulta oficial. `PAID` → finaliza; `WAITING`/indisponível/indeterminado → preserva venda e passageiros; `DECLINED`/`CANCELED` → cancelamento normal. Vendas Asaas inalteradas.
 
 Pendente para Produção: webhook autenticado (a função `pagbank-webhook` recebe a mesma finalização no próximo deploy dela), conciliação detalhada do Split, decisão sobre vendas PagBank `WAITING` além de 24 h (hoje ficam preservadas, sem cancelamento automático), homologação e liberação.
+
+---
+
+## 22. Correção da emissão parcial — 2026-10-11 (Codex)
+
+**Causa comprovada na base `f4a0271e`:** o helper e a RPC retornavam ao encontrar
+qualquer ticket; o índice CPF/trecho/label confundia itens legítimos repetidos.
+O `ON CONFLICT DO NOTHING` seguido de limpeza não provava emissão integral.
+
+**Correção preparada, ainda não implantada/homologada no Sandbox:** migration
+Drizzle `0002_recover_partial_ticket_issuance` (mesmo mecanismo da Etapa 1),
+registrada no journal. Adiciona `tickets.sale_passenger_id` com índice único e
+`sales.expected_ticket_count`. Substitui apenas o índice lógico anterior;
+constraints de ocupação física continuam valendo. O ID do item distingue ida,
+volta e itens repetidos sem poltrona. A RPC exige venda paga e empresa correta,
+mantém a trava transacional, vincula tickets históricos apenas por correspondência
+única e snapshots compatíveis, insere os ausentes e verifica cobertura integral
+antes de registrar a quantidade esperada e apagar o staging. Qualquer conflito
+provoca rollback, preservando passageiros e tickets anteriores.
+
+A finalização compartilhada não considera mais um ticket suficiente quando há
+staging ou divergência da quantidade esperada. Falhas de leitura não comprovam
+consistência. O nome legado `inconsistent_paid_without_ticket` foi preservado
+para compatibilidade dos consumidores, incluindo emissão parcial.
+A recuperação PagBank também seleciona vendas pagas com staging ou quantidade
+persistida divergente, independentemente da janela de 24h. Reutiliza GET Order,
+validação de integridade e finalização comum; nunca cria cobrança. Tentativas
+pendentes continuam com a janela existente. A seleção de vendas pagas prioriza
+as menos recentemente consultadas para reduzir repetição de casos problemáticos.
+Há reserva de capacidade para pendentes quando ambas as filas têm candidatos;
+vendas pagas completas não entram novamente pela lista de tentativas recentes.
+A reconciliação manual transmite o gateway da venda à finalização, evitando
+escrita de status PagBank em campos específicos Asaas.
+
+**Evidências locais:** 394 testes Vitest em 36 arquivos aprovados, incluindo
+recuperação de venda já paga e finalização compartilhada PagBank/Asaas. Em
+PostgreSQL 16 descartável, a migration real passou em 14 cenários com dados
+sintéticos: emissão completa, parcial histórica 1/2 → 2/2 sem duplicação, parcial
+com IDs e itens repetidos, ida/volta, ausência de poltrona, reexecução, ambiguidade
+histórica, incompatibilidade de snapshot, conflito de assento com rollback,
+empresa errada, venda não paga, manifesto incompleto, emissão Asaas e seleção da fila paga.
+Duas conexões PostgreSQL concorrentes retornaram `created` e `skipped_existing`,
+com exatamente duas passagens e staging limpo. Harness versionado em
+`tests/database/partial-ticket-issuance.mjs`; instruções no README adjacente.
+Build Vite, TypeScript do app e `git diff --check` passaram. O lint do teste novo
+passou; o teste Etapa 1 mantém três usos preexistentes de `any` apontados pelo lint.
+Este banco usa schema mínimo: não prova todos os triggers/RLS do Supabase real.
+
+**Limitações:** vendas históricas cujo staging já foi apagado e cuja quantidade
+esperada nunca foi persistida não permitem reconstrução confiável por contagem.
+Não inventar passageiros nem declarar essas vendas integralmente reconciliadas.
+Correspondência histórica ambígua exige revisão operacional; não escolher um item
+arbitrário. Remoção de um ticket após emissão completa é detectada pela quantidade,
+mas, sem staging, não pode ser recuperada automaticamente. Sem mudanças em webhook,
+OAuth, Connect, Split, credenciais, regras comerciais, Asaas específico ou Produção.
+
+**Implantação futura:** aplicar migration antes de atualizar os consumidores da
+finalização compartilhada; implantar funções que a importam, inclusive via
+status-sync (sem alterar código/autenticação do webhook). Validar com schema real
+Sandbox e repetir confirmação simultânea, caso parcial e pagamento com navegador
+fechado. Não houve escrita no banco do projeto, merge, deploy ou pagamento real.
+Não declarar homologação apenas pelos testes locais.
+
+**Cron confirmado pelo responsável:** job 1 `cleanup-expired-seat-locks`, ativo,
+`*/5 * * * *`; 20 execuções a cada 5min com `succeeded`. O command/resultado HTTP
+não foi fornecido: não comprova chamada/sucesso da recuperação PagBank.
+Esta tarefa não altera periodicidade. Não repetir OAuth, GET Split/Charge ou
+investigações básicas de PIX/cartão. Próximo passo mínimo: revisar a PR, validar
+migration e consumidores no Sandbox e confirmar o command do cron.

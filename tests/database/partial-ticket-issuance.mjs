@@ -1,0 +1,51 @@
+// Isolated PostgreSQL only. Never point this harness at an application database.
+import { execFileSync, spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import assert from 'node:assert/strict';
+const container = process.env.TICKET_TEST_CONTAINER;
+if (!container || !container.startsWith('smartbus-ticket-test-')) throw Error('Use a dedicated smartbus-ticket-test-* container');
+const args = ['exec', '-i', container, 'psql', '-U', 'postgres', '-v', 'ON_ERROR_STOP=1', '-At'];
+const sql = text => execFileSync('docker', args, {input:text, encoding:'utf8'}).trim();
+const asyncSql = text => new Promise((resolve,reject) => {
+ const p=spawn('docker',args); let out='',err='';
+ p.stdout.on('data',d=>out+=d); p.stderr.on('data',d=>err+=d);
+ p.on('close',c=>c ? reject(Error(err)):resolve(out.trim())); p.stdin.end(text);
+});
+const sale='00000000-0000-0000-0000-000000000001', company='00000000-0000-0000-0000-000000000002';
+sql(`CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role;
+CREATE TABLE sales(id uuid PRIMARY KEY, company_id uuid, status text, payment_gateway text, payment_confirmed_at timestamptz);
+CREATE TABLE payment_attempts(sale_id uuid,gateway text,last_queried_at timestamptz);
+CREATE TABLE sale_passengers(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),sale_id uuid REFERENCES sales(id),company_id uuid,trip_id uuid,seat_id uuid,seat_label text,passenger_name text,passenger_cpf text,passenger_phone text,sort_order integer DEFAULT 0,ticket_type_id uuid,ticket_type_name text,ticket_type_price numeric,benefit_program_id uuid,benefit_program_name text,benefit_type text,benefit_value numeric,original_price numeric,discount_amount numeric,final_price numeric,benefit_applied boolean,pricing_rule_version text);
+CREATE TABLE tickets(LIKE sale_passengers INCLUDING DEFAULTS);
+ALTER TABLE tickets ADD PRIMARY KEY(id);
+ALTER TABLE tickets ADD UNIQUE(trip_id,seat_id);
+CREATE UNIQUE INDEX tickets_unique_sale_trip_passenger_label ON tickets(sale_id,trip_id,passenger_cpf,seat_label);
+`);
+sql(readFileSync('drizzle/migrations/0002_recover_partial_ticket_issuance.sql','utf8'));
+const reset = () => sql(`TRUNCATE tickets,sale_passengers,sales; INSERT INTO sales(id,company_id,status,payment_gateway) VALUES('${sale}','${company}','pago','pagbank');`);
+const item = (n,{trip=3,label='SEM-POLTRONA',cpf='synthetic',seat='NULL'}={}) => sql(`INSERT INTO sale_passengers(id,sale_id,company_id,trip_id,seat_id,seat_label,passenger_name,passenger_cpf,final_price,sort_order) VALUES('00000000-0000-0000-0000-${String(n).padStart(12,'0')}','${sale}','${company}','00000000-0000-0000-0000-${String(trip).padStart(12,'0')}',${seat},'${label}','Teste','${cpf}',100,${n});`);
+const issue = `SELECT issue_sale_tickets_from_staging('${sale}','${company}');`;
+const counts = () => sql(`SELECT (SELECT count(*) FROM tickets)||','||(SELECT count(*) FROM sale_passengers)||','||(SELECT expected_ticket_count FROM sales);`);
+let cases=0;
+function test(name,fn) {fn(); cases++; console.log('PASS',name);}
+test('complete issuance and repeated legitimate no-seat items',()=>{reset();item(10);item(11); assert.equal(sql(issue),'created');assert.equal(counts(),'2,0,2');});
+test('shared issuance also preserves Asaas',()=>{reset();item(10);item(11);sql("UPDATE sales SET payment_gateway='asaas';");assert.equal(sql(issue),'created');assert.equal(counts(),'2,0,2');});
+test('repeat after complete issuance',()=>{assert.equal(sql(issue),'skipped_existing');assert.equal(counts(),'2,0,2');});
+test('partial legacy 1/2 recovers only missing ticket',()=>{reset();item(10,{label:'A'});item(11,{label:'B'});sql(`INSERT INTO tickets SELECT * FROM sale_passengers WHERE seat_label='A';`);assert.equal(sql(issue),'created');assert.equal(counts(),'2,0,2');assert.equal(sql('SELECT count(DISTINCT sale_passenger_id) FROM tickets'),'2');});
+test('identified partial repeated items recover missing item only',()=>{reset();item(10);item(11);sql(`INSERT INTO tickets(id,sale_passenger_id,sale_id,company_id,trip_id,seat_label,passenger_name,passenger_cpf,final_price) SELECT id,id,sale_id,company_id,trip_id,seat_label,passenger_name,passenger_cpf,final_price FROM sale_passengers LIMIT 1;`);assert.equal(sql(issue),'created');assert.equal(counts(),'2,0,2');});
+test('snapshot mismatch preserves recovery data',()=>{reset();item(10,{label:'A'});item(11,{label:'B'});sql(`INSERT INTO tickets SELECT * FROM sale_passengers WHERE seat_label='A'; UPDATE tickets SET final_price=90;`);assert.throws(()=>sql(issue),/ticket_legacy_mapping_ambiguous/);assert.equal(sql('SELECT count(*) FROM sale_passengers'),'2');});
+test('round trip same passenger same label',()=>{reset();item(10);item(11,{trip:4});assert.equal(sql(issue),'created');assert.equal(counts(),'2,0,2');});
+test('ambiguous historical mapping preserves staging and ticket',()=>{reset();item(10);item(11);sql(`INSERT INTO tickets SELECT * FROM sale_passengers LIMIT 1;`);assert.throws(()=>sql(issue),/ticket_legacy_mapping_ambiguous/);assert.equal(sql('SELECT count(*) FROM sale_passengers'),'2');assert.equal(sql('SELECT count(*) FROM tickets'),'1');});
+test('seat conflict rolls back all insertion and retains staging',()=>{reset();item(10,{seat:"'00000000-0000-0000-0000-000000000099'"});item(11,{seat:"'00000000-0000-0000-0000-000000000099'"});assert.throws(()=>sql(issue));assert.equal(sql('SELECT count(*) FROM tickets'),'0');assert.equal(sql('SELECT count(*) FROM sale_passengers'),'2');});
+test('wrong company rejected',()=>{assert.throws(()=>sql(issue.replace(company,sale)),/ticket_sale_not_paid_or_wrong_company/);});
+test('unpaid sale rejected',()=>{reset();item(10);sql("UPDATE sales SET status='pendente_pagamento';");assert.throws(()=>sql(issue),/ticket_sale_not_paid_or_wrong_company/);});
+test('known manifest without staging fails closed',()=>{reset();sql('UPDATE sales SET expected_ticket_count=2;');assert.throws(()=>sql(issue),/ticket_manifest_missing_or_incomplete/);});
+test('paid recovery queue excludes unpaid and Asaas',()=>{reset();item(10);assert.equal(sql('SELECT count(*) FROM pagbank_paid_sales_needing_tickets(20)'),'1');sql("UPDATE sales SET payment_gateway='asaas';");assert.equal(sql('SELECT count(*) FROM pagbank_paid_sales_needing_tickets(20)'),'0');});
+reset();item(10);item(11);
+// Hold the exact transaction lock before starting both real database connections.
+const hold=asyncSql(`BEGIN; SELECT pg_advisory_xact_lock(hashtextextended('issue_sale_tickets:${sale}',0)); SELECT pg_sleep(1); COMMIT;`);
+await new Promise(r=>setTimeout(r,150));
+const result=await Promise.all([asyncSql(issue),asyncSql(issue)]);await hold;
+assert.deepEqual(result.sort(),['created','skipped_existing']);assert.equal(counts(),'2,0,2');cases++;
+console.log('PASS concurrent real PostgreSQL connections:',result.join(', '));
+console.log(`${cases} database scenarios passed; partial 1/2 became 2/2 without duplication.`);

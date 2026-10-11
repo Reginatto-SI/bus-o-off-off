@@ -410,3 +410,12 @@ funcional.
 - Split: quando o Order traz só o link `rel: SPLIT` (`SPLI_...`), consulta `GET /splits/{id}` com o token da plataforma e confere recebedores/valores pela regra integral; falha na leitura = não confirmado.
 - Webhook: tenta token da conexão, do ambiente e da plataforma; registra presença de `x-authenticity-token` / `x-payload-signature` (sem valores). Confirmação continua por consulta autoritativa.
 - Próximo: nova venda piloto PIX (aguardando autorização do responsável).
+
+## Manutenção — 2026-10-11: emissão parcial preparada para revisão
+
+Correção de emissão parcial na finalização comum, RPC e recuperação PagBank,
+com migration Drizzle `0002_recover_partial_ticket_issuance`. Identidade por item
+do staging, validação de cobertura integral e quantidade esperada persistida;
+conflitos históricos falham fechado. Evidências e limitações na seção 22 de
+`00_LEIA_PRIMEIRO_PAGBANK_SANDBOX.md`. Não implantada nem homologada no Sandbox;
+Produção permanece bloqueada. Nenhuma nova cobrança ou alteração de credenciais.

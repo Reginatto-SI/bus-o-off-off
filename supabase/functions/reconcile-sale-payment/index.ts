@@ -111,6 +111,7 @@ serve(async (req) => {
         asaasStatus: inspection.sale.asaas_payment_status ?? "CONFIRMED",
         source: "reconcile-sale-payment",
         paymentId: inspection.sale.asaas_payment_id,
+        gateway: inspection.sale.payment_gateway === "pagbank" ? "pagbank" : "asaas",
         allowStatusUpdate: false,
         writeSaleLog: true,
       });
