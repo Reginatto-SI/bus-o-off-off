@@ -841,3 +841,60 @@ não foi fornecido: não comprova chamada/sucesso da recuperação PagBank.
 Esta tarefa não altera periodicidade. Não repetir OAuth, GET Split/Charge ou
 investigações básicas de PIX/cartão. Próximo passo mínimo: revisar a PR, validar
 migration e consumidores no Sandbox e confirmar o command do cron.
+
+## 23. PR #771 — compatibilidade com trigger físico (2026-10-11)
+
+**Bloqueio comprovado na revisão:** a versão `4f005ad8` selecionava também itens
+já emitidos e dependia de `ON CONFLICT DO NOTHING`. O trigger físico BEFORE INSERT
+executa antes da resolução do conflito e rejeita a reinserção do assento legítimo.
+Os 14 cenários da seção 22 não incluíam esse trigger: não comprovavam implantação.
+
+**Refinamento da mesma migration ainda não aplicada ao projeto:** o INSERT usa
+`NOT EXISTS` pela identidade do item, depois da vinculação/validação dos tickets
+históricos. O `ON CONFLICT DO NOTHING` foi retirado. A trava por venda e a
+verificação integral antes da limpeza permanecem. Nenhuma alteração na função,
+trigger ou regra de ocupação física existente.
+
+**Caminhos alternativos:** `NewSaleModal` emite tickets legados sem ID do staging.
+O índice lógico antigo foi mantido como índice parcial para esses registros
+(`sale_passenger_id IS NULL`). Um trigger separado de identidade serializa os
+writers pela mesma trava da RPC, impede inserir tickets sem identidade numa venda
+que já possui emissão por item/quantidade esperada, impede remover a identidade e
+exige que uma identidade nova corresponda a um item existente da venda paga, da
+mesma empresa, passageiro, trecho e lugar. A unicidade global por item continua.
+Isso preserva a emissão manual legada sem reabrir duplicação pela retirada do
+índice. Não altera as policies existentes, nem amplia permissões das RPCs.
+O trigger de identidade precede alfabeticamente o físico, adquirindo primeiro a
+trava por venda. Divergências retornam erro e preservam staging/tickets anteriores.
+
+**Evidência:** 25 cenários aprovados em PostgreSQL 16 isolado, carregando diretamente
+do repositório o resolvedor físico e a função `assert_physical_seat_available_for_ticket`
+e instalando o mesmo trigger BEFORE INSERT/UPDATE. Reproduzido o erro da versão
+anterior (`Assento já ocupado neste trecho`), com rollback; depois comprovado
+1/2 → 2/2 para assentos físicos PagBank e Asaas. Duas conexões concorrentes
+recuperaram uma venda física parcial, sem duplicar. Também cobertos conflito
+físico externo com rollback da vinculação histórica, itens sem poltrona, ida/volta,
+ambiguidade, permissões RPC, execução por service_role e inserção pública legada
+com a policy `Public can create tickets` real do repositório. A policy foi testada
+em tabelas auxiliares sintéticas; não representa todas as policies do ambiente.
+
+A suíte existente foi reexecutada: 394 testes em 36 arquivos aprovados;
+`git diff --check` passou. Não houve alteração TypeScript neste refinamento.
+
+**Pendências obrigatórias de implantação:** sem acesso aos catálogos/dados e versões
+implantadas, não há prova de igualdade entre repositório e Supabase atual. Conferir
+índices, triggers, constraints, policies/grants, proprietário das funções, migrations
+aplicadas e dados históricos. Conferir especialmente writers legados, mistura de
+identidades e assentos que hoje conflitam. Testar no schema completo Sandbox antes
+de implantação; a suíte isolada não cobre todos os triggers de vendas e tickets.
+Se `0002` já estiver aplicada em algum ambiente, não reexecutar sua versão editada:
+será necessária migration incremental nesse ambiente. Nenhuma foi aplicada pelo Codex.
+
+Ordem futura, dependente de aprovação: validar compatibilidade no Sandbox; aplicar
+migration transacional em janela controlada (DDL pode bloquear writers); verificar
+RPCs e permissões; merge/publicação coordenados de todos os consumidores da
+finalização compartilhada. Se merge disparar publicação automática, preparar o
+banco antes dele. Preservar evidências e plano de rollback sem apagar pagamentos.
+Não executar rollback cego para a RPC antiga depois de tickets por item terem sido
+emitidos. Produção PagBank segue bloqueada. Não repetir OAuth, Connect, Split,
+GET Charge/Split, diagnósticos de webhook ou testes básicos já comprovados.

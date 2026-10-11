@@ -15,3 +15,10 @@ bancos existentes. Testa inserção parcial histórica e identificada, ida/volta
 itens legítimos repetidos sem poltrona, snapshots incompatíveis, rollback,
 reexecução e duas conexões PostgreSQL simultâneas sob a trava real.
 Não cobre todas as migrations/triggers/RLS do Supabase nem o Sandbox financeiro.
+
+O harness carrega o resolvedor/trigger físico diretamente da migration oficial do
+repositório e reproduz a versão anterior da RPC a partir do commit `4f005ad8`
+(esse commit precisa estar disponível no histórico Git local). Inclui a policy
+pública de INSERT do repositório e testes de roles, sem substituir auditoria das
+policies/grants implantadas. A concorrência agora usa uma venda parcial com
+poltronas físicas. São 25 cenários, incluindo a reprodução esperada do erro antigo.

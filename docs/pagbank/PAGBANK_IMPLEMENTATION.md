@@ -419,3 +419,8 @@ do staging, validação de cobertura integral e quantidade esperada persistida;
 conflitos históricos falham fechado. Evidências e limitações na seção 22 de
 `00_LEIA_PRIMEIRO_PAGBANK_SANDBOX.md`. Não implantada nem homologada no Sandbox;
 Produção permanece bloqueada. Nenhuma nova cobrança ou alteração de credenciais.
+
+Refinamento da PR #771: INSERT somente de itens ausentes, sem ignorar conflitos;
+trigger físico preservado, unicidade legada parcial e proteção separada de identidade.
+25 cenários PostgreSQL com trigger físico real do repositório aprovados. Compatibilidade
+com catálogos/dados implantados segue pendente; detalhes na seção 23 do documento obrigatório.

@@ -5,6 +5,40 @@ ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS expected_ticket_count integer
 CREATE UNIQUE INDEX IF NOT EXISTS tickets_unique_sale_passenger_id
   ON public.tickets(sale_passenger_id);
 DROP INDEX IF EXISTS public.tickets_unique_sale_trip_passenger_label;
+-- Keep the previous protection for manual/legacy writers that have no item ID.
+CREATE UNIQUE INDEX tickets_unique_sale_trip_passenger_label
+  ON public.tickets(sale_id, trip_id, passenger_cpf, seat_label)
+  WHERE sale_passenger_id IS NULL;
+
+-- Identity protection is separate from the unchanged physical-occupancy trigger.
+CREATE OR REPLACE FUNCTION public.assert_ticket_item_identity()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+BEGIN
+  PERFORM pg_advisory_xact_lock(hashtextextended('issue_sale_tickets:' || NEW.sale_id::text, 0));
+  IF NEW.sale_passenger_id IS NULL THEN
+    IF (TG_OP='UPDATE' AND OLD.sale_passenger_id IS NOT NULL)
+      OR EXISTS (SELECT 1 FROM public.sales s WHERE s.id=NEW.sale_id AND s.expected_ticket_count IS NOT NULL)
+      OR EXISTS (SELECT 1 FROM public.tickets t WHERE t.sale_id=NEW.sale_id AND t.sale_passenger_id IS NOT NULL)
+    THEN RAISE EXCEPTION 'ticket_item_identity_required'; END IF;
+  ELSE
+    IF TG_OP='INSERT' AND EXISTS (SELECT 1 FROM public.tickets t
+      WHERE t.sale_id=NEW.sale_id AND t.sale_passenger_id IS NULL)
+    THEN RAISE EXCEPTION 'ticket_legacy_mapping_required'; END IF;
+    IF NOT EXISTS (
+      SELECT 1 FROM public.sale_passengers p JOIN public.sales s ON s.id=p.sale_id
+      WHERE p.id=NEW.sale_passenger_id AND p.sale_id=NEW.sale_id
+        AND p.company_id=NEW.company_id AND s.company_id=NEW.company_id AND s.status='pago'
+        AND p.trip_id=NEW.trip_id AND p.seat_id IS NOT DISTINCT FROM NEW.seat_id
+        AND p.seat_label=NEW.seat_label AND p.passenger_cpf=NEW.passenger_cpf
+        AND p.passenger_name=NEW.passenger_name
+    ) THEN RAISE EXCEPTION 'ticket_item_identity_mismatch'; END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+REVOKE ALL ON FUNCTION public.assert_ticket_item_identity() FROM PUBLIC,anon,authenticated;
+CREATE TRIGGER trg_assert_item_identity
+  BEFORE INSERT OR UPDATE OF sale_passenger_id, sale_id, company_id, trip_id, seat_id, seat_label, passenger_cpf
+  ON public.tickets FOR EACH ROW EXECUTE FUNCTION public.assert_ticket_item_identity();
 
 CREATE OR REPLACE FUNCTION public.issue_sale_tickets_from_staging(p_sale_id uuid, p_company_id uuid)
 RETURNS text LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
@@ -92,10 +126,10 @@ BEGIN
     benefit_program_id, benefit_program_name, benefit_type, benefit_value,
     original_price, coalesce(discount_amount, 0), final_price, coalesce(benefit_applied, false),
     coalesce(pricing_rule_version, 'beneficio_checkout_v1')
-  FROM public.sale_passengers
-  WHERE sale_id = p_sale_id AND company_id = p_company_id
-  ORDER BY sort_order
-  ON CONFLICT (sale_passenger_id) DO NOTHING;
+  FROM public.sale_passengers p
+  WHERE p.sale_id = p_sale_id AND p.company_id = p_company_id
+    AND NOT EXISTS (SELECT 1 FROM public.tickets t WHERE t.sale_passenger_id=p.id)
+  ORDER BY p.sort_order;
 
 
   IF EXISTS (SELECT 1 FROM public.sale_passengers p WHERE p.sale_id=p_sale_id AND NOT EXISTS
