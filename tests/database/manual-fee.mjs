@@ -1,0 +1,28 @@
+// Disposable PostgreSQL only; no application database URLs are accepted.
+import {execFileSync,spawn} from 'node:child_process';
+import {readFileSync,existsSync} from 'node:fs';
+import assert from 'node:assert/strict';
+const container=process.env.TICKET_TEST_CONTAINER;
+if(!container?.startsWith('smartbus-ticket-test-'))throw Error('Dedicated test container required');
+const args=['exec','-i',container,'psql','-U','postgres','-v','ON_ERROR_STOP=1','-At'];
+const sql=s=>execFileSync('docker',args,{input:s,encoding:'utf8',stdio:['pipe','pipe','pipe']}).trim();
+const parallel=s=>new Promise((resolve,reject)=>{const p=spawn('docker',args);let o='',e='';p.stdout.on('data',d=>o+=d);p.stderr.on('data',d=>e+=d);p.on('close',c=>c?reject(Error(e)):resolve(o.trim()));p.stdin.end(s);});
+const c='00000000-0000-0000-0000-000000000001',sale='00000000-0000-0000-0000-000000000002',op='00000000-0000-0000-0000-000000000003',trip='00000000-0000-0000-0000-000000000004';
+sql(`CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role;
+CREATE SCHEMA auth; CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS 'SELECT NULL::uuid';
+CREATE FUNCTION user_belongs_to_company(uuid,uuid) RETURNS boolean LANGUAGE sql AS 'SELECT false';
+CREATE TABLE companies(id uuid PRIMARY KEY,payment_gateway text DEFAULT 'asaas',payment_environment text DEFAULT 'sandbox',manual_reservation_ttl_minutes integer DEFAULT 60,platform_fee_percent numeric DEFAULT 6);
+CREATE TABLE sales(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),company_id uuid,status text,payment_gateway text,payment_environment text,sale_origin text,expected_ticket_count integer,platform_fee_status text,platform_fee_amount numeric,platform_fee_total numeric,platform_fee_paid_at timestamptz,payment_confirmed_at timestamptz,reservation_expires_at timestamptz,event_id uuid,trip_id uuid,boarding_location_id uuid,customer_name text,customer_cpf text,customer_phone text,quantity integer,unit_price numeric,gross_amount numeric,seller_id uuid,benefit_total_discount numeric);
+CREATE TABLE payment_attempts(sale_id uuid,gateway text,last_queried_at timestamptz);
+INSERT INTO companies(id) VALUES('${c}');
+INSERT INTO sales(id,company_id,status,payment_gateway,payment_environment,sale_origin) VALUES('${sale}','${c}','reservado','asaas','sandbox','admin_manual');`);
+sql(readFileSync('drizzle/migrations/0003_manual_fee_operations.sql','utf8'));
+sql(`INSERT INTO platform_fee_operations(id,sale_id,company_id,gateway,environment,issuer_account_id,amount_cents,reference,idempotency_key,snapshot) VALUES('${op}','${sale}','${c}','asaas','sandbox','issuer',6000,'platform_fee_${sale}','key','{}');`);
+let n=0;const test=(name,f)=>{f();n++;console.log('PASS',name);};
+test('private operations denied to anon',()=>assert.throws(()=>sql('SET ROLE anon; SELECT * FROM platform_fee_operations;')));
+test('authenticated cannot create or edit operations',()=>assert.throws(()=>sql("SET ROLE authenticated; UPDATE platform_fee_operations SET amount_cents=1;")));
+test('context and amount immutable',()=>assert.throws(()=>sql('UPDATE platform_fee_operations SET amount_cents=100000;')));
+const claims=await Promise.all([parallel(`SELECT claim_manual_fee_creation('${op}');`),parallel(`SELECT claim_manual_fee_creation('${op}');`)]);assert.deepEqual(claims.sort(),['f','t']);n++;console.log('PASS one creation owner across real connections');
+test('crashed creator cannot claim another POST',()=>assert.equal(sql(`SELECT claim_manual_fee_creation('${op}');`),'f'));
+test('wrong company rejected',()=>assert.throws(()=>sql(`INSERT INTO platform_fee_operations(sale_id,company_id,gateway,environment,issuer_account_id,amount_cents,reference,idempotency_key,snapshot) VALUES('${sale}','${sale}','asaas','sandbox','issuer',6000,'other','other','{}');`)));
+console.log(`${n} database cases passed.`);
