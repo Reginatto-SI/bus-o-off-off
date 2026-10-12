@@ -94,10 +94,11 @@ Base: main `6051424e`. As etapas são cumulativas, todas em Draft contra main:
 | 3 | [#775](https://github.com/Reginatto-SI/bus-o-off-off/pull/775) | Cadastro e liberação transacionais; migration 0004 |
 | 4 | [#776](https://github.com/Reginatto-SI/bus-o-off-off/pull/776) | Confirmação, ledger, reserva e recuperação; migration 0005 |
 | 5 | [#777](https://github.com/Reginatto-SI/bus-o-off-off/pull/777) | Adapter PIX PagBank da plataforma, exclusivamente Sandbox |
-| 6 | Branch `codex/manual-fee-pilot-validation` | Validação e proteção final do piloto; migration 0006 |
+| 6 | [#778](https://github.com/Reginatto-SI/bus-o-off-off/pull/778) | Validação e proteção final do piloto; migration 0006 |
 
-Revisar/mergear na ordem para que o diff das próximas PRs diminua conforme a base
-avança. **Não ativar flags ao mergear uma etapa intermediária.** Nenhum merge,
+Revisar/mergear na ordem e atualizar a branch da próxima PR com a main após cada
+merge, especialmente se for squash, para retirar mudanças já integradas do diff.
+**Não ativar flags ao mergear uma etapa intermediária.** Nenhum merge de PR,
 deploy, pagamento, atualização de credenciais ou escrita no banco conectado foi
 executado nesta implementação. Não importar histórico sem vínculo comprovado.
 Não há migração automática de empresa, gateway ou cobranças antigas.
@@ -160,6 +161,16 @@ publicado ou homologação do fluxo manual. A recuperação backend usa o cron e
 o resultado fornecido pelo responsável indica `*/5 * * * *`, **5 minutos**.
 Não foi alterado para um minuto. Fila manual não tem corte de 24 horas e usa lotes
 de 20 com rotação por última tentativa; avaliar backlog/duração no piloto.
+
+Para reproduzir localmente: `npm test`, `npx tsc --noEmit -p tsconfig.app.json` e
+`npx vite build` (não precisa gerar versão do produto). Os harnesses SQL são
+`TICKET_TEST_CONTAINER=smartbus-ticket-test-<nome> node tests/database/manual-fee.mjs`
+e `... node tests/database/partial-ticket-issuance.mjs`. Cada harness precisa de
+container PostgreSQL 16 **novo e separado**, sem portas publicadas, com readiness
+`docker exec <nome> pg_isready -U postgres`; nunca URL do banco do SmartBus.
+Criar roles/tabelas é permitido somente nesse banco descartável. Remover o
+container de teste após coletar resultados. Deno check deve incluir os nove
+entrypoints abaixo e manter verificação TLS, sem usar credenciais do projeto.
 
 No Asaas, somente rejeição explícita de split admite tentativa no mesmo worker sem
 split; erro de rede, 5xx e rejeição genérica não permitem outro POST. Mock comprova

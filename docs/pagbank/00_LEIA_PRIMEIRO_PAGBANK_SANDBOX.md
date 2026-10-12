@@ -939,7 +939,7 @@ alterado. Detalhes em VENDA_MANUAL_MULTIGATEWAY.md. Produção PagBank bloqueada
 ## 26. Venda manual multi-gateway — implementação em Drafts (2026-10-12)
 
 Plano implementado por etapas cumulativas: Drafts #772, #774, #775, #776, #777
-e branch final `codex/manual-fee-pilot-validation`. Base inicial `6051424e`;
+e #778 (validação final). Base inicial `6051424e`;
 revalidada a main `1271ddd3`/PR documental #773, que reforça a regra comum manual.
 Detalhes, arquivos, gates e procedimento de recuperação em
 [VENDA_MANUAL_MULTIGATEWAY.md](./VENDA_MANUAL_MULTIGATEWAY.md).
@@ -958,7 +958,7 @@ SHA-256 SQL continua `f467e8c7553b9a8b4fab6b61989fc31aeb7381bf019a8244fb59f46001
 Entradas históricas do journal, incluindo data/idx/tag da 0002, foram preservadas;
 apenas entradas novas foram acrescentadas.
 
-Evidência local final: **443 testes Vitest em 41 arquivos**, TypeScript do app,
+Evidência local final: **445 testes Vitest em 41 arquivos**, TypeScript do app,
 build Vite (aviso de tamanho de bundles) e Deno dos nove consumidores aprovados.
 **33 cenários PostgreSQL 16 isolado** do fluxo manual e **25 cenários** da emissão
 compartilhada anterior aprovados. Venda simulada de 10 itens de R$ 100 emitiu 10
