@@ -898,3 +898,32 @@ banco antes dele. Preservar evidências e plano de rollback sem apagar pagamento
 Não executar rollback cego para a RPC antiga depois de tickets por item terem sido
 emitidos. Produção PagBank segue bloqueada. Não repetir OAuth, Connect, Split,
 GET Charge/Split, diagnósticos de webhook ou testes básicos já comprovados.
+
+## 24. PR #771 — histórico aplicado alinhado à main (2026-10-12)
+
+O responsável informou que o Lovable aplicou com sucesso a migration `0002` e
+registrou o arquivo/journal na main. Essa informação atualiza as notas históricas
+anteriores de "ainda não aplicada"; o Codex não executou nem repetiu a migration.
+
+Comparação com a main `00afb912`: o SQL funcional era idêntico à PR, mas a main
+não possui newline final. O journal da main usa `when = 1791799668965`, diferente
+da data originalmente preparada na PR. A branch da PR incorpora essa main e
+preserva integralmente seus dois arquivos, sem alterar bytes, tag, idx ou data.
+SHA-256 do SQL: `f467e8c7553b9a8b4fab6b61989fc31aeb7381bf019a8244fb59f4600155ce96`.
+SHA-256 do journal: `045cb171c9b03898d02a263ef51a7d0369067802ea4f211a29408c89fd9de4ee`.
+Esses hashes identificam os arquivos versionados da main; não são nova consulta
+à tabela de histórico do banco. O snapshot e os tipos gerados pelo Lovable também
+são preservados. Não há diferença desses arquivos no merge proposto contra main.
+
+O código de recuperação/finalização/reconciliação e os testes da PR permanecem
+inalterados neste alinhamento. As colunas, nomes/argumentos/retornos das RPCs
+utilizados pelo código coincidem com o SQL da main e os tipos gerados atuais.
+Não criar outra migration, regenerar/formatar `0002`, alterar sua data nem
+reaplicá-la. A publicação dos seis consumidores continua etapa separada:
+asaas-webhook, pagbank-webhook, verify-payment-status, reconcile-sale-payment,
+create-pagbank-payment e cleanup-expired-locks. Produção PagBank segue bloqueada.
+Nenhum banco, deploy, pagamento ou merge da PR foi executado pelo Codex.
+Validação após incorporar main: 394 testes em 36 arquivos e TypeScript do app
+aprovados; conferência byte a byte/SHA-256 e `git diff --check` aprovados.
+Os testes SQL anteriores continuam aplicáveis porque o SQL funcional não mudou;
+nenhuma migration foi executada novamente nesta etapa.
