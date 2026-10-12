@@ -38,3 +38,6 @@ project_id = "cdrcyjrvurrphnceromd"
   [functions.pagbank-platform-application]
     verify_jwt = false
 
+
+[functions.register-manual-sale]
+verify_jwt = false # session and company/role checked inside the handler

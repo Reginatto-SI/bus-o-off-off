@@ -26,3 +26,14 @@ a mesma operação serve a retries/consulta. Criação incerta nunca libera outr
 O contrato normalizado valida valor, referência, conta, ambiente e moeda antes de
 persistir confirmação. Nenhuma tabela pública payment_attempts foi alterada.
 Os módulos serão conectados na etapa de cadastro/finalização, ainda sem ativação.
+
+## Etapa 3 — cadastro e emissão atômicos
+
+Migration 0004 cria request idempotente, cadastro transacional e finalização manual
+que chama emissão 0002 na mesma transação do status pago. Staging é confrontado com
+o manifesto congelado antes da emissão. Prova financeira permanece na operação
+mesmo se emissão falhar. NewSaleModal é preservado para empresas fora do piloto;
+empresas habilitadas usam cadastro backend e comprovante de reserva sem QR liberado.
+11 cenários PostgreSQL e 19 testes relevantes passaram. A flag deve continuar
+DESLIGADA até completar/publicar as etapas seguintes; o SQL isolado não comprova
+schema completo nem homologação financeira.
