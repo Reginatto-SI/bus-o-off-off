@@ -1,6 +1,7 @@
 // @ts-nocheck — Deno service-role orchestration; adapters have an injected transport.
 import {ManualFeeError} from './auth.ts';
 import {asaasFeeAdapter} from './asaas.ts';
+import {pagbankFeeAdapter} from './pagbank.ts';
 import {synchronizeManualFee} from './service.ts';
 import {resolvePaymentContext} from '../payment-context-resolver.ts';
 import {logSaleOperationalEvent} from '../payment-observability.ts';
@@ -10,6 +11,12 @@ export async function readManualFeeOperation(db:any,sale:any) {
  return found.data;
 }
 export function adapterForManualFee(op:any,getSecret:(name:string)=>string|undefined) {
+ if(op.gateway==='pagbank'){
+  const issuer=getSecret('PAGBANK_MARKETPLACE_ACCOUNT_ID_SANDBOX'),token=getSecret('PAGBANK_SMARTBUS_TOKEN_SANDBOX');
+  const base=getSecret('SUPABASE_URL');
+  if(op.environment!=='sandbox'||issuer!==op.issuer_account_id||!token||!base)throw new ManualFeeError('manual_pagbank_issuer_unavailable',503);
+  return pagbankFeeAdapter({environment:'sandbox',accessToken:token,issuerAccountId:issuer,notificationUrl:base+'/functions/v1/pagbank-webhook'});
+ }
  if(op.gateway!=='asaas')throw new ManualFeeError('manual_gateway_not_implemented');
  const context=resolvePaymentContext({mode:'platform_fee',sale:{payment_environment:op.environment}});
  const issuer=getSecret(context.platformWalletSecretName);

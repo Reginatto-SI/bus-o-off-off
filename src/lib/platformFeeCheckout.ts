@@ -14,6 +14,7 @@ export type PlatformFeeCheckoutResult =
   | { status: 'opened'; url: string }
   | { status: 'waived' }
   | { status: 'already_paid' }
+  | { status: 'pix' }
   | { status: 'error' };
 
 /**
@@ -29,15 +30,21 @@ export async function startPlatformFeeCheckout({
   onMissingReusablePayment,
 }: StartPlatformFeeCheckoutParams): Promise<PlatformFeeCheckoutResult> {
   try {
-    const { data, error } = await supabase.functions.invoke('create-platform-fee-checkout', {
+    const { data: responseData, error } = await supabase.functions.invoke('create-platform-fee-checkout', {
       body: {
         sale_id: saleId,
         consult_only: mode === 'consult_only',
       },
     });
 
+    let data=responseData;
+    if(error&&!data){try{data=await (error as {context?:{json?:()=>Promise<unknown>}}).context?.json?.();}catch{/* preserve safe generic feedback */}}
     if (error) {
-      if (data?.error_code === 'consult_only_without_reusable_payment') {
+      const code=data?.error_code??data?.error;
+      if(code==='manual_issuance_incomplete') {toast.info('Taxa confirmada. As passagens estão em recuperação; não é necessário pagar novamente.');}
+      else if(['manual_fee_create_unresolved','manual_fee_query_failed','manual_fee_persistence_failed'].includes(code)) {toast.info('Cobrança em verificação. A reserva está preservada; não gere outra cobrança.');}
+      else if(code==='manual_late_payment_review') {toast.warning('Pagamento recebido após cancelamento. Solicite conciliação antes de liberar passagens.');}
+      else if (data?.error_code === 'consult_only_without_reusable_payment') {
         toast.info(data?.error || 'Não existe cobrança reutilizável para consulta desta taxa.');
         await onMissingReusablePayment?.();
       } else if (data?.error_code === 'existing_platform_fee_terminal_requires_admin_action') {
@@ -64,6 +71,11 @@ export async function startPlatformFeeCheckout({
       toast.success(data?.message || 'Taxa da plataforma já estava paga e foi convergida.');
       await onWaived?.();
       return { status: 'already_paid' };
+    }
+
+    if (data?.pix?.qr_text) {
+      window.dispatchEvent(new CustomEvent('smartbus:manual-fee-pix', {detail:{saleId,pix:data.pix}}));
+      return { status: 'pix' };
     }
 
     // Reuso explícito de cobrança existente: mantém o mesmo comportamento de abrir URL

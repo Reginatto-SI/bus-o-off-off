@@ -1,3 +1,4 @@
+import {ManualFeePixDialog} from '@/components/admin/ManualFeePixDialog';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useLocation } from 'react-router-dom';
@@ -1857,6 +1858,7 @@ export default function Sales() {
   // ── Render ──
   return (
     <AdminLayout>
+      <ManualFeePixDialog onConfirmed={fetchSales}/>
       <div className="min-h-screen bg-[#fbfaf8] pb-[calc(5.35rem+env(safe-area-inset-bottom))] lg:hidden">
           <AdminMobileHeader
             title="Vendas"

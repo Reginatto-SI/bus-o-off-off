@@ -152,6 +152,8 @@ serve(async (req) => {
       );
     }
 
+    if (sale.payment_gateway === 'pagbank' && !sale.platform_fee_payment_id) throw new ManualFeeError('manual_pagbank_requires_managed_sale');
+
     if (sale.platform_fee_status === "paid") {
       // Blindagem anti-duplicidade: taxa já quitada não pode gerar nova cobrança.
       await logSaleOperationalEvent({

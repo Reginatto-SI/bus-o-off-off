@@ -995,6 +995,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
       const isBlock = activeTab === 'bloqueio';
       const isManual = activeTab === 'manual';
+      if(isManual && (company ?? activeCompany)?.payment_gateway === 'pagbank' && !(company ?? activeCompany)?.manual_fee_flow_enabled) { toast.error('Venda manual PagBank ainda não está habilitada para esta empresa.'); return; }
       const basePrice = isManual ? parseCurrencyInputBRL(unitPrice) : (selectedEvent?.unit_price ?? 0);
       const usesCatPricing = Boolean((selectedEvent as any)?.use_category_pricing) && categoryPricesMap.size > 0;
 

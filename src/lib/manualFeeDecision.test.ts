@@ -4,7 +4,7 @@ function database(socio:boolean,representative:boolean,failed=false) {
  const rows:any={socios_split:socio?[{id:'s',asaas_wallet_id_sandbox:'00000000-0000-0000-0000-000000000010'}]:[],representative_company_links:[{representative_id:'r',company_id:'c'}],representatives:{id:'r',asaas_wallet_id_sandbox:representative?'00000000-0000-0000-0000-000000000011':null}};
  return {from:(table:string)=>{const q:any={select:()=>q,eq:()=>q,maybeSingle:async()=>({data:table==='representative_company_links'?rows[table][0]:rows[table],error:null}),then:(r:any)=>Promise.resolve({data:rows[table],error:failed&&table==='socios_split'?{message:'offline'}:null}).then(r)};return q;}};
 }
-const company={id:'c',name:'Company',document_number:'12345678901',payment_gateway:'asaas',platform_fee_percent:6};
+const company={id:'c',name:'Company',email:'company@example.test',document_number:'12345678901',payment_gateway:'asaas',platform_fee_percent:6};
 describe('common manual economic decision',()=>{
  it.each([[false,false,60,0,0],[true,false,30,30,0],[false,true,40,0,20],[true,true,20,20,20]])('preserves PRD distribution %s/%s',async(s,r,m,ss,rr)=>{
   const d=await prepareManualFeeDecision(database(s as boolean,r as boolean),company,'sandbox',Array(10).fill(100),r?'r':null,()=> 'issuer');
