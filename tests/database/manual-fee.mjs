@@ -12,7 +12,9 @@ sql(`CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role;
 CREATE SCHEMA auth; CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS 'SELECT NULL::uuid';
 CREATE FUNCTION user_belongs_to_company(uuid,uuid) RETURNS boolean LANGUAGE sql AS 'SELECT false';
 CREATE TABLE companies(id uuid PRIMARY KEY,payment_gateway text DEFAULT 'asaas',payment_environment text DEFAULT 'sandbox',manual_reservation_ttl_minutes integer DEFAULT 60,platform_fee_percent numeric DEFAULT 6);
-CREATE TABLE sales(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),company_id uuid,status text,payment_gateway text,payment_environment text,sale_origin text,expected_ticket_count integer,platform_fee_status text,platform_fee_amount numeric,platform_fee_total numeric,platform_fee_paid_at timestamptz,payment_confirmed_at timestamptz,reservation_expires_at timestamptz,event_id uuid,trip_id uuid,boarding_location_id uuid,customer_name text,customer_cpf text,customer_phone text,quantity integer,unit_price numeric,gross_amount numeric,seller_id uuid,benefit_total_discount numeric);
+CREATE TABLE sales(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),company_id uuid,status text,payment_gateway text,payment_environment text,sale_origin text,expected_ticket_count integer,platform_fee_status text,platform_fee_amount numeric,platform_fee_total numeric,platform_net_amount numeric,split_snapshot_platform_fee_total numeric,split_snapshot_socio_fee_amount numeric,split_snapshot_platform_net_amount numeric,split_snapshot_source text,split_snapshot_captured_at timestamptz,platform_fee_paid_at timestamptz,payment_confirmed_at timestamptz,reservation_expires_at timestamptz,event_id uuid,trip_id uuid,boarding_location_id uuid,customer_name text,customer_cpf text,customer_phone text,quantity integer,unit_price numeric,gross_amount numeric,seller_id uuid,benefit_total_discount numeric);
+CREATE TABLE representatives(id uuid PRIMARY KEY);
+CREATE TABLE representative_commissions(company_id uuid,representative_id uuid,sale_id uuid UNIQUE,payment_environment text,base_amount numeric,commission_percent numeric,commission_amount numeric,status text,blocked_reason text);
 CREATE TABLE payment_attempts(sale_id uuid,gateway text,last_queried_at timestamptz);
 INSERT INTO companies(id) VALUES('${c}');
 INSERT INTO sales(id,company_id,status,payment_gateway,payment_environment,sale_origin) VALUES('${sale}','${c}','reservado','asaas','sandbox','admin_manual');`);
@@ -31,6 +33,7 @@ if(existsSync('drizzle/migrations/0004_atomic_manual_sales.sql')) {
  CREATE TABLE tickets(LIKE sale_passengers INCLUDING DEFAULTS); ALTER TABLE tickets ADD PRIMARY KEY(id); ALTER TABLE tickets ADD UNIQUE(trip_id,seat_id);`);
  sql(readFileSync('drizzle/migrations/0002_recover_partial_ticket_issuance.sql','utf8'));
  sql(readFileSync('drizzle/migrations/0004_atomic_manual_sales.sql','utf8'));
+ if(existsSync('drizzle/migrations/0005_manual_fee_ledger_and_recovery.sql'))sql(readFileSync('drizzle/migrations/0005_manual_fee_ledger_and_recovery.sql','utf8'));
  sql(`UPDATE companies SET manual_fee_flow_enabled=true;`);
  const saleBody={company_id:c,event_id:trip,trip_id:trip,boarding_location_id:trip,customer_name:'Test',customer_cpf:'12345678901',quantity:2,unit_price:100,gross_amount:200,benefit_total_discount:0,payment_gateway:'asaas',payment_environment:'sandbox',reservation_expires_at:'2030-01-01T00:00:00Z'};
  const item=(id,label)=>({id,sale_id:sale,company_id:c,trip_id:trip,seat_id:null,seat_label:label,passenger_name:'Test',passenger_cpf:'12345678901',passenger_phone:'',sort_order:0,ticket_type_id:null,ticket_type_name:null,ticket_type_price:null,benefit_program_id:null,benefit_program_name:null,benefit_type:null,benefit_value:null,original_price:100,discount_amount:0,final_price:100,benefit_applied:false,pricing_rule_version:'beneficio_checkout_v1'});
@@ -49,5 +52,12 @@ if(existsSync('drizzle/migrations/0004_atomic_manual_sales.sql')) {
  assert.deepEqual(results.sort(),['created','skipped_existing']);n++;console.log('PASS atomic concurrent release: exactly two tickets');
  assert.equal(sql(`SELECT count(*) FROM tickets WHERE sale_id='${registered}'`),'2');
  assert.equal(sql(`SELECT status FROM sales WHERE id='${registered}'`),'pago');
+ if(existsSync('drizzle/migrations/0005_manual_fee_ledger_and_recovery.sql')){
+  test('replayed confirmation does not duplicate financial allocations',()=>{sql(`SELECT finalize_manual_sale('${registeredOp}');`);assert.equal(sql(`SELECT count(*) FROM platform_fee_allocations WHERE operation_id='${registeredOp}'`),'1');});
+  test('uncertain expired reservation retains seats and evidence',()=>{sql(`UPDATE sales SET reservation_expires_at='2000-01-01' WHERE id='${sale}';`);assert.equal(sql(`SELECT expire_unpaid_manual_sale('${sale}');`),'f');assert.equal(sql(`SELECT status FROM sales WHERE id='${sale}'`),'reservado');});
+  test('pending/uncertain cancellation rejected even by a backend writer',()=>assert.throws(()=>sql(`UPDATE sales SET status='cancelado' WHERE id='${sale}';`)));
+  test('confirmed complete sales do not starve the recovery queue',()=>assert.equal(sql(`SELECT count(*) FROM manual_fee_recovery_candidates(20) WHERE sale_id='${registered}'`),'0'));
+ }
+
 }
 console.log(`${n} database cases passed.`);

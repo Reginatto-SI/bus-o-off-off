@@ -37,3 +37,26 @@ empresas habilitadas usam cadastro backend e comprovante de reserva sem QR liber
 11 cenários PostgreSQL e 19 testes relevantes passaram. A flag deve continuar
 DESLIGADA até completar/publicar as etapas seguintes; o SQL isolado não comprova
 schema completo nem homologação financeira.
+
+## Etapa 4 — confirmação, ledger e expiração comuns
+
+Migration 0005 registra destinações econômicas sem confundir recebimento técnico
+com receita Marketplace. Parcela de terceiro fica pendente de conciliação, mesmo
+quando split foi solicitado: NÃO executar repasse manual sem verificar se o
+provedor já liquidou. Comissão manual projeta o valor absoluto no ledger existente,
+sem alterar a RPC pública ou sobrescrever registros históricos conflitantes.
+Dados financeiros de vendas geridas são protegidos contra escrita pelo cliente.
+A reserva gerida incerta/pendente nunca é cancelada; prepared (nenhum envio) e
+terminal seguro podem expirar sob a mesma trava. Staging/evidências são preservados.
+O cleanup antigo preserva também reservas legadas com taxa pendente/falha; esses
+vínculos não são importados por suposição. Métodos públicos rejeitam cobrar valor
+integral de venda manual. Webhook Asaas, consulta, reconciliação e cron convergem
+para consulta autoritativa da operação e liberação integral. Readiness valida a
+wallet emissora contra /wallets antes das operações Asaas.
+
+Elegibilidade econômica é comum: identidade válida no ambiente em um gateway
+suportado preserva direito, ainda que o gateway escolhido não tenha destino técnico.
+Ausência comprovada não cria dívida. Wallet legado sem ambiente comprovado exige
+revisão, nunca complementação entre ambientes. 67 testes relevantes e 15 cenários
+PostgreSQL passaram antes do ajuste final de snapshots (a suíte completa será
+reexecutada ao concluir o conjunto). Flags continuam desligadas.

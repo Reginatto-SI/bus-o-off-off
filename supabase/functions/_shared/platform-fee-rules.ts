@@ -1,0 +1,177 @@
+
+export type PassengerFeeTier = {
+  maxUnitPrice: number | null;
+  percent: number;
+};
+
+export type PassengerFeeBreakdown = {
+  unitPrice: number;
+  percent: number;
+  uncappedFee: number;
+  cappedFee: number;
+  capApplied: boolean;
+};
+
+export type PlatformFeeEngineResult = {
+  passengerBreakdown: PassengerFeeBreakdown[];
+  totalFee: number;
+  totalUncappedFee: number;
+  capHits: number;
+};
+
+export type PlatformFeeDistribution = {
+  platformAmount: number;
+  socioAmount: number;
+  representativeAmount: number;
+  mode: "all_present" | "socio_only" | "representative_only" | "platform_only";
+};
+
+const TIERS: PassengerFeeTier[] = [
+  { maxUnitPrice: 100, percent: 6 },
+  { maxUnitPrice: 300, percent: 5 },
+  { maxUnitPrice: 600, percent: 4 },
+  { maxUnitPrice: null, percent: 3 },
+];
+
+export const PASSENGER_FEE_CAP_BRL = 25;
+export const PLATFORM_FEE_MINIMUM_TOTAL_BRL = 5;
+
+function roundCurrency(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function toCents(value: number): number {
+  return Math.round(Number(value || 0) * 100);
+}
+
+export function resolveTierPercent(unitPrice: number): number {
+  for (const tier of TIERS) {
+    if (tier.maxUnitPrice == null || unitPrice <= tier.maxUnitPrice) {
+      return tier.percent;
+    }
+  }
+  return 3;
+}
+
+/**
+ * Motor financeiro oficial do PRD 01.
+ * `unitPrices` é a lista de preços individuais: cada elemento representa uma
+ * passagem ou item. A faixa e o teto de R$ 25 são resolvidos dentro do cálculo
+ * de cada elemento; somente depois as taxas individuais são somadas e o mínimo
+ * operacional é aplicado ao total. O valor bruto da venda não participa da
+ * escolha da faixa nem do teto. Este motor termina em valores absolutos e não
+ * conhece o payload Asaas; o adaptador posterior usa `fixedValue` ou
+ * `totalFixedValue`. `amountToGrossPercent` permanece apenas para auditoria e
+ * campos legados, nunca para montar o novo split monetário.
+ */
+export function applyPlatformFeeMinimumTotal(total:number):number {
+ const amount=roundCurrency(total);
+ return amount>0&&amount<PLATFORM_FEE_MINIMUM_TOTAL_BRL?PLATFORM_FEE_MINIMUM_TOTAL_BRL:amount;
+}
+
+export function computeProgressiveFeeForPassengers(
+  unitPrices: number[],
+): PlatformFeeEngineResult {
+  const passengerBreakdown = unitPrices.map((rawUnitPrice) => {
+    const unitPrice = roundCurrency(Number(rawUnitPrice || 0));
+    const unitPriceCents = toCents(unitPrice);
+    const percent = resolveTierPercent(unitPrice);
+    const uncappedFeeCents = Math.round(unitPriceCents * (percent / 100));
+    const cappedFeeCents = Math.min(uncappedFeeCents, toCents(PASSENGER_FEE_CAP_BRL));
+
+    return {
+      unitPrice,
+      percent,
+      uncappedFee: roundCurrency(uncappedFeeCents / 100),
+      cappedFee: roundCurrency(cappedFeeCents / 100),
+      capApplied: cappedFeeCents < uncappedFeeCents,
+    } satisfies PassengerFeeBreakdown;
+  });
+
+  const totalUncappedFee = roundCurrency(
+    passengerBreakdown.reduce((sum, item) => sum + item.uncappedFee, 0),
+  );
+  const totalCappedFee = roundCurrency(
+    passengerBreakdown.reduce((sum, item) => sum + item.cappedFee, 0),
+  );
+  // PRD 01: o piso operacional é aplicado após somar as taxas por item
+  // com teto individual, e antes da divisão entre recebedores.
+  const totalFee = applyPlatformFeeMinimumTotal(totalCappedFee);
+
+  return {
+    passengerBreakdown,
+    totalFee,
+    totalUncappedFee,
+    capHits: passengerBreakdown.filter((item) => item.capApplied).length,
+  };
+}
+
+/**
+ * Distribuição oficial, aplicada somente depois de calcular a taxa total:
+ * sócio+representante = 1/3 cada; sócio = 1/2 cada; representante = 2/3
+ * plataforma + 1/3 representante; nenhum = 100% plataforma.
+ */
+export function distributePlatformFee(params: {
+  totalFee: number;
+  socioEligible: boolean;
+  representativeEligible: boolean;
+}): PlatformFeeDistribution {
+  const totalFeeCents = toCents(params.totalFee);
+  if (totalFeeCents <= 0) {
+    return {
+      platformAmount: 0,
+      socioAmount: 0,
+      representativeAmount: 0,
+      mode: params.socioEligible
+        ? (params.representativeEligible ? "all_present" : "socio_only")
+        : (params.representativeEligible ? "representative_only" : "platform_only"),
+    };
+  }
+
+  if (params.socioEligible && params.representativeEligible) {
+    const baseThirdCents = Math.floor(totalFeeCents / 3);
+    const representativeAmountCents = baseThirdCents;
+    const socioAmountCents = baseThirdCents;
+    const platformAmountCents = totalFeeCents - representativeAmountCents - socioAmountCents;
+    return {
+      platformAmount: roundCurrency(platformAmountCents / 100),
+      socioAmount: roundCurrency(socioAmountCents / 100),
+      representativeAmount: roundCurrency(representativeAmountCents / 100),
+      mode: "all_present",
+    };
+  }
+
+  if (params.socioEligible) {
+    const socioAmountCents = Math.floor(totalFeeCents / 2);
+    return {
+      platformAmount: roundCurrency((totalFeeCents - socioAmountCents) / 100),
+      socioAmount: roundCurrency(socioAmountCents / 100),
+      representativeAmount: 0,
+      mode: "socio_only",
+    };
+  }
+
+  if (params.representativeEligible) {
+    const representativeAmountCents = Math.floor(totalFeeCents / 3);
+    return {
+      platformAmount: roundCurrency((totalFeeCents - representativeAmountCents) / 100),
+      socioAmount: 0,
+      representativeAmount: roundCurrency(representativeAmountCents / 100),
+      mode: "representative_only",
+    };
+  }
+
+  return {
+    platformAmount: roundCurrency(totalFeeCents / 100),
+    socioAmount: 0,
+    representativeAmount: 0,
+    mode: "platform_only",
+  };
+}
+
+export function amountToGrossPercent(amount: number, grossAmount: number): number {
+  const gross = Number(grossAmount || 0);
+  if (!Number.isFinite(gross) || gross <= 0) return 0;
+  return roundCurrency((Number(amount || 0) / gross) * 100);
+}
+

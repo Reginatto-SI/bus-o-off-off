@@ -11,6 +11,8 @@ import {
 import { finalizeConfirmedPayment } from "../_shared/payment-finalization.ts";
 import { isPagbankError, syncPagbankSaleStatus } from "../_shared/pagbank/status-sync.ts";
 
+import {authenticateManualOperator,ManualFeeError} from "../_shared/manual-fee/auth.ts";
+import {readManualFeeOperation,handleManualFeeOperation} from "../_shared/manual-fee/runtime.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -121,6 +123,16 @@ serve(async (req) => {
         responseJson: { error: "Sale not found" },
       });
       return jsonResponse({ error: "Sale not found" }, 404);
+    }
+
+    if (sale.sale_origin && MANUAL_PLATFORM_FEE_ORIGINS.has(sale.sale_origin)) {
+      const managed = await readManualFeeOperation(supabaseAdmin, sale);
+      if (managed) {
+        const actor = await authenticateManualOperator(supabaseAdmin, req);
+        actor.assertCompany(sale.company_id);
+        const result = await handleManualFeeOperation(supabaseAdmin, sale, managed, false, name => Deno.env.get(name));
+        return jsonResponse({ paymentStatus: result.finalized ? 'pago' : sale.status, platformFeeStatus: result.operation.state }, 200);
+      }
     }
 
     const persistVerifyLog = async (params: {
@@ -1134,6 +1146,7 @@ serve(async (req) => {
 
     return jsonResponse({ paymentStatus: sale.status, asaas_status: asaasStatus }, 200);
   } catch (error) {
+    if (error instanceof ManualFeeError) return jsonResponse({ error: error.code }, error.status);
     logPaymentTrace("error", "verify-payment-status", "unexpected_error", {
       sale_id: saleIdFromRequest,
       error_message: error instanceof Error ? error.message : String(error),

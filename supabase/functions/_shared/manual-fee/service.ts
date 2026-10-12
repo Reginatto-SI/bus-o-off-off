@@ -13,7 +13,7 @@ export async function synchronizeManualFee(db:any,op:FeeOperation,adapter:FeeAda
   assertFeeFacts(op,facts);
   const state=facts.state==='paid'?'confirmed':facts.state==='terminal'?'terminal':facts.state==='indeterminate'?'indeterminate':'pending';
   const patch={external_id:facts.externalId,state,external_status:facts.rawStatus,presentation:{...facts.presentation,native_destinations:facts.nativeDestinations},last_queried_at:new Date().toISOString(),...(state==='confirmed'?{confirmed_at:new Date().toISOString()}:{})};
-  const saved=await db.from('platform_fee_operations').update(patch).eq('id',op.id).in('state',['creating','pending','indeterminate']).select('*').maybeSingle();
+  const saved=await db.from('platform_fee_operations').update(patch).eq('id',op.id).in('state',['prepared','creating','pending','indeterminate','terminal']).select('*').maybeSingle();
   if(saved.error)throw new ManualFeeError('manual_fee_persistence_failed',503);
   if(!saved.data){const current=await db.from('platform_fee_operations').select('*').eq('id',op.id).single();if(current.error)throw new ManualFeeError('manual_fee_read_failed',503);return {operation:current.data,paid:['confirmed','exempt'].includes(current.data.state)};}
   return {operation:saved.data,paid:state==='confirmed'};

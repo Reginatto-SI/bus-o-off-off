@@ -18,7 +18,7 @@ describe('manual fee operations',()=>{
  it.each(['amountCents','reference','issuerAccountId','environment','externalId'] as const)('rejects integrity mismatch %s',async key=>{const db=fakeDb();const wrong={...facts,[key]:key==='amountCents'?100000:''};await expect(synchronizeManualFee(db,operation,{create:async()=>wrong,query:async()=>wrong},true)).rejects.toThrow('manual_fee_integrity_mismatch');expect(db.row.state).not.toBe('confirmed');});
  it('charges 60 fee instead of 1000 received outside',async()=>{
   const bodies:any[]=[];
-  const request=vi.fn(async(url:string,options:any)=>{if(options.body)bodies.push(JSON.parse(options.body));return new Response(JSON.stringify(url.includes('/payments?')?{data:[]}:url.includes('/customers?')?{data:[{id:'customer'}]}:{id:'pay',externalReference:operation.reference,value:60,status:'PENDING'}),{status:200});});
+  const request=vi.fn(async(url:string,options:any)=>{if(options.body)bodies.push(JSON.parse(options.body));return new Response(JSON.stringify(url.includes('/wallets/')?{data:[{id:'wallet'}]}:url.includes('/payments?')?{data:[]}:url.includes('/customers?')?{data:[{id:'customer'}]}:{id:'pay',externalReference:operation.reference,value:60,status:'PENDING'}),{status:200});});
   const adapter=asaasFeeAdapter({baseUrl:'https://synthetic.test',apiKey:'synthetic',issuerAccountId:'wallet',environment:'sandbox',fetch:request as any});await adapter.create(operation);expect(bodies).toHaveLength(1);expect(bodies[0].value).toBe(60);expect(bodies[0].billingType).toBe('PIX');
  });
 });
