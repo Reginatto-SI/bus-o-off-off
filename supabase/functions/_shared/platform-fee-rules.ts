@@ -174,4 +174,3 @@ export function amountToGrossPercent(amount: number, grossAmount: number): numbe
   if (!Number.isFinite(gross) || gross <= 0) return 0;
   return roundCurrency((Number(amount || 0) / gross) * 100);
 }
-

@@ -1067,7 +1067,9 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
           platformFeeStatus: data.platform_fee_status, platformFeeAmount: data.platform_fee_amount });
         const receipts = (data.receipt_items ?? []).map((p: any) => {
           const ticket = { ...p, sale_id: data.sale_id, qr_code_token: p.qr_code_token ?? '', boarding_status: 'pendente' } as TicketRecord;
-          return { ticket, ticketCardData: { ...buildTicketCardData(ticket), saleStatus: data.status,
+          const price=Number(p.final_price??0);const breakdown=calculateFees(price,p.trip_id===selectedTripId?(data.fee_rules??[]):[]);
+          return { ticket, ticketCardData: { ...buildTicketCardData(ticket), totalPaid:breakdown.unitPriceWithFees,unitPrice:price,
+            fees:breakdown.fees.map(f=>({name:f.name,amount:f.amount})),saleStatus: data.status,
             purchaseConfirmedAt: data.status === 'pago' ? new Date().toISOString() : null } };
         });
         setConfirmationData(receipts);

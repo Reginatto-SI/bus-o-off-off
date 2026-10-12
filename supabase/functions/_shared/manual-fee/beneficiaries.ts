@@ -8,7 +8,7 @@ export async function resolveManualBeneficiaries(db:any,companyId:string,environ
  const eligible=(row:any)=>validAsaas(row?.[fields[0]])||validPagbank(row?.[fields[1]]);
  const socios=await db.from('socios_split').select(`id,asaas_wallet_id,${fields.join(',')}`);
  if(socios.error)throw new ManualFeeError('manual_beneficiaries_unresolved',503);
- if((socios.data??[]).some((r:any)=>r.asaas_wallet_id&&!fields.some(f=>r[f])))throw new ManualFeeError('manual_beneficiaries_environment_unresolved');
+ if((socios.data??[]).some((r:any)=>validAsaas(r.asaas_wallet_id)&&!fields.some(f=>r[f])))throw new ManualFeeError('manual_beneficiaries_environment_unresolved');
  const active=(socios.data??[]).filter(eligible);
  if(active.length>1)throw new ManualFeeError('manual_beneficiaries_ambiguous');
  let representative=null;

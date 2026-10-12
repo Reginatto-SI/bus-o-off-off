@@ -106,4 +106,3 @@ export function resolveBestBenefitForPassengerPrice(
     pricingRuleVersion: BENEFIT_PRICING_RULE_VERSION,
   };
 }
-

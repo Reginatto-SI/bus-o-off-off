@@ -1,5 +1,6 @@
 import {readManualFeeOperation,handleManualFeeOperation} from "../_shared/manual-fee/runtime.ts";
 import {authenticateManualPagbankNotification} from "../_shared/manual-fee/notification.ts";
+import {ManualFeeError} from "../_shared/manual-fee/auth.ts";
 // @ts-nocheck — arquivo Deno (edge function).
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Webhook PagBank (separado do Asaas). Fluxo:
@@ -57,7 +58,7 @@ Deno.serve(async (req) => {
       if (manualSale.error) return respond(503,{error:'manual_sale_unavailable'});
       const result = await handleManualFeeOperation(supabaseAdmin,manualSale.data,match.data,false,name=>Deno.env.get(name));
       return respond(200,{received:true,paymentStatus:result.finalized?'pago':manualSale.data.status});
-    } catch (e) { return respond(e?.status??503,{error:e?.code??'manual_fee_reconciliation_failed'}); }
+    } catch (e) { return e instanceof ManualFeeError ? respond(e.status,{error:e.code}) : respond(503,{error:'manual_fee_reconciliation_failed'}); }
   }
   const saleId = referenceId && UUID_RE.test(referenceId) ? referenceId : null;
 
