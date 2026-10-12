@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 import { getTripSeatOccupancyRpc } from '@/lib/tripSeatOccupancyRpc';
@@ -268,6 +268,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
   // Guardamos apenas o mínimo da venda recém-criada para reutilizar o checkout da taxa
   // no comprovante final sem precisar recriar regra financeira no frontend.
   const [createdSaleSummary, setCreatedSaleSummary] = useState<CreatedSaleSummary | null>(null);
+  const manualRequestKey = useRef(crypto.randomUUID());
   const [payingPlatformFee, setPayingPlatformFee] = useState(false);
   // activeTicketIndex removido — agora PassengerTicketList gerencia internamente
   const [eventFees, setEventFees] = useState<EventFeeInput[]>([]);
@@ -315,6 +316,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
   useEffect(() => {
     if (open) {
       setStep(1);
+      manualRequestKey.current = crypto.randomUUID();
       setActiveTab('manual');
       setSelectedEventId('');
       setSelectedTripId('');
@@ -1045,6 +1047,31 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
       if (activeTab === 'reserva' && !manualReservationPolicy.allowManualReservations) {
         toast.error('Reservas manuais estão desabilitadas para esta empresa em /admin/empresa.');
+        return;
+      }
+
+      if (isManual && (company ?? activeCompany)?.manual_fee_flow_enabled) {
+        const { data, error } = await supabase.functions.invoke('register-manual-sale', { body: {
+          request_key: manualRequestKey.current, company_id: activeCompanyId,
+          event_id: selectedEventId, trip_id: selectedTripId,
+          return_trip_id: (mandatoryReturnPolicy || includeReturnTrip) ? selectedReturnTripId || null : null,
+          boarding_location_id: selectedBoarding?.boarding_location_id ?? selectedBoardingId,
+          seller_id: selectedSellerId && selectedSellerId !== '__none__' ? selectedSellerId : null,
+          unit_price: basePrice, receipt_method: paymentMethod,
+          passengers: passengers.map(p => ({ name: p.name, cpf: p.cpf, phone: p.phone,
+            seat_id: p.seatId || null, seat_label: p.seatLabel, ticket_type_id: p.ticketTypeId })),
+        }});
+        if (error || !data?.sale_id) throw new Error(data?.error || 'Não foi possível registrar a venda manual.');
+        setCreatedSaleSummary({ id: data.sale_id, status: data.status,
+          platformFeeStatus: data.platform_fee_status, platformFeeAmount: data.platform_fee_amount });
+        const receipts = (data.receipt_items ?? []).map((p: any) => {
+          const ticket = { ...p, sale_id: data.sale_id, qr_code_token: p.qr_code_token ?? '', boarding_status: 'pendente' } as TicketRecord;
+          return { ticket, ticketCardData: { ...buildTicketCardData(ticket), saleStatus: data.status,
+            purchaseConfirmedAt: data.status === 'pago' ? new Date().toISOString() : null } };
+        });
+        setConfirmationData(receipts);
+        setStep(4);
+        toast.success(data.status === 'pago' ? 'Venda isenta finalizada com passagens emitidas.' : 'Reserva registrada. Quite a taxa para liberar as passagens.');
         return;
       }
 

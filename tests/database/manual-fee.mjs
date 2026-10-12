@@ -25,4 +25,29 @@ test('context and amount immutable',()=>assert.throws(()=>sql('UPDATE platform_f
 const claims=await Promise.all([parallel(`SELECT claim_manual_fee_creation('${op}');`),parallel(`SELECT claim_manual_fee_creation('${op}');`)]);assert.deepEqual(claims.sort(),['f','t']);n++;console.log('PASS one creation owner across real connections');
 test('crashed creator cannot claim another POST',()=>assert.equal(sql(`SELECT claim_manual_fee_creation('${op}');`),'f'));
 test('wrong company rejected',()=>assert.throws(()=>sql(`INSERT INTO platform_fee_operations(sale_id,company_id,gateway,environment,issuer_account_id,amount_cents,reference,idempotency_key,snapshot) VALUES('${sale}','${sale}','asaas','sandbox','issuer',6000,'other','other','{}');`)));
+
+if(existsSync('drizzle/migrations/0004_atomic_manual_sales.sql')) {
+ sql(`CREATE TABLE sale_passengers(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),sale_id uuid REFERENCES sales(id),company_id uuid,trip_id uuid,seat_id uuid,seat_label text,passenger_name text,passenger_cpf text,passenger_phone text,sort_order integer DEFAULT 0,ticket_type_id uuid,ticket_type_name text,ticket_type_price numeric,benefit_program_id uuid,benefit_program_name text,benefit_type text,benefit_value numeric,original_price numeric,discount_amount numeric,final_price numeric,benefit_applied boolean,pricing_rule_version text);
+ CREATE TABLE tickets(LIKE sale_passengers INCLUDING DEFAULTS); ALTER TABLE tickets ADD PRIMARY KEY(id); ALTER TABLE tickets ADD UNIQUE(trip_id,seat_id);`);
+ sql(readFileSync('drizzle/migrations/0002_recover_partial_ticket_issuance.sql','utf8'));
+ sql(readFileSync('drizzle/migrations/0004_atomic_manual_sales.sql','utf8'));
+ sql(`UPDATE companies SET manual_fee_flow_enabled=true;`);
+ const saleBody={company_id:c,event_id:trip,trip_id:trip,boarding_location_id:trip,customer_name:'Test',customer_cpf:'12345678901',quantity:2,unit_price:100,gross_amount:200,benefit_total_discount:0,payment_gateway:'asaas',payment_environment:'sandbox',reservation_expires_at:'2030-01-01T00:00:00Z'};
+ const item=(id,label)=>({id,sale_id:sale,company_id:c,trip_id:trip,seat_id:null,seat_label:label,passenger_name:'Test',passenger_cpf:'12345678901',passenger_phone:'',sort_order:0,ticket_type_id:null,ticket_type_name:null,ticket_type_price:null,benefit_program_id:null,benefit_program_name:null,benefit_type:null,benefit_value:null,original_price:100,discount_amount:0,final_price:100,benefit_applied:false,pricing_rule_version:'beneficio_checkout_v1'});
+ const items=[item('00000000-0000-0000-0000-000000000010','A'),item('00000000-0000-0000-0000-000000000011','B')];
+ const operation={gateway:'asaas',environment:'sandbox',issuer_account_id:'issuer',amount_cents:1200,snapshot:{allocations:[{kind:'marketplace',beneficiary_id:'issuer',destination:'issuer',amount_cents:1200}]}};
+ const key='00000000-0000-0000-0000-000000000020';
+ const register=(ps=items,k=key)=>`SELECT register_manual_sale('${k}','hash','${c}','${JSON.stringify(saleBody)}','${JSON.stringify(ps)}','${JSON.stringify(operation)}');`;
+ const registered=sql(register());
+ test('registration retry keeps sale and complete staging',()=>{assert.equal(sql(register()),registered);assert.equal(sql(`SELECT count(*) FROM sale_passengers WHERE sale_id='${registered}'`),'2');});
+ test('invalid second item rolls back sale and first item',()=>{const broken=[{...items[0],id:'00000000-0000-0000-0000-000000000012'},{...items[1],id:'not-a-uuid'}];assert.throws(()=>sql(register(broken,'00000000-0000-0000-0000-000000000021')));assert.equal(sql('SELECT count(*) FROM manual_sale_requests'),'1');});
+ const registeredOp=sql(`SELECT id FROM platform_fee_operations WHERE sale_id='${registered}'`);
+ test('unpaid sale cannot issue',()=>assert.throws(()=>sql(`SELECT finalize_manual_sale('${registeredOp}');`)));
+ sql(`UPDATE platform_fee_operations SET state='confirmed',external_id='fee_1',confirmed_at=now() WHERE id='${registeredOp}';`);
+ test('staging tamper fails closed and paid proof remains',()=>{sql(`UPDATE sale_passengers SET final_price=999 WHERE sale_id='${registered}' AND seat_label='A';`);assert.throws(()=>sql(`SELECT finalize_manual_sale('${registeredOp}');`));assert.equal(sql(`SELECT status FROM sales WHERE id='${registered}'`),'reservado');assert.equal(sql(`SELECT state FROM platform_fee_operations WHERE id='${registeredOp}'`),'confirmed');sql(`UPDATE sale_passengers SET final_price=100 WHERE sale_id='${registered}' AND seat_label='A';`);});
+ const results=await Promise.all([parallel(`SELECT finalize_manual_sale('${registeredOp}');`),parallel(`SELECT finalize_manual_sale('${registeredOp}');`)]);
+ assert.deepEqual(results.sort(),['created','skipped_existing']);n++;console.log('PASS atomic concurrent release: exactly two tickets');
+ assert.equal(sql(`SELECT count(*) FROM tickets WHERE sale_id='${registered}'`),'2');
+ assert.equal(sql(`SELECT status FROM sales WHERE id='${registered}'`),'pago');
+}
 console.log(`${n} database cases passed.`);
