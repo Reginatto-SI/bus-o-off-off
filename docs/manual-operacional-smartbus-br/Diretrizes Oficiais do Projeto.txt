@@ -92,6 +92,18 @@ Regras:
 - quando exigido pelo contrato do gateway, o SmartBus consulta a cobrança/order no provedor antes de finalizar
 - verificação manual ou polling pode ser fallback; todos os caminhos convergem para a mesma finalização central
 
+### Diretriz obrigatória — venda manual com fluxo único para todos os gateways
+
+- A venda manual em `/admin/vendas` tem **um único comportamento de negócio**, tomando como referência funcional o fluxo já existente com Asaas. Não criar comportamento diferente para PagBank ou provedores futuros.
+- O operador registra a venda e o recebimento presencial dos passageiros; o gateway cobra **somente a taxa SmartBus devida pela empresa**, sem cobrar novamente o valor das passagens recebido presencialmente.
+- Preservar em todos os gateways as mesmas regras de reserva e ocupação, comprovante de reserva, cálculo e isenção da taxa, confirmação, integridade das passagens, emissão, liberação para embarque, expiração e recuperação.
+- Quando houver taxa devida, a liberação depende da confirmação válida da taxa e da integridade da emissão, respeitando as isenções oficiais e a experiência atual do Asaas.
+- Toda mudança nessas regras deve ser feita na lógica compartilhada e valer **para todos os gateways**.
+- Cada integração trata apenas diferenças externas: credenciais, conta emissora, comunicação, cobrança, confirmação, split técnico e liquidação.
+- A divisão econômica entre Marketplace, sócio e representante segue os PRDs oficiais. Ausência de split nativo não extingue parcelas devidas.
+- Preservar autorização do operador, isolamento por `company_id`, contexto de gateway/ambiente e cobranças históricas.
+- Esta diretriz não declara a venda manual PagBank implementada ou homologada em Produção.
+
 ---
 
 ## 7. AMBIENTES (CRÍTICO)
