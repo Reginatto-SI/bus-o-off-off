@@ -17,3 +17,12 @@ implantação, mudança de credenciais ou escrita no banco conectado.
 Etapas seguintes: operação privada/idempotência, cadastro/finalização atômicos,
 ledger/conciliação/expiração, adapter PagBank Sandbox e piloto controlado.
 A migration 0002 e o checkout público permanecem preservados.
+
+## Etapa 2 — operação privada e adapter Asaas
+
+Migration 0003 aditiva cria operação privada, contexto imutável e claim de criação
+único. Flags por empresa começam desligadas. O adapter Asaas cobra somente a taxa;
+a mesma operação serve a retries/consulta. Criação incerta nunca libera outro POST.
+O contrato normalizado valida valor, referência, conta, ambiente e moeda antes de
+persistir confirmação. Nenhuma tabela pública payment_attempts foi alterada.
+Os módulos serão conectados na etapa de cadastro/finalização, ainda sem ativação.
