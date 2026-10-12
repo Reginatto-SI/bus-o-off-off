@@ -265,7 +265,7 @@ serve(async (req) => {
     }
 
     // Ramo PagBank (aditivo): gateway congelado na venda decide; Asaas segue abaixo inalterado.
-    if (sale.payment_gateway === "pagbank") {
+    if (sale.payment_gateway === "pagbank" && !sale.platform_fee_payment_id) {
       try {
         const sync = await syncPagbankSaleStatus(supabaseAdmin, { sale, source: "verify-payment-status", eventType: "verify_payment_status" });
         if (sync.state === "paid") {
@@ -326,7 +326,7 @@ serve(async (req) => {
       let paymentContext;
       try {
         paymentContext = resolvePaymentContext({
-          mode: "verify",
+          mode: "platform_fee",
           sale,
           company,
         });

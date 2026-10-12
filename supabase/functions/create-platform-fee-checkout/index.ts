@@ -26,6 +26,8 @@ import {
   type CheckoutPassengerSnapshotInput,
 } from "../_shared/checkout-financial-integrity.ts";
 
+import { authenticateManualOperator, ManualFeeError } from "../_shared/manual-fee/auth.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -113,6 +115,8 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
+    const operator = await authenticateManualOperator(supabaseAdmin, req);
+
     const { data: sale, error: saleError } = await supabaseAdmin
       .from("sales")
       .select("*, event:events(name)")
@@ -125,6 +129,8 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    operator.assertCompany(sale.company_id);
 
     const isManualOrigin = !sale.sale_origin || MANUAL_SALE_ORIGINS.has(sale.sale_origin);
     if (!isManualOrigin) {
@@ -795,6 +801,7 @@ serve(async (req) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
+    if (error instanceof ManualFeeError) return new Response(JSON.stringify({ error: error.code }), { status: error.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     logPaymentTrace("error", "create-platform-fee-checkout", "unexpected_error", {
       error_message: error instanceof Error ? error.message : String(error),
     });

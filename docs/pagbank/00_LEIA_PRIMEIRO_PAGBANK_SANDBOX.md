@@ -927,3 +927,11 @@ Validação após incorporar main: 394 testes em 36 arquivos e TypeScript do app
 aprovados; conferência byte a byte/SHA-256 e `git diff --check` aprovados.
 Os testes SQL anteriores continuam aplicáveis porque o SQL funcional não mudou;
 nenhuma migration foi executada novamente nesta etapa.
+
+## 25. Venda manual multi-gateway — início autorizado (2026-10-12)
+
+Plano aprovado para Draft PRs por etapas. Etapa 1 protege criação da taxa com
+sessão/gerente da empresa ou developer e corrige conta emissora na consulta manual
+Asaas. Regras financeiras e payload mantidos; testes locais de autorização e
+caracterização: 9 aprovados. Nenhum deploy, banco externo, pagamento ou credencial
+alterado. Detalhes em VENDA_MANUAL_MULTIGATEWAY.md. Produção PagBank bloqueada.
