@@ -57,6 +57,16 @@ A regra de taxa, divisão e ledger deve ser única.
 
 O que muda entre gateways é apenas a forma de cobrança, confirmação e liquidação externa.
 
+### 3.1 Venda manual: paridade funcional obrigatória
+
+A venda manual em `/admin/vendas` deve seguir **o mesmo fluxo de negócio em todos os gateways**. O funcionamento atual com Asaas é a referência funcional, incluindo reserva de poltronas, comprovante de reserva, cobrança da taxa, confirmação, emissão e liberação das passagens. Não criar variantes operacionais por provedor.
+
+Se a empresa recebeu presencialmente o valor das passagens, o gateway cobra **somente a taxa SmartBus**, nunca novamente o valor recebido pela empresa. Cálculo, isenção, snapshot, divisão econômica, confirmação, expiração e recuperação pertencem à lógica central compartilhada.
+
+Toda alteração dessas regras deve alcançar Asaas, PagBank e gateways futuros. Adapters tratam somente particularidades externas de cobrança, autenticação, consulta, confirmação e liquidação. Split técnico não modifica a distribuição econômica dos PRDs.
+
+A cobrança manual PagBank requer implementação e homologação próprias. Esta diretriz não habilita Produção.
+
 ---
 
 ## 4. Conceitos principais
