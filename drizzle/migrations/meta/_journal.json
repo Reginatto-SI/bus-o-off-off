@@ -43,6 +43,13 @@
       "when": 1791816002000,
       "tag": "0005_manual_fee_ledger_and_recovery",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791816003000,
+      "tag": "0006_manual_fee_pilot_guards",
+      "breakpoints": true
     }
   ]
 }

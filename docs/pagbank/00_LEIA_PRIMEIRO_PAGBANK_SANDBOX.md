@@ -935,3 +935,54 @@ sessão/gerente da empresa ou developer e corrige conta emissora na consulta man
 Asaas. Regras financeiras e payload mantidos; testes locais de autorização e
 caracterização: 9 aprovados. Nenhum deploy, banco externo, pagamento ou credencial
 alterado. Detalhes em VENDA_MANUAL_MULTIGATEWAY.md. Produção PagBank bloqueada.
+
+## 26. Venda manual multi-gateway — implementação em Drafts (2026-10-12)
+
+Plano implementado por etapas cumulativas: Drafts #772, #774, #775, #776, #777
+e branch final `codex/manual-fee-pilot-validation`. Base inicial `6051424e`;
+revalidada a main `1271ddd3`/PR documental #773, que reforça a regra comum manual.
+Detalhes, arquivos, gates e procedimento de recuperação em
+[VENDA_MANUAL_MULTIGATEWAY.md](./VENDA_MANUAL_MULTIGATEWAY.md).
+
+O fluxo novo, atrás de flags desligadas, registra venda/staging/operação atomicamente,
+calcula taxa/benefícios no backend com regras compartilhadas, cobra somente a taxa
+pela conta da plataforma e congela gateway/ambiente/conta/snapshot. Claim exclusivo
+e consulta por referência impedem recriação após resultado incerto. Confirmação
+financeira/ledger persistem antes da tentativa de emissão; liberação e emissão
+integral usam uma transação com a RPC 0002. Isenção é derivada no backend e auditada.
+Direitos de terceiros são preservados em conciliação sem transferências automáticas.
+
+Migrations novas 0003–0006 são propostas/versionadas; **nenhuma foi aplicada no
+SmartBus pelo Codex**. 0002 e seu snapshot permanecem byte a byte iguais à main;
+SHA-256 SQL continua `f467e8c7553b9a8b4fab6b61989fc31aeb7381bf019a8244fb59f4600155ce96`.
+Entradas históricas do journal, incluindo data/idx/tag da 0002, foram preservadas;
+apenas entradas novas foram acrescentadas.
+
+Evidência local final: **443 testes Vitest em 41 arquivos**, TypeScript do app,
+build Vite (aviso de tamanho de bundles) e Deno dos nove consumidores aprovados.
+**33 cenários PostgreSQL 16 isolado** do fluxo manual e **25 cenários** da emissão
+compartilhada anterior aprovados. Venda simulada de 10 itens de R$ 100 emitiu 10
+tickets e taxa de R$ 60. Venda física com 1/2 tickets recuperou 2/2 sob duas
+conexões concorrentes com os triggers físicos reais do repositório. Falha preserva
+prova financeira/staging; reserva física incerta vencida continua ocupada.
+
+PagBank manual é um contexto **direto da plataforma**, exclusivo Sandbox, distinto
+do Connect público do vendedor. Modelo candidato documentado: x-authenticity-token,
+SHA-256(token + hífen + corpo original em texto), um único token da conta/plataforma.
+Assinatura inválida permanece 401; webhook nunca substitui GET autoritativo.
+**Não comprovado em Sandbox real neste novo contexto**, inclusive captura/encoding
+no runtime publicado e conta/token corretos. O 401 Connect público e sua investigação
+pendente não foram corrigidos nem enfraquecidos por esta tarefa.
+
+Próximo passo mínimo: revisar Drafts em ordem, conferir schema completo Sandbox e
+contratos reais Asaas; autorizar migrations/publicação coordenada dos nove
+consumidores e frontend; depois executar piloto Asaas Sandbox. PagBank manual exige
+homologação própria antes de habilitar sua flag Sandbox. Cron informado pelo
+responsável continua em **5 minutos**, sem alteração; fila manual não tem corte de
+24 horas. Vínculos históricos não foram importados por suposição.
+
+Sem deploy, merge de PR, pagamento externo, edição de banco/credenciais ou ativação
+de flags nesta implementação. Produção PagBank permanece bloqueada. Não repetir
+OAuth, conexão, GET Split/Charge, PIX/cartão básicos já comprovados. Recuperar por
+correção adiante, preservando dados e IDs: não restaurar índices antigos/apagar
+passagens/recriar cobranças para simular rollback.

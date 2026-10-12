@@ -13,6 +13,7 @@ describe('common manual economic decision',()=>{
  it('absence creates no obligation to absent receivers',async()=>{const d=await prepareManualFeeDecision(database(false,false),company,'sandbox',[100],null,()=> 'issuer');expect(d.snapshot.allocations).toHaveLength(1);expect(d.snapshot.allocations[0].kind).toBe('marketplace');});
  it('query failure does not silently redistribute',async()=>{await expect(prepareManualFeeDecision(database(false,false,true),company,'sandbox',[100],null,()=> 'issuer')).rejects.toThrow('manual_beneficiaries_unresolved');});
  it('exemption does not apply minimum or require gateway secrets',async()=>{const d=await prepareManualFeeDecision(database(false,false),{...company,platform_fee_percent:0},'sandbox',[100],null,()=>undefined);expect(d.amount_cents).toBe(0);expect(d.snapshot.allocations).toEqual([]);});
+ it('exemption has a backend-derived audit reason',async()=>{const d=await prepareManualFeeDecision(database(false,false),company,'sandbox',[0],null,()=>undefined);expect(d.snapshot.exemption_reason).toBe('zero_financial_base');});
  it('eligible wallet in same environment remains owed when chosen gateway cannot settle',async()=>{
   const d=await prepareManualFeeDecision(database(true,true),{...company,payment_gateway:'pagbank',manual_fee_pagbank_sandbox_enabled:true},'sandbox',[100],'r',()=> 'issuer');
   expect(d.snapshot.distribution).toMatchObject({platformAmount:2,socioAmount:2,representativeAmount:2});

@@ -54,8 +54,12 @@ serve(async (req) => {
         const op = await readManualFeeOperation(supabaseAdmin, manualSale.data);
         if (op) {
           const actor = await authenticateManualOperator(supabaseAdmin, req); actor.assertCompany(manualSale.data.company_id);
+          const before = await supabaseAdmin.from('tickets').select('id',{count:'exact',head:true}).eq('sale_id',saleId).eq('company_id',manualSale.data.company_id);
+          if (before.error) throw new Error('manual_ticket_count_failed');
           const result = await handleManualFeeOperation(supabaseAdmin, manualSale.data, op, false, name => Deno.env.get(name));
-          results.push({sale_id:saleId,state:result.finalized?"reconciled":"not_eligible",message:result.finalized?"Emissão manual integral":"Taxa ainda não confirmada"});
+          const after = await supabaseAdmin.from('tickets').select('id',{count:'exact',head:true}).eq('sale_id',saleId).eq('company_id',manualSale.data.company_id);
+          if (after.error) throw new Error('manual_ticket_count_failed');
+          results.push({sale_id:saleId,state:result.finalized?"reconciled":"not_eligible",message:result.finalized?"Emissão manual integral":"Taxa ainda não confirmada",tickets_before:before.count??0,tickets_after:after.count??0,payment_environment:op.environment});
           continue;
         }
       }

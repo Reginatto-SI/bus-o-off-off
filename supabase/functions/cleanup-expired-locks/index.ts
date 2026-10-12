@@ -242,6 +242,10 @@ serve(async (req) => {
 
       // 3.0) PagBank com cobrança existente: consulta oficial antes de cancelar (fail-closed).
       if (cancellableSaleIds.length > 0) {
+        const managed = await supabaseAdmin.from('platform_fee_operations').select('sale_id').in('sale_id',cancellableSaleIds);
+        if (managed.error) throw new Error('manual_fee_protection_unavailable');
+        const managedIds = new Set((managed.data??[]).map((o:any)=>o.sale_id));
+        cancellableSaleIds = cancellableSaleIds.filter(id=>!managedIds.has(id));
         const preserved = await pagbankSalesToPreserve(supabaseAdmin, cancellableSaleIds, (d) =>
           logCleanup("info", { execution_id: executionId, flow: "checkout_publico", ...d }));
         cancellableSaleIds = cancellableSaleIds.filter((id) => !preserved.has(id));
@@ -584,7 +588,9 @@ serve(async (req) => {
       });
     }
 
-    const managedIds = await supabaseAdmin.from("platform_fee_operations").select("sale_id");
+    const managedIds = expiredManualReservations?.length
+      ? await supabaseAdmin.from("platform_fee_operations").select("sale_id").in('sale_id',expiredManualReservations.map(s=>s.id))
+      : {data:[],error:null};
     if (managedIds.error) throw new Error("manual_fee_protection_unavailable");
     const protectedManualIds = new Set((managedIds.data ?? []).map((o: any) => o.sale_id));
     const legacyExpiredManual = (expiredManualReservations ?? []).filter(s => !protectedManualIds.has(s.id));

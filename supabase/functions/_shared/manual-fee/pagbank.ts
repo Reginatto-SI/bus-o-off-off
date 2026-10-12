@@ -9,11 +9,13 @@ export function pagbankFeeAdapter(params:{environment:string;accessToken:string;
  const check=(op:FeeOperation)=>{if(params.environment!=='sandbox'||op.environment!=='sandbox'||op.issuer_account_id!==params.issuerAccountId)throw new ManualFeeError('manual_pagbank_context_rejected');};
  const call=(method:'GET'|'POST',path:string,body?:unknown,key?:string)=>request({environment:'sandbox',accessToken:params.accessToken,method,path,body,idempotencyKey:key});
  const facts=(op:FeeOperation,data:any):FeeFacts=>{
+  if((data.charges?.length??0)>1||(data.qr_codes?.length??0)>1)throw new ManualFeeError('manual_fee_order_ambiguous');
   const art=extractPagbankPixArtifacts(data);const charge=data.charges?.[0];const paid=charge?.status==='PAID';
   if(paid&&charge.amount?.currency!=='BRL')throw new ManualFeeError('manual_fee_currency_mismatch');
   const amount=charge?.amount??data.qr_codes?.[0]?.amount;
   return {externalId:data.id,reference:data.reference_id,amountCents:amount?.value,currency:'BRL',environment:'sandbox',issuerAccountId:params.issuerAccountId,
-   state:paid?'paid':charge?.status==='CANCELED'?'terminal':'pending',rawStatus:art.rawStatus??'WAITING',nativeDestinations:[],
+   // A canceled Charge alone does not prove that the Order/PIX cannot be paid.
+   state:paid?'paid':charge?.status==='CANCELED'?'indeterminate':'pending',rawStatus:art.rawStatus??'WAITING',nativeDestinations:[],
    presentation:{pix:{qr_text:art.qrText,qr_image_url:art.qrImageUrl,expires_at:art.expiresAt,amount_cents:op.amount_cents}}};
  };
  const query=async(op:FeeOperation)=>{

@@ -23,7 +23,7 @@ export function asaasFeeAdapter(params:{baseUrl:string;apiKey:string;issuerAccou
   issuerAccountId:params.issuerAccountId, environment:params.environment,
   state:['CONFIRMED','RECEIVED','RECEIVED_IN_CASH'].includes(data.status)?'paid':data.deleted===true||['CANCELLED','DELETED'].includes(data.status)?'terminal':'pending',
   rawStatus:data.status??'UNKNOWN', presentation:{url:data.invoiceUrl??null},
-  nativeDestinations:sent??(Array.isArray(data.split)?data.split.map((s:any)=>s.walletId):[]),
+  nativeDestinations:sent??(Array.isArray(data.split)?data.split.map((s:any)=>s.walletId):op.presentation?.native_destinations??[]),
  });
  const query=async(op:FeeOperation)=>{
   await check(op);

@@ -10,7 +10,7 @@ export async function prepareManualFeeDecision(db:any,company:any,environment:'s
  const gateway=company.payment_gateway;
  if(!['asaas','pagbank'].includes(gateway))throw new ManualFeeError('manual_gateway_unsupported');
  if(gateway==='pagbank'&&(environment!=='sandbox'||!company.manual_fee_pagbank_sandbox_enabled))throw new ManualFeeError('manual_pagbank_not_enabled');
- if(!amountCents)return {gateway,environment,issuer_account_id:'exempt',amount_cents:0,snapshot:{engine,is_exempt:true,allocations:[],customer:{name:company.name,document:''}}};
+ if(!amountCents)return {gateway,environment,issuer_account_id:'exempt',amount_cents:0,snapshot:{engine,is_exempt:true,exemption_reason:Number(company.platform_fee_percent??0)>0?'zero_financial_base':'company_platform_fee_disabled',allocations:[],customer:{name:company.name,document:''}}};
  const parties=await resolveManualBeneficiaries(db,company.id,environment,gateway,representativeId);
  const issuer=gateway==='asaas'?getSecret(getAsaasWalletSecretName(environment)):getSecret(`PAGBANK_MARKETPLACE_ACCOUNT_ID_${environment.toUpperCase()}`);
  if(!issuer)throw new ManualFeeError('manual_platform_issuer_missing');
