@@ -15,6 +15,13 @@
       "when": 1791634760310,
       "tag": "0001_pagbank_atomic_ticket_issuance",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791799668965,
+      "tag": "0002_recover_partial_ticket_issuance",
+      "breakpoints": true
     }
   ]
 }

@@ -2741,6 +2741,7 @@ export type Database = {
           customer_name: string
           customer_phone: string | null
           event_id: string
+          expected_ticket_count: number | null
           external_account_id: string | null
           gross_amount: number | null
           id: string
@@ -2794,6 +2795,7 @@ export type Database = {
           customer_name: string
           customer_phone?: string | null
           event_id: string
+          expected_ticket_count?: number | null
           external_account_id?: string | null
           gross_amount?: number | null
           id?: string
@@ -2847,6 +2849,7 @@ export type Database = {
           customer_name?: string
           customer_phone?: string | null
           event_id?: string
+          expected_ticket_count?: number | null
           external_account_id?: string | null
           gross_amount?: number | null
           id?: string
@@ -3614,6 +3617,7 @@ export type Database = {
           pricing_rule_version: string
           qr_code_token: string
           sale_id: string
+          sale_passenger_id: string | null
           seat_id: string | null
           seat_label: string
           ticket_number: string | null
@@ -3642,6 +3646,7 @@ export type Database = {
           pricing_rule_version?: string
           qr_code_token?: string
           sale_id: string
+          sale_passenger_id?: string | null
           seat_id?: string | null
           seat_label: string
           ticket_number?: string | null
@@ -3670,6 +3675,7 @@ export type Database = {
           pricing_rule_version?: string
           qr_code_token?: string
           sale_id?: string
+          sale_passenger_id?: string | null
           seat_id?: string | null
           seat_label?: string
           ticket_number?: string | null
@@ -4326,6 +4332,12 @@ export type Database = {
       }
       normalize_city_name: { Args: { input: string }; Returns: string }
       normalize_public_slug: { Args: { input_slug: string }; Returns: string }
+      pagbank_paid_sales_needing_tickets: {
+        Args: { p_limit?: number }
+        Returns: {
+          sale_id: string
+        }[]
+      }
       read_email_batch: {
         Args: { batch_size: number; queue_name: string; vt: number }
         Returns: {
