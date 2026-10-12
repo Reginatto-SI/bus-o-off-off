@@ -62,13 +62,27 @@ export async function recoverPendingPagbankSales(supabaseAdmin: any, log: (d: an
     .gte("created_at", since)
     .order("last_queried_at", { ascending: true, nullsFirst: true })
     .limit(200);
-  if (error || !attempts?.length) return 0;
-  const { data: sales } = await supabaseAdmin
-    .from("sales").select(SALE_COLUMNS)
-    .in("id", attempts.map((a: any) => a.sale_id))
-    .eq("payment_gateway", "pagbank")
-    .eq("status", "pendente_pagamento")
-    .limit(limit);
+  // Vendas já pagas com staging remanescente precisam de recuperação mesmo após 24h.
+  const { data: staged, error: stagedError } = await supabaseAdmin
+    .rpc("pagbank_paid_sales_needing_tickets", { p_limit: limit });
+  if (error || stagedError) return 0;
+  const paidIds = (staged ?? []).map((p: any) => p.sale_id);
+  const pendingIds = (attempts ?? []).map((a: any) => a.sale_id);
+  const paidResult = paidIds.length
+    ? await supabaseAdmin.from("sales").select(SALE_COLUMNS).in("id", paidIds)
+      .eq("payment_gateway", "pagbank").eq("status", "pago").limit(limit)
+    : { data: [], error: null };
+  const pendingResult = pendingIds.length
+    ? await supabaseAdmin.from("sales").select(SALE_COLUMNS).in("id", pendingIds)
+      .eq("payment_gateway", "pagbank").eq("status", "pendente_pagamento").limit(limit)
+    : { data: [], error: null };
+  if (paidResult.error || pendingResult.error) return 0;
+  const paid = (paidResult.data ?? []).filter((s: any) => s.status === "pago")
+    .sort((a: any, b: any) => paidIds.indexOf(a.id) - paidIds.indexOf(b.id));
+  // Reserve space for pending Orders too; problematic paid sales cannot starve them.
+  const paidLimit = pendingResult.data?.length ? Math.ceil(limit / 2) : limit;
+  const sales = [...paid.slice(0, paidLimit),
+    ...(pendingResult.data ?? []).filter((s: any) => s.status === "pendente_pagamento").slice(0, limit - Math.min(paid.length, paidLimit))];
   let finalized = 0;
   for (const sale of sales ?? []) {
     const { decision, reason } = await evaluatePagbankSale(supabaseAdmin, sale);

@@ -21,7 +21,7 @@ function fakeDb(rows: Record<string, unknown[]>, failSales = false) {
     chain.then = (res: any) => res(failSales && table === 'sales' ? { data: null, error: { message: 'x' } } : { data: rows[table] ?? [], error: null });
     return chain;
   };
-  return { from: q };
+  return { from: q, rpc: () => Promise.resolve({ data: rows.paid_staging ?? [], error: null }) };
 }
 
 describe('integridade da Order PAID', () => {
@@ -43,6 +43,20 @@ describe('cleanup e recuperação PagBank', () => {
     syncMock.mockReturnValue({ state: 'paid', finalizationOk: true });
     const n = await recoverPendingPagbankSales(fakeDb({ payment_attempts: [{ sale_id: 'sale-1' }], sales: [sale] }), () => {});
     expect(n).toBe(1);
+  });
+  it('recupera venda já paga com staging fora da janela de tentativas', async () => {
+    syncMock.mockReturnValue({ state: 'paid', finalizationOk: true });
+    const paidSale = { ...sale, status: 'pago' };
+    expect(await recoverPendingPagbankSales(fakeDb({ payment_attempts: [], paid_staging: [{ sale_id: sale.id }], sales: [paidSale] }), () => {})).toBe(1);
+    expect(syncMock).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ sale: paidSale }));
+  });
+  it('reserva capacidade para pendentes junto de vendas pagas incompletas', async () => {
+    syncMock.mockReturnValue({ state: 'paid', finalizationOk: true });
+    const paid = { ...sale, id: 'paid-1', status: 'pago' };
+    const paid2 = { ...paid, id: 'paid-2' };
+    const admin = fakeDb({ payment_attempts: [{ sale_id: sale.id }], paid_staging: [{ sale_id: paid.id }, { sale_id: paid2.id }], sales: [paid, paid2, sale] });
+    expect(await recoverPendingPagbankSales(admin, () => {}, 2)).toBe(2);
+    expect(syncMock.mock.calls.map((c) => c[1].sale.id)).toEqual(['paid-1', sale.id]);
   });
   it('Order WAITING é preservada', async () => {
     syncMock.mockReturnValue({ state: 'pending', normalized: 'pending' });

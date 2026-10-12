@@ -772,3 +772,158 @@ Implementado (sem tocar webhook, assinatura, OAuth, Connect, Split, credenciais 
 - **Cleanup protegido:** antes de cancelar venda PagBank com Order, consulta oficial. `PAID` → finaliza; `WAITING`/indisponível/indeterminado → preserva venda e passageiros; `DECLINED`/`CANCELED` → cancelamento normal. Vendas Asaas inalteradas.
 
 Pendente para Produção: webhook autenticado (a função `pagbank-webhook` recebe a mesma finalização no próximo deploy dela), conciliação detalhada do Split, decisão sobre vendas PagBank `WAITING` além de 24 h (hoje ficam preservadas, sem cancelamento automático), homologação e liberação.
+
+---
+
+## 22. Correção da emissão parcial — 2026-10-11 (Codex)
+
+**Causa comprovada na base `f4a0271e`:** o helper e a RPC retornavam ao encontrar
+qualquer ticket; o índice CPF/trecho/label confundia itens legítimos repetidos.
+O `ON CONFLICT DO NOTHING` seguido de limpeza não provava emissão integral.
+
+**Correção preparada, ainda não implantada/homologada no Sandbox:** migration
+Drizzle `0002_recover_partial_ticket_issuance` (mesmo mecanismo da Etapa 1),
+registrada no journal. Adiciona `tickets.sale_passenger_id` com índice único e
+`sales.expected_ticket_count`. Substitui apenas o índice lógico anterior;
+constraints de ocupação física continuam valendo. O ID do item distingue ida,
+volta e itens repetidos sem poltrona. A RPC exige venda paga e empresa correta,
+mantém a trava transacional, vincula tickets históricos apenas por correspondência
+única e snapshots compatíveis, insere os ausentes e verifica cobertura integral
+antes de registrar a quantidade esperada e apagar o staging. Qualquer conflito
+provoca rollback, preservando passageiros e tickets anteriores.
+
+A finalização compartilhada não considera mais um ticket suficiente quando há
+staging ou divergência da quantidade esperada. Falhas de leitura não comprovam
+consistência. O nome legado `inconsistent_paid_without_ticket` foi preservado
+para compatibilidade dos consumidores, incluindo emissão parcial.
+A recuperação PagBank também seleciona vendas pagas com staging ou quantidade
+persistida divergente, independentemente da janela de 24h. Reutiliza GET Order,
+validação de integridade e finalização comum; nunca cria cobrança. Tentativas
+pendentes continuam com a janela existente. A seleção de vendas pagas prioriza
+as menos recentemente consultadas para reduzir repetição de casos problemáticos.
+Há reserva de capacidade para pendentes quando ambas as filas têm candidatos;
+vendas pagas completas não entram novamente pela lista de tentativas recentes.
+A reconciliação manual transmite o gateway da venda à finalização, evitando
+escrita de status PagBank em campos específicos Asaas.
+
+**Evidências locais:** 394 testes Vitest em 36 arquivos aprovados, incluindo
+recuperação de venda já paga e finalização compartilhada PagBank/Asaas. Em
+PostgreSQL 16 descartável, a migration real passou em 14 cenários com dados
+sintéticos: emissão completa, parcial histórica 1/2 → 2/2 sem duplicação, parcial
+com IDs e itens repetidos, ida/volta, ausência de poltrona, reexecução, ambiguidade
+histórica, incompatibilidade de snapshot, conflito de assento com rollback,
+empresa errada, venda não paga, manifesto incompleto, emissão Asaas e seleção da fila paga.
+Duas conexões PostgreSQL concorrentes retornaram `created` e `skipped_existing`,
+com exatamente duas passagens e staging limpo. Harness versionado em
+`tests/database/partial-ticket-issuance.mjs`; instruções no README adjacente.
+Build Vite, TypeScript do app e `git diff --check` passaram. O lint do teste novo
+passou; o teste Etapa 1 mantém três usos preexistentes de `any` apontados pelo lint.
+Este banco usa schema mínimo: não prova todos os triggers/RLS do Supabase real.
+
+**Limitações:** vendas históricas cujo staging já foi apagado e cuja quantidade
+esperada nunca foi persistida não permitem reconstrução confiável por contagem.
+Não inventar passageiros nem declarar essas vendas integralmente reconciliadas.
+Correspondência histórica ambígua exige revisão operacional; não escolher um item
+arbitrário. Remoção de um ticket após emissão completa é detectada pela quantidade,
+mas, sem staging, não pode ser recuperada automaticamente. Sem mudanças em webhook,
+OAuth, Connect, Split, credenciais, regras comerciais, Asaas específico ou Produção.
+
+**Implantação futura:** aplicar migration antes de atualizar os consumidores da
+finalização compartilhada; implantar funções que a importam, inclusive via
+status-sync (sem alterar código/autenticação do webhook). Validar com schema real
+Sandbox e repetir confirmação simultânea, caso parcial e pagamento com navegador
+fechado. Não houve escrita no banco do projeto, merge, deploy ou pagamento real.
+Não declarar homologação apenas pelos testes locais.
+
+**Cron confirmado pelo responsável:** job 1 `cleanup-expired-seat-locks`, ativo,
+`*/5 * * * *`; 20 execuções a cada 5min com `succeeded`. O command/resultado HTTP
+não foi fornecido: não comprova chamada/sucesso da recuperação PagBank.
+Esta tarefa não altera periodicidade. Não repetir OAuth, GET Split/Charge ou
+investigações básicas de PIX/cartão. Próximo passo mínimo: revisar a PR, validar
+migration e consumidores no Sandbox e confirmar o command do cron.
+
+## 23. PR #771 — compatibilidade com trigger físico (2026-10-11)
+
+**Bloqueio comprovado na revisão:** a versão `4f005ad8` selecionava também itens
+já emitidos e dependia de `ON CONFLICT DO NOTHING`. O trigger físico BEFORE INSERT
+executa antes da resolução do conflito e rejeita a reinserção do assento legítimo.
+Os 14 cenários da seção 22 não incluíam esse trigger: não comprovavam implantação.
+
+**Refinamento da mesma migration ainda não aplicada ao projeto:** o INSERT usa
+`NOT EXISTS` pela identidade do item, depois da vinculação/validação dos tickets
+históricos. O `ON CONFLICT DO NOTHING` foi retirado. A trava por venda e a
+verificação integral antes da limpeza permanecem. Nenhuma alteração na função,
+trigger ou regra de ocupação física existente.
+
+**Caminhos alternativos:** `NewSaleModal` emite tickets legados sem ID do staging.
+O índice lógico antigo foi mantido como índice parcial para esses registros
+(`sale_passenger_id IS NULL`). Um trigger separado de identidade serializa os
+writers pela mesma trava da RPC, impede inserir tickets sem identidade numa venda
+que já possui emissão por item/quantidade esperada, impede remover a identidade e
+exige que uma identidade nova corresponda a um item existente da venda paga, da
+mesma empresa, passageiro, trecho e lugar. A unicidade global por item continua.
+Isso preserva a emissão manual legada sem reabrir duplicação pela retirada do
+índice. Não altera as policies existentes, nem amplia permissões das RPCs.
+O trigger de identidade precede alfabeticamente o físico, adquirindo primeiro a
+trava por venda. Divergências retornam erro e preservam staging/tickets anteriores.
+
+**Evidência:** 25 cenários aprovados em PostgreSQL 16 isolado, carregando diretamente
+do repositório o resolvedor físico e a função `assert_physical_seat_available_for_ticket`
+e instalando o mesmo trigger BEFORE INSERT/UPDATE. Reproduzido o erro da versão
+anterior (`Assento já ocupado neste trecho`), com rollback; depois comprovado
+1/2 → 2/2 para assentos físicos PagBank e Asaas. Duas conexões concorrentes
+recuperaram uma venda física parcial, sem duplicar. Também cobertos conflito
+físico externo com rollback da vinculação histórica, itens sem poltrona, ida/volta,
+ambiguidade, permissões RPC, execução por service_role e inserção pública legada
+com a policy `Public can create tickets` real do repositório. A policy foi testada
+em tabelas auxiliares sintéticas; não representa todas as policies do ambiente.
+
+A suíte existente foi reexecutada: 394 testes em 36 arquivos aprovados;
+`git diff --check` passou. Não houve alteração TypeScript neste refinamento.
+
+**Pendências obrigatórias de implantação:** sem acesso aos catálogos/dados e versões
+implantadas, não há prova de igualdade entre repositório e Supabase atual. Conferir
+índices, triggers, constraints, policies/grants, proprietário das funções, migrations
+aplicadas e dados históricos. Conferir especialmente writers legados, mistura de
+identidades e assentos que hoje conflitam. Testar no schema completo Sandbox antes
+de implantação; a suíte isolada não cobre todos os triggers de vendas e tickets.
+Se `0002` já estiver aplicada em algum ambiente, não reexecutar sua versão editada:
+será necessária migration incremental nesse ambiente. Nenhuma foi aplicada pelo Codex.
+
+Ordem futura, dependente de aprovação: validar compatibilidade no Sandbox; aplicar
+migration transacional em janela controlada (DDL pode bloquear writers); verificar
+RPCs e permissões; merge/publicação coordenados de todos os consumidores da
+finalização compartilhada. Se merge disparar publicação automática, preparar o
+banco antes dele. Preservar evidências e plano de rollback sem apagar pagamentos.
+Não executar rollback cego para a RPC antiga depois de tickets por item terem sido
+emitidos. Produção PagBank segue bloqueada. Não repetir OAuth, Connect, Split,
+GET Charge/Split, diagnósticos de webhook ou testes básicos já comprovados.
+
+## 24. PR #771 — histórico aplicado alinhado à main (2026-10-12)
+
+O responsável informou que o Lovable aplicou com sucesso a migration `0002` e
+registrou o arquivo/journal na main. Essa informação atualiza as notas históricas
+anteriores de "ainda não aplicada"; o Codex não executou nem repetiu a migration.
+
+Comparação com a main `00afb912`: o SQL funcional era idêntico à PR, mas a main
+não possui newline final. O journal da main usa `when = 1791799668965`, diferente
+da data originalmente preparada na PR. A branch da PR incorpora essa main e
+preserva integralmente seus dois arquivos, sem alterar bytes, tag, idx ou data.
+SHA-256 do SQL: `f467e8c7553b9a8b4fab6b61989fc31aeb7381bf019a8244fb59f4600155ce96`.
+SHA-256 do journal: `045cb171c9b03898d02a263ef51a7d0369067802ea4f211a29408c89fd9de4ee`.
+Esses hashes identificam os arquivos versionados da main; não são nova consulta
+à tabela de histórico do banco. O snapshot e os tipos gerados pelo Lovable também
+são preservados. Não há diferença desses arquivos no merge proposto contra main.
+
+O código de recuperação/finalização/reconciliação e os testes da PR permanecem
+inalterados neste alinhamento. As colunas, nomes/argumentos/retornos das RPCs
+utilizados pelo código coincidem com o SQL da main e os tipos gerados atuais.
+Não criar outra migration, regenerar/formatar `0002`, alterar sua data nem
+reaplicá-la. A publicação dos seis consumidores continua etapa separada:
+asaas-webhook, pagbank-webhook, verify-payment-status, reconcile-sale-payment,
+create-pagbank-payment e cleanup-expired-locks. Produção PagBank segue bloqueada.
+Nenhum banco, deploy, pagamento ou merge da PR foi executado pelo Codex.
+Validação após incorporar main: 394 testes em 36 arquivos e TypeScript do app
+aprovados; conferência byte a byte/SHA-256 e `git diff --check` aprovados.
+Os testes SQL anteriores continuam aplicáveis porque o SQL funcional não mudou;
+nenhuma migration foi executada novamente nesta etapa.
