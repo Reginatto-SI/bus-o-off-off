@@ -55,6 +55,9 @@ CREATE OR REPLACE FUNCTION public.guard_managed_manual_sale() RETURNS trigger
  LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 DECLARE v_state text;
 BEGIN
+ -- Public/legacy updates already own their row lock; do not add the managed
+ -- issuance lock to that path. Re-read financial state only after locking.
+ IF NOT EXISTS(SELECT 1 FROM public.platform_fee_operations WHERE sale_id=OLD.id) THEN RETURN NEW; END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended('issue_sale_tickets:'||OLD.id,0));
  SELECT state INTO v_state FROM public.platform_fee_operations WHERE sale_id=OLD.id;
  IF NOT FOUND THEN RETURN NEW; END IF;
