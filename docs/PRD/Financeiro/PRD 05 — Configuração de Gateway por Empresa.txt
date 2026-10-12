@@ -44,6 +44,14 @@ Nenhuma venda deve ser criada sem identificar claramente:
 
 O sistema não deve misturar credenciais, ambientes ou dados financeiros entre empresas.
 
+### 3.1 Configuração não altera o fluxo da venda manual
+
+A escolha do gateway pela empresa **não pode alterar o fluxo de venda manual** em `/admin/vendas`. Asaas é a referência funcional existente: reserva, comprovante, cobrança da taxa SmartBus, confirmação, emissão e liberação seguem regras iguais para qualquer provedor.
+
+Quando a empresa já recebeu presencialmente o valor das passagens, o gateway cobra exclusivamente a taxa SmartBus devida, respeitando as regras de isenção e divisão financeira oficiais. A lógica é comum e mantida uma única vez; cada integração trata apenas suas capacidades e comunicação externas.
+
+Alterar o gateway/ambiente afeta somente operações novas, preservando o contexto das cobranças existentes. A taxa manual em determinado gateway só pode operar quando o fluxo estiver implementado e homologado para o ambiente e empresa.
+
 ---
 
 ## 4. Público e permissões
