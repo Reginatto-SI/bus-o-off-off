@@ -1,3 +1,5 @@
+import {readManualFeeOperation,handleManualFeeOperation} from "../_shared/manual-fee/runtime.ts";
+import {authenticateManualPagbankNotification} from "../_shared/manual-fee/notification.ts";
 // @ts-nocheck — arquivo Deno (edge function).
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Webhook PagBank (separado do Asaas). Fluxo:
@@ -45,6 +47,18 @@ Deno.serve(async (req) => {
 
   const art = extractPagbankPixArtifacts(payload);
   const referenceId = typeof payload?.reference_id === "string" ? payload.reference_id : null;
+  if (referenceId?.startsWith('platform_fee_')) {
+    try {
+      const match = await supabaseAdmin.from('platform_fee_operations').select('*').eq('reference',referenceId).eq('gateway','pagbank').maybeSingle();
+      if (match.error || !match.data) return respond(401,{error:'manual_notification_unmatched'});
+      await authenticateManualPagbankNotification(match.data,req,rawBody,name=>Deno.env.get(name));
+      if (match.data.external_id && match.data.external_id !== art.orderId) return respond(401,{error:'manual_notification_order_mismatch'});
+      const manualSale = await supabaseAdmin.from('sales').select('id,company_id,status').eq('id',match.data.sale_id).eq('company_id',match.data.company_id).single();
+      if (manualSale.error) return respond(503,{error:'manual_sale_unavailable'});
+      const result = await handleManualFeeOperation(supabaseAdmin,manualSale.data,match.data,false,name=>Deno.env.get(name));
+      return respond(200,{received:true,paymentStatus:result.finalized?'pago':manualSale.data.status});
+    } catch (e) { return respond(e?.status??503,{error:e?.code??'manual_fee_reconciliation_failed'}); }
+  }
   const saleId = referenceId && UUID_RE.test(referenceId) ? referenceId : null;
 
   // 1) Correlação: sem venda PagBank correspondente, não há token a usar → rejeita.

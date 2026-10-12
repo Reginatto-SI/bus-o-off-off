@@ -60,3 +60,25 @@ Ausência comprovada não cria dívida. Wallet legado sem ambiente comprovado ex
 revisão, nunca complementação entre ambientes. 67 testes relevantes e 15 cenários
 PostgreSQL passaram antes do ajuste final de snapshots (a suíte completa será
 reexecutada ao concluir o conjunto). Flags continuam desligadas.
+
+## Etapa 5 — adapter PagBank apenas Sandbox
+
+O adapter usa o token da conta SmartBus da plataforma, referência própria e
+idempotency key congelados; envia UM item com SOMENTE a taxa e nenhum valor das
+passagens. É Order PIX direto, sem checkout hospedado e sem Connect do vendedor.
+Os direitos de terceiros permanecem no ledger para conciliação manual. O Pix da
+taxa é exibido no admin; fechar a janela não interrompe recuperação em backend.
+Notificações deste propósito usam x-authenticity-token com um único token da
+conta da plataforma, corpo original e GET autoritativo; ramo Connect público não
+foi alterado. Assinatura inválida permanece 401, sem efeitos financeiros.
+
+9 testes locais passaram (payload, ambiente, moeda, referência ambígua, assinatura
+válida/inválida/ausente e body alterado). A documentação instalada descreve este
+contrato; reconsulta oficial anterior retornou 403. A conta emissora e o modelo
+real desta notificação DIRETA precisam de homologação Sandbox específica: o caso
+Connect público não comprova nenhum dos dois. Flags começam desligadas; habilitar
+manual_fee_pagbank_sandbox_enabled exige evidência desse novo contexto. A política
+de repasse manual está autorizada, porém exige comprovar ausência de liquidação
+nativa antes de enviar dinheiro para evitar repasse duplicado. Nenhum token foi
+consultado/copied de histórico, nenhum pagamento/envio/credencial foi executado.
+Produção PagBank é bloqueada por código e constraints existentes e novas.
