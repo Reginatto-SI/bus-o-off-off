@@ -248,3 +248,25 @@ valem para operações privadas do piloto; **não declarar saneado todo o legado
 Não repetir OAuth, troca de conexão, GET Split/Charge, PIX/cartão básicos ou
 diagnóstico público do 401. A nova conta/contexto manual é homologação independente;
 produção PagBank continua bloqueada.
+
+## Correção da ordem de locks — validação antes dos merges (2026-10-12)
+
+O bloqueio de concorrência encontrado na revisão final foi corrigido em 0005 e
+0006: `guard_managed_manual_sale` retorna antes do advisory lock quando não existe
+operação privada. Para vendas geridas, mantém a trava e lê o estado financeiro
+depois dela. Não modifica o contrato de emissão 0002 ou o checkout público.
+
+O teste `tests/database/manual-fee-lock-order.mjs`, executado após a fixture manual,
+reproduz a falha anterior e controla a concorrência por conexões reais/barreiras
+de lock, sem depender de coincidência de timing. **12 cenários aprovados** no
+conjunto final, incluindo as duas falhas antigas esperadas; **33 cenários** da
+fixture manual reaprovados. Também validada 0005 isoladamente na etapa #776
+(fixture de 15 cenários e 6 direcionados). Não houve repetição da suíte de app.
+
+#776, #777 e #778 foram atualizadas preservando a cadeia cumulativa; as três
+primeiras Drafts permanecem iguais. 0002/snapshot/journal e as demais regras são
+preservados. Nenhuma migration adicional, merge de PR ou implantação foi executado.
+**APROVADO PARA INICIAR OS MERGES**, observando a sequência e os gates operacionais
+acima: nenhuma publicação parcial sobre banco sem os novos contratos, flags off,
+validação do banco conectado e publicação coordenada antes do piloto autorizado.
+PagBank em Produção permanece bloqueado.

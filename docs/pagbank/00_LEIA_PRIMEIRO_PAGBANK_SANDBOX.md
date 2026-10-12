@@ -986,3 +986,43 @@ de flags nesta implementação. Produção PagBank permanece bloqueada. Não rep
 OAuth, conexão, GET Split/Charge, PIX/cartão básicos já comprovados. Recuperar por
 correção adiante, preservando dados e IDs: não restaurar índices antigos/apagar
 passagens/recriar cobranças para simular rollback.
+
+## 27. Correção localizada da ordem de locks — antes dos merges (2026-10-12)
+
+Bloqueio confirmado em PostgreSQL 16 descartável: o guard das migrations 0005 e
+0006 adquiria a trava de emissão mesmo para vendas sem operação privada. Um UPDATE
+da venda pública Asaas, já com a linha bloqueada, esperava essa trava; emissão
+concorrente, já com a trava, esperava a linha. Ambas as definições anteriores
+reproduziram `deadlock detected` com conexões reais e barreiras por pg_stat_activity.
+
+Correção de três linhas em cada definição: verificar existência de operação
+privada e retornar antes do advisory lock para vendas públicas/legadas. Para
+vendas geridas, trava e SELECT do estado após sua aquisição permanecem intactos.
+Nenhuma regra financeira, contrato de RPC, credencial, webhook ou código de
+checkout foi alterado. 0002, snapshot e journal permanecem preservados.
+
+PRs atualizadas: #776 (0005/teste), #777 (incorporação cumulativa por rebase) e
+#778 (0006/evidências). #772, #774 e #775 permanecem sem alterações.
+
+Validação desta correção: fixture da etapa 4, **15 cenários**, e **6 cenários
+direcionados** aprovados; conjunto final, **33 cenários da fixture** e **12 cenários
+direcionados**, aprovados. Os 12 incluem duas reproduções EXPECTATIVAS da falha
+antiga e demonstram: UPDATE público Asaas/PagBank e legado sem depender da trava;
+emissão/reconciliação concorrentes com exatamente dois tickets; bloqueio de
+cancelamento gerido após mudança de estado durante a espera; duas confirmações
+geridas com emissão integral e ledger único. A suíte TypeScript/Vitest anterior
+não foi repetida: não houve alteração de aplicação. git diff --check aprovado.
+
+Harness: executar `tests/database/manual-fee.mjs` e depois
+`tests/database/manual-fee-lock-order.mjs`, no mesmo container de teste descartável
+identificado por TICKET_TEST_CONTAINER. Não aceita URL de banco do projeto.
+SQL/migrations versionados foram carregados SOMENTE na fixture isolada para testes;
+nenhuma migration foi aplicada no SmartBus. Não há nova migration ou PR.
+
+O bloqueio identificado foi eliminado. Integração de código aprovada na sequência
+#772 → #774 → #775 → #776 → #777 → #778, mantendo publicação intermediária suspensa.
+Antes da publicação, permanecem os gates do runbook: conferir banco conectado,
+aplicar os arquivos oficiais 0003–0006 e publicar coordenadamente os consumidores.
+Testes isolados não comprovam schema/versões implantadas ou homologação financeira.
+Nenhum merge de PR, deploy, pagamento, credencial ou flag operacional foi alterado.
+PagBank em Produção permanece bloqueado.
