@@ -28,6 +28,8 @@ import {
 
 import { authenticateManualOperator, ManualFeeError } from "../_shared/manual-fee/auth.ts";
 
+import {readManualFeeOperation,handleManualFeeOperation} from "../_shared/manual-fee/runtime.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -131,6 +133,16 @@ serve(async (req) => {
     }
 
     operator.assertCompany(sale.company_id);
+
+    const managedOperation = await readManualFeeOperation(supabaseAdmin, sale);
+    if (managedOperation) {
+      const result = await handleManualFeeOperation(supabaseAdmin, sale, managedOperation, !consultOnly, name => Deno.env.get(name));
+      return new Response(JSON.stringify({ ...result.operation.presentation,
+        payment_id: result.operation.external_id, payment_status: result.operation.state,
+        already_paid: result.finalized, waived: result.operation.state === 'exempt',
+        paymentStatus: result.finalized ? 'pago' : sale.status,
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     const isManualOrigin = !sale.sale_origin || MANUAL_SALE_ORIGINS.has(sale.sale_origin);
     if (!isManualOrigin) {

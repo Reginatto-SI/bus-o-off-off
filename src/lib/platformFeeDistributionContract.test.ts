@@ -156,7 +156,7 @@ describe('contrato de isolamento do resolvedor', () => {
 describe('contrato estático da base individual', () => {
   const publicFlow = readFileSync(`${process.cwd()}/supabase/functions/create-asaas-payment/index.ts`, 'utf8');
   const manualFlow = readFileSync(`${process.cwd()}/supabase/functions/create-platform-fee-checkout/index.ts`, 'utf8');
-  const engine = readFileSync(`${process.cwd()}/supabase/functions/_shared/platform-fee-engine.ts`, 'utf8');
+  const engine = readFileSync(`${process.cwd()}/supabase/functions/_shared/platform-fee-rules.ts`, 'utf8');
 
   it('fluxos público e manual entregam passengerUnitPrices ao mesmo motor', () => {
     expect(publicFlow).toContain('computeProgressiveFeeForPassengers(passengerUnitPrices)');

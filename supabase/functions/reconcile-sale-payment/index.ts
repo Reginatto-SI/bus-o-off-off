@@ -1,3 +1,5 @@
+import {authenticateManualOperator} from "../_shared/manual-fee/auth.ts";
+import {readManualFeeOperation,handleManualFeeOperation} from "../_shared/manual-fee/runtime.ts";
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { finalizeConfirmedPayment, inspectSaleConsistency } from "../_shared/payment-finalization.ts";
@@ -47,6 +49,16 @@ serve(async (req) => {
     const results: ReconcileItemResult[] = [];
 
     for (const saleId of saleIds) {
+      const manualSale = await supabaseAdmin.from("sales").select("id,company_id,status,sale_origin").eq("id",saleId).maybeSingle();
+      if (manualSale.data && ['admin_manual','admin_reservation_conversion','seller_manual'].includes(manualSale.data.sale_origin)) {
+        const op = await readManualFeeOperation(supabaseAdmin, manualSale.data);
+        if (op) {
+          const actor = await authenticateManualOperator(supabaseAdmin, req); actor.assertCompany(manualSale.data.company_id);
+          const result = await handleManualFeeOperation(supabaseAdmin, manualSale.data, op, false, name => Deno.env.get(name));
+          results.push({sale_id:saleId,state:result.finalized?"reconciled":"not_eligible",message:result.finalized?"Emissão manual integral":"Taxa ainda não confirmada"});
+          continue;
+        }
+      }
       const inspection = await inspectSaleConsistency(supabaseAdmin, saleId);
       const ticketsBefore = inspection.ticketsCount;
 

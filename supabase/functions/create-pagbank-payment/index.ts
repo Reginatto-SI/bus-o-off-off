@@ -129,6 +129,10 @@ Deno.serve(async (req) => {
       .single();
     if (saleError || !saleRow) return json({ error: "Venda não encontrada.", error_code: "sale_not_found" }, 404);
     sale = saleRow;
+    if (sale.sale_origin && ['admin_manual','admin_reservation_conversion','seller_manual'].includes(sale.sale_origin)) {
+      return json({ error: 'Venda manual deve cobrar somente a taxa pelo fluxo administrativo.', error_code: 'manual_sale_requires_fee_flow' }, 409);
+    }
+
 
     // Contexto congelado na venda: gateway, ambiente e conexão. Request/host não substituem.
     if (sale.payment_gateway !== "pagbank") {

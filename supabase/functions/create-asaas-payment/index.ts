@@ -180,6 +180,9 @@ serve(async (req) => {
 
     // Guarda multi-gateway (aditiva): o gateway congelado na venda decide. Nunca
     // cobrar no Asaas uma venda vinculada a outro gateway.
+    if (sale.sale_origin && ['admin_manual','admin_reservation_conversion','seller_manual'].includes(sale.sale_origin)) {
+      return jsonResponse({ error: 'Venda manual deve cobrar somente a taxa pelo fluxo administrativo.', error_code: 'manual_sale_requires_fee_flow' }, 409);
+    }
     if (sale.payment_gateway && sale.payment_gateway !== "asaas") {
       return jsonResponse(
         { error: "Esta venda não usa Asaas.", error_code: "gateway_mismatch", sale_gateway: sale.payment_gateway },

@@ -1,3 +1,4 @@
+import {recoverManualFees} from "../_shared/manual-fee/runtime.ts";
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { pagbankSalesToPreserve, recoverPendingPagbankSales } from "./pagbank-guard.ts";
@@ -101,6 +102,7 @@ serve(async (req) => {
     // 0) Recuperação PagBank em segundo plano: não depende do navegador do comprador.
     // Falha aqui nunca interrompe o cleanup.
     try {
+      await recoverManualFees(supabaseAdmin, name => Deno.env.get(name), d => logCleanup("info", {execution_id:executionId,...d}));
       await recoverPendingPagbankSales(supabaseAdmin, (d) => logCleanup("info", { execution_id: executionId, flow: "checkout_publico", ...d }));
     } catch (e) {
       logCleanup("warn", { execution_id: executionId, stage: "pagbank_recovery", action: "falhou", reason: (e as Error)?.message ?? "unknown" });
@@ -563,6 +565,7 @@ serve(async (req) => {
       .from("sales")
       .select("id, company_id, payment_environment")
       .eq("status", "reservado")
+      .in("platform_fee_status", ["not_applicable", "paid", "waived"])
       .not("reservation_expires_at", "is", null)
       .lt("reservation_expires_at", nowIso);
 
@@ -581,7 +584,11 @@ serve(async (req) => {
       });
     }
 
-    manualCandidateCount = expiredManualReservations?.length ?? 0;
+    const managedIds = await supabaseAdmin.from("platform_fee_operations").select("sale_id");
+    if (managedIds.error) throw new Error("manual_fee_protection_unavailable");
+    const protectedManualIds = new Set((managedIds.data ?? []).map((o: any) => o.sale_id));
+    const legacyExpiredManual = (expiredManualReservations ?? []).filter(s => !protectedManualIds.has(s.id));
+    manualCandidateCount = legacyExpiredManual.length;
     (expiredManualReservations ?? []).forEach((sale) => {
       logCleanup("info", {
         execution_id: executionId,
@@ -595,8 +602,8 @@ serve(async (req) => {
       });
     });
 
-    if (expiredManualReservations && expiredManualReservations.length > 0) {
-      const manualReservationIds = expiredManualReservations.map((sale) => sale.id);
+    if (legacyExpiredManual.length > 0) {
+      const manualReservationIds = legacyExpiredManual.map((sale) => sale.id);
       const { data: cancelledSales, error: cancelManualError } = await supabaseAdmin
         .from("sales")
         .update({

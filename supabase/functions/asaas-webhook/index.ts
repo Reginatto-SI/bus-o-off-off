@@ -1,3 +1,4 @@
+import {readManualFeeOperation,handleManualFeeOperation} from "../_shared/manual-fee/runtime.ts";
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
@@ -1229,6 +1230,13 @@ async function processPlatformFeeWebhook(
     };
   }
 
+  const managed = await readManualFeeOperation(supabaseAdmin, sale);
+  if (managed) {
+    const result = await handleManualFeeOperation(supabaseAdmin, sale, managed, false, name => Deno.env.get(name));
+    return { status: "success", resultCategory: "success", httpStatus: 200,
+      message: result.finalized ? "Taxa manual conciliada e emissão integral" : "Taxa manual preservada para conciliação",
+      responseBody: { received: true, sale_id: saleId, paymentStatus: result.finalized ? "pago" : sale.status }, saleId, companyId: sale.company_id };
+  }
   const confirmedAt = resolveAsaasConfirmedAt(payment, webhookCreatedAt);
 
   if (eventType === "PAYMENT_CONFIRMED" || eventType === "PAYMENT_RECEIVED") {

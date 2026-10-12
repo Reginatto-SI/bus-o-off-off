@@ -20,40 +20,11 @@ export interface PlatformFeeConfig {
   passToCustomer: boolean;
 }
 
-export const PLATFORM_FEE_MINIMUM_TOTAL_BRL = 5;
-
-export function resolvePlatformFeePercentByTicketPrice(unitPrice: number): number {
-  if (unitPrice <= 100) return 6;
-  if (unitPrice <= 300) return 5;
-  if (unitPrice <= 600) return 4;
-  return 3;
-}
-
-export function calculatePlatformFee(unitPrice: number): number {
-  const percent = resolvePlatformFeePercentByTicketPrice(unitPrice);
-  const uncapped = Math.round(unitPrice * (percent / 100) * 100) / 100;
-  return Math.min(uncapped, 25);
-}
-
-export function applyPlatformFeeMinimumTotal(totalFee: number): number {
-  const roundedTotal = Math.round(Number(totalFee || 0) * 100) / 100;
-  if (roundedTotal > 0 && roundedTotal < PLATFORM_FEE_MINIMUM_TOTAL_BRL) {
-    return PLATFORM_FEE_MINIMUM_TOTAL_BRL;
-  }
-  return roundedTotal;
-}
-
-/**
- * Calcula a taxa oficial total da plataforma para a venda pública.
- * A ordem replica o PRD 01: taxa/teto por item, soma dos itens e só então
- * piso operacional de R$ 5,00 sobre a taxa total (nunca por passageiro).
- */
-export function calculatePlatformFeeTotal(unitPrices: number[]): number {
-  const progressiveTotal = Math.round(
-    unitPrices.reduce((sum, unitPrice) => sum + calculatePlatformFee(unitPrice), 0) * 100,
-  ) / 100;
-  return applyPlatformFeeMinimumTotal(progressiveTotal);
-}
+export { PLATFORM_FEE_MINIMUM_TOTAL_BRL, applyPlatformFeeMinimumTotal } from '../../supabase/functions/_shared/platform-fee-rules';
+import { computeProgressiveFeeForPassengers, resolveTierPercent } from '../../supabase/functions/_shared/platform-fee-rules';
+export const resolvePlatformFeePercentByTicketPrice = resolveTierPercent;
+export function calculatePlatformFee(unitPrice:number):number { return computeProgressiveFeeForPassengers([unitPrice]).passengerBreakdown[0].cappedFee; }
+export function calculatePlatformFeeTotal(unitPrices:number[]):number { return computeProgressiveFeeForPassengers(unitPrices).totalFee; }
 
 /**
  * Calcula as taxas adicionais de um evento sobre o preço unitário da passagem.
