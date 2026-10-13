@@ -61,9 +61,11 @@ ambiente não pode ser usada como prova de elegibilidade em Sandbox nem completa
 com dados de Produção. Se a consulta ao cadastro for bem-sucedida e não houver
 wallet válida específica do ambiente, o beneficiário é ausente nesse ambiente,
 conforme PRD 01, sem remover ou alterar a wallet histórica. Falha de consulta
-ou múltiplos recebedores elegíveis permanecem sujeitos a revisão. 67 testes relevantes e 15 cenários
-PostgreSQL passaram antes do ajuste final de snapshots (a suíte completa será
-reexecutada ao concluir o conjunto). Flags continuam desligadas.
+ou múltiplos recebedores elegíveis permanecem sujeitos a revisão.
+
+No marco original de implementação, 67 testes relevantes e 15 cenários
+PostgreSQL passaram antes do ajuste final de snapshots (a suíte completa seria
+reexecutada ao concluir o conjunto). Naquela etapa, as flags estavam desligadas.
 
 ## Etapa 5 — adapter PagBank apenas Sandbox
 
