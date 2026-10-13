@@ -43,6 +43,8 @@ export async function startPlatformFeeCheckout({
       const code=data?.error_code??data?.error;
       if(code==='manual_issuance_incomplete') {toast.info('Taxa confirmada. As passagens estão em recuperação; não é necessário pagar novamente.');}
       else if(['manual_fee_create_unresolved','manual_fee_query_failed','manual_fee_persistence_failed'].includes(code)) {toast.info('Cobrança em verificação. A reserva está preservada; não gere outra cobrança.');}
+      else if(code==='manual_fee_order_id_required') {toast.warning('Cobrança sem identificador recuperável. Solicite conciliação; a reserva está preservada. Não gere outra cobrança.');}
+      else if(code==='manual_fee_create_rejected') {toast.warning('O PagBank recusou a criação da taxa. Solicite revisão antes de tentar gerar outra cobrança.');}
       else if(code==='manual_late_payment_review') {toast.warning('Pagamento recebido após cancelamento. Solicite conciliação antes de liberar passagens.');}
       else if (data?.error_code === 'consult_only_without_reusable_payment') {
         toast.info(data?.error || 'Não existe cobrança reutilizável para consulta desta taxa.');
@@ -76,6 +78,11 @@ export async function startPlatformFeeCheckout({
     if (data?.pix?.qr_text) {
       window.dispatchEvent(new CustomEvent('smartbus:manual-fee-pix', {detail:{saleId,pix:data.pix}}));
       return { status: 'pix' };
+    }
+
+    if (data?.pix && data?.payment_id) {
+      toast.info('Cobrança vinculada. O código Pix ainda não está disponível; consulte novamente. Não gere outra cobrança.');
+      return { status: 'error' };
     }
 
     // Reuso explícito de cobrança existente: mantém o mesmo comportamento de abrir URL

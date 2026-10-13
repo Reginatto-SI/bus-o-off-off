@@ -6,7 +6,7 @@
 >
 > **Objetivo atual é simples:** fazer **PIX e cartão de crédito funcionarem em Sandbox com Split**, ponta a ponta, antes de buscar uma integração "perfeita".
 
-Atualizado em: **2026-10-07**
+Atualizado em: **2026-10-12**
 
 ---
 
@@ -1025,4 +1025,109 @@ Antes da publicação, permanecem os gates do runbook: conferir banco conectado,
 aplicar os arquivos oficiais 0003–0006 e publicar coordenadamente os consumidores.
 Testes isolados não comprovam schema/versões implantadas ou homologação financeira.
 Nenhum merge de PR, deploy, pagamento, credencial ou flag operacional foi alterado.
+PagBank em Produção permanece bloqueado.
+
+## 28. Venda manual — criação e recuperação do PIX sem consulta por referência (2026-10-12)
+
+Base desta correção: `main` em `13a786841e217ef96193285b6a0ff274226fbee0`,
+incluindo a elegibilidade de carteiras da PR #779. O responsável informou que
+0003–0006 já foram aplicadas manualmente no Lovable Cloud. Esse relato não é uma
+verificação direta do schema conectado. **Não reaplicar 0002–0006.** Nenhum desses
+arquivos, journal, snapshot, beneficiário, flag ou dado financeiro foi alterado.
+
+**Causa comprovada no código e na documentação:** o adapter manual executava
+`GET /orders?reference_id=...` antes do POST. O endpoint oficial por parâmetros
+exige `charge_id`; `reference_id` não é um filtro documentado. O HTTP 400 e
+`manual_fee_query_failed` da operação `bff984ad-246d-493e-b527-cabacc6cef89`, venda
+`72897a70-c44c-4180-b657-124a6d187063`, R$ 6,00, foram informados pelo responsável;
+não foram obtidos por novo acesso a logs/banco nesta sessão. Essa sequência
+interrompe a criação e o catch comum preserva a operação como `indeterminate`.
+
+**Correção localizada:** após o claim exclusivo já existente, uma operação nova
+apta envia somente `POST /orders`, com a referência e `x-idempotency-key` originais
+da operação e somente o valor da taxa. ID conhecido usa somente
+`GET /orders/{order_id}`; nem clique repetido nem reconciliação cria outra Order.
+As validações comuns de ID/referência/valor/ambiente/conta emissora permanecem;
+`PAID` exige BRL, e moeda divergente declarada em resposta pendente também falha.
+Resposta íntegra sem texto QR conserva ID e estado pendente para recuperar o QR
+por GET. Resposta sem prova suficiente de integridade não é persistida como paga.
+Os artefatos válidos continuam no componente PIX existente. Sem QR, a tela pede
+nova consulta, sem iniciar outra cobrança.
+
+HTTP 400/401/403/422 de criação, sem ID e sem indicação de falha de transporte,
+retorna `manual_fee_create_rejected`; timeout/rede, conflito 409, 429, 5xx ou
+resposta de sucesso sem dados utilizáveis retornam erro inconclusivo. Essa
+distinção orienta o operador, **não autoriza novo POST ou expiração**: o catch
+compartilhado mantém conservadoramente `indeterminate`. Nenhuma transição
+automática para `prepared`/`terminal`, isenção ou liberação foi adicionada.
+
+### Limite de idempotência e operação antiga
+
+Fontes oficiais consultadas nesta sessão (páginas Markdown disponíveis):
+
+- [Consulta por parâmetros](https://developer.pagbank.com.br/reference/consultar-pedido-parametros):
+  somente `charge_id` documentado como parâmetro obrigatório.
+- [Consulta por ID](https://developer.pagbank.com.br/reference/consultar-pedido):
+  `GET /orders/{order_id}`.
+- [Criar pedido](https://developer.pagbank.com.br/reference/criar-pedido):
+  `POST /orders`, schema com `reference_id` e `qr_codes`.
+- [Chaves de idempotência](https://developer.pagbank.com.br/docs/chaves-publicas-e-de-idempotencia):
+  descreve repetição da mesma resposta ao reenviar a mesma chave, mas não informa
+  prazo de retenção nem detalha escopo/replay do endpoint Orders. O OpenAPI de
+  criação consultado não detalha o header de idempotência.
+
+**NÃO COMPROVADO:** janela segura de replay de Orders para esta operação/conta.
+O payload original completo não está persistido; `expiration_date` era calculado
+com o horário da chamada. Não presumir que chave + referência + valor bastam para
+reconstruir uma tentativa antiga idêntica. Portanto **não há reenvio automático**
+de POST nesta correção, nem teste que declare comprovado um replay externo seguro.
+
+A operação informada permanece `indeterminate`, sem ID, reserva preservada e sem
+passagens liberadas. Clique, consulta e cron retornam/logam
+`manual_fee_order_id_required`, sem GET inválido ou POST. O cron de cinco minutos
+continua sendo reconciliação, nunca pagamento automático. `service.ts` e
+`runtime.ts` foram revisados e não precisaram de alteração; claim, ledger,
+finalização integral e política de expiração são os mesmos para ambos gateways.
+
+**Intervenção mínima necessária:** o responsável deve conciliar, em leitura,
+na conta da plataforma Sandbox, a referência original e o histórico de tentativas,
+obtendo do PagBank a Order correspondente ou prova de ausência, junto do contrato
+de retenção/replay aplicável. Se existir Order, validar ID, referência, R$ 6,00,
+BRL e conta/ambiente antes de autorizar seu vínculo auditado à mesma operação.
+Essa vinculação administrativa não foi executada nem ganhou endpoint nesta PR.
+Se não existir Order, somente evidência conclusiva de ausência/ausência de POST
+e autorização específica permitem planejar uma retomada auditada da mesma operação.
+Esta PR não fornece reset de estado ou instrução SQL para contornar o bloqueio.
+Não criar outra operação, referência ou chave; não confiar em consulta vazia ou
+na ausência de ID local; não receber/copiar tokens para investigação.
+
+### Validação e implantação pendente
+
+Testes direcionados, com transporte/banco simulados, cobrem criação exclusiva da
+taxa de R$ 6,00; header/chave originais; persistência e apresentação do QR; ausência
+temporária de QR com ID recuperável; consultas/repetições; concorrência; operação
+antiga sem ID; timeout/5xx/409/resposta ilegível/rejeição; falha de persistência;
+integridade e isolamento; PAID recuperado sem POST; contratos Asaas e criação PIX
+pública existentes. Não houve pagamento Sandbox/real, execução SQL, migration,
+backfill, alteração da operação informada, merge ou deploy.
+
+Resultado local: **101 testes passaram em 7 arquivos**, incluindo regressões
+Asaas/checkout público; TypeScript do app, `deno check --cached-only` dos seis
+consumidores abaixo e `git diff --check` passaram. Não foi executada suíte SQL,
+nem foram consultados secrets, logs privados ou o banco conectado.
+
+**Sem nova migration.** Após revisão/merge autorizado, republicar coordenadamente
+os consumidores do adapter incorporado via `manual-fee/runtime.ts`:
+`create-platform-fee-checkout`, `verify-payment-status`, `reconcile-sale-payment`,
+`cleanup-expired-locks`, `asaas-webhook` e `pagbank-webhook`. Publicar também o app
+para as mensagens corrigidas; não mudar flags durante a publicação. Os webhooks
+precisam da versão compartilhada, mas sua autenticação não foi alterada.
+
+Próximo teste mínimo, somente com autorização posterior: nova operação manual
+Sandbox apta, R$ 6,00, comprovar um único POST/Order e exibição PIX; repetir clique,
+fechar navegador, pagar e comprovar consulta backend + taxa confirmada + emissão
+integral/ledger sem duplicidade. Para a operação antiga, conciliação precede
+qualquer retomada. Mocks não homologam conta emissora, API real, assinatura,
+retenção de idempotência ou liquidação. Não repetir OAuth/Connect, trocar
+credenciais, investigar GET Split/Charge ou os testes públicos básicos encerrados.
 PagBank em Produção permanece bloqueado.

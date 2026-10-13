@@ -229,9 +229,13 @@ com as flags apenas porque os testes locais passaram.
 - Operação `confirmed` com emissão falhando: corrigir o impedimento e reexecutar
   consulta/reconciliação da **mesma** operação. Não cobrar novamente. A prova
   externa e o ledger são persistidos antes da transação de emissão.
-- `creating`/`indeterminate` sem ID: consultar referência na conta/ambiente congelados.
-  Se não houver prova segura de ausência, manter revisão; não resetar estado/chave
-  para autorizar POST, não criar outro registro/cobrança por suposição.
+- `creating`/`indeterminate` sem ID: Asaas mantém a consulta por referência suportada.
+  PagBank não oferece `GET /orders?reference_id=...` documentado; retorna
+  `manual_fee_order_id_required` sem requisição externa e exige conciliação na
+  conta/ambiente congelados. Não resetar estado/chave nem criar outra cobrança
+  por suposição. ID conhecido usa `GET /orders/{id}`. Ver o capítulo 28 do
+  [checkpoint](./00_LEIA_PRIMEIRO_PAGBANK_SANDBOX.md) para limites de replay e
+  procedimento da operação antiga.
 - Reserva pendente/incerta vencida permanece ocupada e sem liberação de embarque.
   Somente `prepared` sem criação iniciada ou terminal definitivo consultado aplica
   a política de expiração. Staging/evidências permanecem armazenados.
