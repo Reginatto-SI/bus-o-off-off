@@ -501,6 +501,8 @@ export type Database = {
           legal_name: string | null
           legal_type: string
           logo_url: string | null
+          manual_fee_flow_enabled: boolean
+          manual_fee_pagbank_sandbox_enabled: boolean
           manual_reservation_ttl_minutes: number
           name: string
           notes: string | null
@@ -567,6 +569,8 @@ export type Database = {
           legal_name?: string | null
           legal_type?: string
           logo_url?: string | null
+          manual_fee_flow_enabled?: boolean
+          manual_fee_pagbank_sandbox_enabled?: boolean
           manual_reservation_ttl_minutes?: number
           name: string
           notes?: string | null
@@ -633,6 +637,8 @@ export type Database = {
           legal_name?: string | null
           legal_type?: string
           logo_url?: string | null
+          manual_fee_flow_enabled?: boolean
+          manual_fee_pagbank_sandbox_enabled?: boolean
           manual_reservation_ttl_minutes?: number
           name?: string
           notes?: string | null
@@ -1638,6 +1644,48 @@ export type Database = {
           },
         ]
       }
+      manual_sale_requests: {
+        Row: {
+          actor_id: string
+          company_id: string
+          created_at: string
+          request_hash: string
+          request_key: string
+          sale_id: string
+        }
+        Insert: {
+          actor_id: string
+          company_id: string
+          created_at?: string
+          request_hash: string
+          request_key: string
+          sale_id: string
+        }
+        Update: {
+          actor_id?: string
+          company_id?: string
+          created_at?: string
+          request_hash?: string
+          request_key?: string
+          sale_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "manual_sale_requests_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "manual_sale_requests_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: true
+            referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pagbank_connect_states: {
         Row: {
           company_id: string
@@ -2004,6 +2052,135 @@ export type Database = {
             foreignKeyName: "payment_webhook_events_sale_id_fkey"
             columns: ["sale_id"]
             isOneToOne: false
+            referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_fee_allocations: {
+        Row: {
+          amount_cents: number
+          beneficiary_id: string
+          company_id: string
+          destination: string
+          evidence: Json | null
+          kind: string
+          native_requested: boolean
+          operation_id: string
+          state: string
+        }
+        Insert: {
+          amount_cents: number
+          beneficiary_id: string
+          company_id: string
+          destination: string
+          evidence?: Json | null
+          kind: string
+          native_requested?: boolean
+          operation_id: string
+          state: string
+        }
+        Update: {
+          amount_cents?: number
+          beneficiary_id?: string
+          company_id?: string
+          destination?: string
+          evidence?: Json | null
+          kind?: string
+          native_requested?: boolean
+          operation_id?: string
+          state?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_fee_allocations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_fee_allocations_operation_id_fkey"
+            columns: ["operation_id"]
+            isOneToOne: false
+            referencedRelation: "platform_fee_operations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_fee_operations: {
+        Row: {
+          amount_cents: number
+          company_id: string
+          confirmed_at: string | null
+          created_at: string
+          environment: string
+          external_id: string | null
+          external_status: string | null
+          gateway: string
+          id: string
+          idempotency_key: string
+          issuer_account_id: string
+          last_queried_at: string | null
+          presentation: Json | null
+          reference: string
+          review_required: boolean
+          sale_id: string
+          snapshot: Json
+          state: string
+        }
+        Insert: {
+          amount_cents: number
+          company_id: string
+          confirmed_at?: string | null
+          created_at?: string
+          environment: string
+          external_id?: string | null
+          external_status?: string | null
+          gateway: string
+          id?: string
+          idempotency_key: string
+          issuer_account_id: string
+          last_queried_at?: string | null
+          presentation?: Json | null
+          reference: string
+          review_required?: boolean
+          sale_id: string
+          snapshot: Json
+          state?: string
+        }
+        Update: {
+          amount_cents?: number
+          company_id?: string
+          confirmed_at?: string | null
+          created_at?: string
+          environment?: string
+          external_id?: string | null
+          external_status?: string | null
+          gateway?: string
+          id?: string
+          idempotency_key?: string
+          issuer_account_id?: string
+          last_queried_at?: string | null
+          presentation?: Json | null
+          reference?: string
+          review_required?: boolean
+          sale_id?: string
+          snapshot?: Json
+          state?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_fee_operations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_fee_operations_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: true
             referencedRelation: "sales"
             referencedColumns: ["id"]
           },
@@ -3961,6 +4138,11 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_read_manual_fee_company: {
+        Args: { p_company_id: string }
+        Returns: boolean
+      }
+      claim_manual_fee_creation: { Args: { p_id: string }; Returns: boolean }
       consume_service_item: {
         Args: {
           p_sale_service_item_id: string
@@ -4053,6 +4235,14 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      expire_unpaid_manual_sale: {
+        Args: { p_sale_id: string }
+        Returns: boolean
+      }
+      finalize_manual_sale: {
+        Args: { p_operation_id: string }
+        Returns: string
       }
       generate_event_starting_soon_notifications: {
         Args: { p_company_id: string; p_window_hours?: number }
@@ -4312,6 +4502,12 @@ export type Database = {
         Args: { p_company_id: string; p_sale_id: string }
         Returns: string
       }
+      manual_fee_recovery_candidates: {
+        Args: { p_limit?: number }
+        Returns: {
+          sale_id: string
+        }[]
+      }
       mark_asaas_webhook_event_duplicate: {
         Args: {
           p_asaas_event_id: string
@@ -4346,6 +4542,10 @@ export type Database = {
           read_ct: number
         }[]
       }
+      record_manual_fee_allocations: {
+        Args: { p_operation_id: string }
+        Returns: undefined
+      }
       recover_company_term_initial_version: {
         Args: {
           p_company_id: string
@@ -4362,6 +4562,17 @@ export type Database = {
       refresh_company_referral_progress: {
         Args: { p_referred_company_id?: string }
         Returns: number
+      }
+      register_manual_sale: {
+        Args: {
+          p_actor_id: string
+          p_operation: Json
+          p_passengers: Json
+          p_request_hash: string
+          p_request_key: string
+          p_sale: Json
+        }
+        Returns: string
       }
       resolve_company_referral_code: { Args: { code: string }; Returns: string }
       resolve_event_seller_ref: {
