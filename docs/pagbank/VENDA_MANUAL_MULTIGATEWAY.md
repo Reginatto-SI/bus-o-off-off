@@ -56,8 +56,12 @@ wallet emissora contra /wallets antes das operações Asaas.
 
 Elegibilidade econômica é comum: identidade válida no ambiente em um gateway
 suportado preserva direito, ainda que o gateway escolhido não tenha destino técnico.
-Ausência comprovada não cria dívida. Wallet legado sem ambiente comprovado exige
-revisão, nunca complementação entre ambientes. 67 testes relevantes e 15 cenários
+Ausência comprovada não cria dívida. Uma wallet legada sem identificação do
+ambiente não pode ser usada como prova de elegibilidade em Sandbox nem completada
+com dados de Produção. Se a consulta ao cadastro for bem-sucedida e não houver
+wallet válida específica do ambiente, o beneficiário é ausente nesse ambiente,
+conforme PRD 01, sem remover ou alterar a wallet histórica. Falha de consulta
+ou múltiplos recebedores elegíveis permanecem sujeitos a revisão. 67 testes relevantes e 15 cenários
 PostgreSQL passaram antes do ajuste final de snapshots (a suíte completa será
 reexecutada ao concluir o conjunto). Flags continuam desligadas.
 
