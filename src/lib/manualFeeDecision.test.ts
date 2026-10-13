@@ -12,7 +12,22 @@ describe('common manual economic decision',()=>{
  });
  it('absence creates no obligation to absent receivers',async()=>{const d=await prepareManualFeeDecision(database(false,false),company,'sandbox',[100],null,()=> 'issuer');expect(d.snapshot.allocations).toHaveLength(1);expect(d.snapshot.allocations[0].kind).toBe('marketplace');});
  it('invalid legacy wallet is absence, not an eligible entitlement',async()=>{const d=await prepareManualFeeDecision(database(false,false,false,'invalid-legacy-value'),company,'sandbox',[100],null,()=> 'issuer');expect(d.snapshot.allocations).toHaveLength(1);expect(d.snapshot.allocations[0].amount_cents).toBe(600);});
- it('valid unscoped legacy wallet requires environment evidence',async()=>{await expect(prepareManualFeeDecision(database(false,false,false,'00000000-0000-0000-0000-000000000010'),company,'sandbox',[100],null,()=> 'issuer')).rejects.toThrow('manual_beneficiaries_environment_unresolved');});
+ it('valid unscoped legacy wallet does not grant Sandbox eligibility or block the sale',async()=>{
+  const d=await prepareManualFeeDecision(database(false,false,false,'00000000-0000-0000-0000-000000000010'),company,'sandbox',[100],null,()=> 'issuer');
+  expect(d.snapshot.distribution).toMatchObject({platformAmount:6,socioAmount:0,representativeAmount:0});
+  expect(d.snapshot.allocations).toHaveLength(1);
+  expect(d.snapshot.allocations[0]).toMatchObject({kind:'marketplace',amount_cents:600});
+ });
+ it('PagBank Sandbox does not inherit a legacy wallet from another environment',async()=>{
+  const d=await prepareManualFeeDecision(
+   database(false,false,false,'00000000-0000-0000-0000-000000000010'),
+   {...company,payment_gateway:'pagbank',manual_fee_pagbank_sandbox_enabled:true},
+   'sandbox',[100],null,()=> 'issuer',
+  );
+  expect(d.snapshot.distribution).toMatchObject({platformAmount:6,socioAmount:0,representativeAmount:0});
+  expect(d.snapshot.allocations).toHaveLength(1);
+  expect(d.snapshot.allocations[0].kind).toBe('marketplace');
+ });
  it('query failure does not silently redistribute',async()=>{await expect(prepareManualFeeDecision(database(false,false,true),company,'sandbox',[100],null,()=> 'issuer')).rejects.toThrow('manual_beneficiaries_unresolved');});
  it('exemption does not apply minimum or require gateway secrets',async()=>{const d=await prepareManualFeeDecision(database(false,false),{...company,platform_fee_percent:0},'sandbox',[100],null,()=>undefined);expect(d.amount_cents).toBe(0);expect(d.snapshot.allocations).toEqual([]);});
  it('exemption has a backend-derived audit reason',async()=>{const d=await prepareManualFeeDecision(database(false,false),company,'sandbox',[0],null,()=>undefined);expect(d.snapshot.exemption_reason).toBe('zero_financial_base');});

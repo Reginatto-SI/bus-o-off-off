@@ -6,9 +6,10 @@ export async function resolveManualBeneficiaries(db:any,companyId:string,environ
  const validAsaas=(v:unknown)=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v.trim());
  const validPagbank=(v:unknown)=>typeof v==='string'&&/^ACCO_[0-9a-f-]{36}$/i.test(v.trim());
  const eligible=(row:any)=>validAsaas(row?.[fields[0]])||validPagbank(row?.[fields[1]]);
- const socios=await db.from('socios_split').select(`id,asaas_wallet_id,${fields.join(',')}`);
+ // PRD 01: only a wallet explicitly associated with this environment grants eligibility.
+ // Historical wallets without environment cannot be used to infer Sandbox rights.
+ const socios=await db.from('socios_split').select(`id,${fields.join(',')}`);
  if(socios.error)throw new ManualFeeError('manual_beneficiaries_unresolved',503);
- if((socios.data??[]).some((r:any)=>validAsaas(r.asaas_wallet_id)&&!fields.some(f=>r[f])))throw new ManualFeeError('manual_beneficiaries_environment_unresolved');
  const active=(socios.data??[]).filter(eligible);
  if(active.length>1)throw new ManualFeeError('manual_beneficiaries_ambiguous');
  let representative=null;
