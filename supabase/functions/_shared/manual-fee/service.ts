@@ -1,14 +1,17 @@
 import { ManualFeeError } from './auth.ts';
 import { assertFeeFacts,type FeeAdapter,type FeeOperation } from './contracts.ts';
+import {withManualFeeDiagnostic,type ManualFeeDiagnostic} from './diagnostics.ts';
 
 // All externally confirmed payments are recorded before attempting ticket issuance.
 // deno-lint-ignore no-explicit-any
 export async function synchronizeManualFee(db:any,op:FeeOperation,adapter:FeeAdapter,allowCreate=false) {
  if(op.state==='exempt'||op.state==='confirmed') return {operation:op,paid:true};
  let claimed=false;
+ let providerDiagnostic:ManualFeeDiagnostic|undefined;
  if(allowCreate){const claim=await db.rpc('claim_manual_fee_creation',{p_id:op.id});if(claim.error)throw new ManualFeeError('manual_fee_claim_failed',503);claimed=claim.data===true;}
  try {
   const facts=claimed?await adapter.create(op):await adapter.query(op);
+  providerDiagnostic=facts?.diagnostic;
   if(!facts){return {operation:op,paid:false,uncertain:true};}
   assertFeeFacts(op,facts);
   const state=facts.state==='paid'?'confirmed':facts.state==='terminal'?'terminal':facts.state==='indeterminate'?'indeterminate':'pending';
@@ -19,6 +22,8 @@ export async function synchronizeManualFee(db:any,op:FeeOperation,adapter:FeeAda
   return {operation:saved.data,paid:state==='confirmed'};
  } catch(error) {
   if(claimed)await db.from('platform_fee_operations').update({state:'indeterminate'}).eq('id',op.id).eq('state','creating');
+  if(providerDiagnostic&&error instanceof ManualFeeError)
+   throw withManualFeeDiagnostic(error,providerDiagnostic,['manual_fee_persistence_failed','manual_fee_read_failed'].includes(error.code)?'persistence_failure':'integrity_failure');
   throw error;
  }
 }
