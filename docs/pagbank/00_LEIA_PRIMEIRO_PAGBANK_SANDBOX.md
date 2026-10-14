@@ -6,7 +6,7 @@
 >
 > **Objetivo atual é simples:** fazer **PIX e cartão de crédito funcionarem em Sandbox com Split**, ponta a ponta, antes de buscar uma integração "perfeita".
 
-Atualizado em: **2026-10-12**
+Atualizado em: **2026-10-13**
 
 ---
 
@@ -1130,4 +1130,97 @@ integral/ledger sem duplicidade. Para a operação antiga, conciliação precede
 qualquer retomada. Mocks não homologam conta emissora, API real, assinatura,
 retenção de idempotência ou liquidação. Não repetir OAuth/Connect, trocar
 credenciais, investigar GET Split/Charge ou os testes públicos básicos encerrados.
+PagBank em Produção permanece bloqueado.
+
+## 29. Diagnóstico de rejeições na taxa manual PagBank (2026-10-13)
+
+Base: `main` em `92125c2ac45ed016680e7b8cb8b635c1e7adecfd`, após merge da #780.
+A `main` contém registro de publicação das seis funções; esse registro não foi
+tratado como teste financeiro ou inspeção do runtime conectado nesta sessão.
+
+O responsável informou rejeição na operação `534d9db0-fb36-4359-9805-f59a97cfbc4a`,
+venda `e2b38d78-17d5-4f00-a4ff-9fb6c7c5c1c1`, Sandbox, R$ 6,00. O HTTP 422 visto
+no SmartBus é interno: **não comprova o HTTP original nem a causa da rejeição**.
+O cliente já entregava `status` e `data.error_messages`; o adapter descartava
+esse contexto ao lançar `manual_fee_create_rejected`. Não corrigir `qr_codes`
+ou substituir por `charges` sem evidência do motivo real.
+
+**Melhoria exclusivamente de observabilidade:** o adapter preserva uma observação
+sanitizada no erro, e o fluxo comum registra uma única ocorrência em
+`sale_integration_logs`, usando `logSaleIntegrationEvent`, com
+`event_type=manual_fee_gateway_failure`, `provider=pagbank` e direção de saída.
+Registra empresa/venda/operação, gateway/ambiente, etapa `POST /orders` ou
+`GET /orders/{id}`, HTTP original, HTTP/código interno, classificação, data/hora
+e até cinco códigos/parâmetros/descrições seguras do provedor. Não altera a
+resposta simples ao operador, o payload Pix ou as transições financeiras.
+
+Classificações diagnósticas distinguem 401/403 (autorização), rejeição/dado
+obrigatório informado pelo provedor, 409, 429/5xx, rede/timeout sem HTTP, resposta
+inesperada, integridade e persistência local após resposta externa. São evidências
+de HTTP/mensagem, não confirmação de hipótese sobre conta, credencial ou capacidade
+Pix. Falha local de persistência conserva o HTTP externo observado (por exemplo,
+201), sem apresentar esse HTTP como rejeição do PagBank.
+
+**Sanitização:** não armazena request/response brutos, headers, tokens, clientes,
+documentos, telefones, e-mails ou chave de idempotência. Códigos seguem formatos
+permitidos e vocabulário técnico; parâmetros seguem allowlist de campos/índices;
+valores sensíveis conhecidos são excluídos. Descrições são normalizadas para
+frases fixas: texto desconhecido é omitido, pois regex de mascaramento isolada
+não protege nomes ou segredos inesperados. Campos desconhecidos são descartados,
+há limites de tamanho/quantidade e nenhuma interpolação de texto bruto em log.
+
+O logger existente passa a reconhecer também erros retornados pelo insert do
+Supabase, além de exceções; retorna sucesso/falha, sem lançar erro financeiro.
+Falha da auditoria gera fallback sanitizado `manual_fee_gateway_failure` nos
+logs da função. A mensagem bruta de erro do banco não é logada: somente SQLSTATE
+ou código genérico. Demais consumidores continuam ignorando o retorno do logger.
+
+### Consulta autorizada e limites
+
+No app, usar **`/admin/diagnostico-vendas`**, selecionar empresa e Sandbox,
+abrir o diagnóstico técnico existente e a aba **Logs recentes**. A ocorrência
+exibe HTTP original e JSON sanitizado; não criar outra tela. A rota mantém o
+guard existente de **developer em desktop**. Operadores não recebem esses detalhes
+na resposta de criação. Queries continuam filtradas por empresa/ambiente, e a
+leitura direta da tabela permanece sujeita às RLS já existentes, inclusive a
+policy histórica de membros da empresa. Não foi criada promessa de restrição
+exclusiva a developers na tabela, nem houve alteração de RLS/permissões.
+
+No Lovable Cloud, o responsável autorizado também pode consultar o registro em
+`sale_integration_logs` por venda/empresa/ambiente, ou os logs da Edge Function
+quando houver fallback. A estrutura versionada já suporta PagBank e os campos
+usados; o schema/RLS efetivamente conectado não foi acessado nem verificado.
+Conferir esses acessos na implantação, sem alterar as policies por suposição.
+
+**Sem recuperação retroativa:** a melhoria não inventa HTTP/detalhes perdidos.
+As operações `534d9db0-fb36-4359-9805-f59a97cfbc4a` e
+`bff984ad-246d-493e-b527-cabacc6cef89` continuam intactas e inconclusivas sem ID.
+Retries continuam bloqueados, sem POST adicional; consultas locais sem resposta
+do provedor não sobrescrevem a causa original com uma nova ocorrência externa.
+Não resetar estados, liberar reservas, alterar chaves ou reprocessar essas vendas.
+
+### Evidências e implantação pendente
+
+**139 testes passaram em 11 arquivos**, incluindo 32 novos cenários de diagnóstico,
+logger e autorização; preservação de HTTP, campos, sanitização, respostas inesperadas,
+classificações, concorrência/retries existentes, erro de persistência com HTTP 201,
+fallback de auditoria, resposta simples ao operador, ownership/role e guard da
+tela técnica. Regressões direcionadas de Asaas e criação PIX pública passaram.
+TypeScript do app, checagem Deno de oito funções (seis manuais + duas criações
+públicas), lint do helper puro e teste do logger, e `git diff --check` passaram.
+Todos os transportes/bancos de teste são mocks; nenhum acesso financeiro externo,
+pagamento, consulta ao banco conectado, SQL, backfill, deploy ou merge foi feito.
+
+**Sem nova migration; não reaplicar 0002–0006.** Após revisão/merge autorizado,
+republicar as seis funções que incorporam o fluxo manual: `create-platform-fee-checkout`,
+`verify-payment-status`, `reconcile-sale-payment`, `cleanup-expired-locks`,
+`asaas-webhook`, `pagbank-webhook`; publicar o frontend para o detalhe na tela existente.
+O retorno adicional do logger não exige mudança de contrato nos demais consumidores.
+Não mudar flags, conta, credenciais, beneficiários, cálculo, split, ledger ou emissão.
+
+Próximo passo mínimo: publicar somente após autorização, conferir acesso e
+persistência do diagnóstico no ambiente implantado; analisar a resposta sanitizada
+de uma próxima tentativa Sandbox explicitamente autorizada antes de propor ajuste
+financeiro. Não reproduzir a rejeição nem repetir pagamentos nesta sessão. Não
+reabrir OAuth/Connect, PIX/cartão públicos, GET Split/Charge ou assinatura encerrados.
 PagBank em Produção permanece bloqueado.

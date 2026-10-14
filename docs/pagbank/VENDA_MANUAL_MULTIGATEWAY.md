@@ -280,3 +280,24 @@ preservados. Nenhuma migration adicional, merge de PR ou implantação foi execu
 acima: nenhuma publicação parcial sobre banco sem os novos contratos, flags off,
 validação do banco conectado e publicação coordenada antes do piloto autorizado.
 PagBank em Produção permanece bloqueado.
+
+## Diagnóstico da taxa manual PagBank (2026-10-13)
+
+Depois de publicar a melhoria de diagnóstico, usar `/admin/diagnostico-vendas`
+(developer no desktop), selecionar empresa/ambiente, abrir o diagnóstico técnico
+existente e **Logs recentes**. O evento `manual_fee_gateway_failure` apresenta
+HTTP original do provedor, classificação, operação e erros sanitizados. O HTTP
+422 do SmartBus continua distinto do HTTP externo; ausência de resposta não
+vira HTTP inventado. No Lovable Cloud, o responsável também pode consultar
+`sale_integration_logs`; em falha de gravação, procurar o mesmo evento nos logs
+da função. O acesso direto segue as RLS existentes e deve ser conferido no
+ambiente conectado. Não há endpoint público novo para detalhes técnicos.
+
+Mensagens externas desconhecidas são omitidas; descrições reconhecidas são
+normalizadas, e código/parâmetro têm formatos, allowlists e limites. Não gravar
+request/response bruto, credenciais, clientes ou chave de idempotência. Logs
+não recuperam detalhes perdidos de tentativas antigas nem autorizam novo POST.
+As operações inconclusivas continuam preservadas. Sem nova migration, mudança
+de payload Pix, regra financeira, flag ou liberação de Produção. Evidências,
+testes e publicação coordenada das seis funções no capítulo 29 do
+[checkpoint](./00_LEIA_PRIMEIRO_PAGBANK_SANDBOX.md).

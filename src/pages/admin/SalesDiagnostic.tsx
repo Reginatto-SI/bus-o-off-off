@@ -4056,6 +4056,12 @@ export default function SalesDiagnostic() {
                               <p className="break-all"><span className="text-muted-foreground">external_reference:</span> {log.external_reference ?? '-'}</p>
                             </div>
                             <p className="mt-2 text-muted-foreground">message: {log.message}</p>
+                            {log.event_type === 'manual_fee_gateway_failure' && (
+                              <div className="mt-2 space-y-2">
+                                <p>HTTP original do provedor: {log.http_status ?? 'sem resposta HTTP'}</p>
+                                <pre className="whitespace-pre-wrap break-all rounded bg-muted p-2">{JSON.stringify(log.response_json, null, 2)}</pre>
+                              </div>
+                            )}
                           </div>
                         ))
                       )}

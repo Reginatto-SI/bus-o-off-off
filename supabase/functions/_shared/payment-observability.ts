@@ -143,7 +143,7 @@ export async function logSaleIntegrationEvent(params: {
   responseJson?: unknown;
 }) {
   try {
-    await params.supabaseAdmin.from("sale_integration_logs").insert({
+    const {error} = await params.supabaseAdmin.from("sale_integration_logs").insert({
       sale_id: params.saleId ?? null,
       company_id: params.companyId ?? null,
       payment_environment: params.paymentEnvironment ?? null,
@@ -165,6 +165,8 @@ export async function logSaleIntegrationEvent(params: {
       payload_json: params.payloadJson ?? null,
       response_json: params.responseJson ?? null,
     });
+    if(error)throw error;
+    return true;
   } catch (error) {
     logPaymentTrace("error", "payment-observability", "integration_log_insert_failed", {
       sale_id: params.saleId ?? null,
@@ -176,8 +178,10 @@ export async function logSaleIntegrationEvent(params: {
       asaas_event_id: params.asaasEventId ?? null,
       processing_status: params.processingStatus,
       result_category: params.resultCategory ?? null,
-      error_message: error instanceof Error ? error.message : String(error),
+      // Database errors can echo values from the rejected insert. Keep only SQLSTATE.
+      error_code: typeof error?.code === "string" && /^[0-9A-Z]{5}$/.test(error.code) ? error.code : "integration_log_write_failed",
     });
+    return false;
   }
 }
 

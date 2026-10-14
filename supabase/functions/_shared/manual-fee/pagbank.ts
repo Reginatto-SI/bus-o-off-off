@@ -3,11 +3,18 @@ import {pagbankRequest} from '../pagbank/client.ts';
 import {extractPagbankPixArtifacts} from '../pagbank/core.ts';
 import {isValidCustomerEmail} from '../customer-email.ts';
 import {ManualFeeError} from './auth.ts';
+import {manualFeeProviderDiagnostic,withManualFeeDiagnostic} from './diagnostics.ts';
 import type {FeeAdapter,FeeOperation,FeeFacts} from './contracts.ts';
 export function pagbankFeeAdapter(params:{environment:string;accessToken:string;issuerAccountId:string;notificationUrl:string;request?:typeof pagbankRequest}):FeeAdapter {
  const request=params.request??pagbankRequest;
  const check=(op:FeeOperation)=>{if(op.gateway!=='pagbank'||params.environment!=='sandbox'||op.environment!=='sandbox'||op.issuer_account_id!==params.issuerAccountId)throw new ManualFeeError('manual_pagbank_context_rejected');};
  const call=(method:'GET'|'POST',path:string,body?:unknown,key?:string)=>request({environment:'sandbox',accessToken:params.accessToken,method,path,body,idempotencyKey:key});
+ const diagnostic=(op:FeeOperation,res:any,stage:'POST /orders'|'GET /orders/{id}')=>manualFeeProviderDiagnostic(res,stage,[params.accessToken,op.idempotency_key,op.snapshot.customer.name,op.snapshot.customer.document,op.snapshot.customer.email??'']);
+ const responseFacts=(op:FeeOperation,res:any,stage:'POST /orders'|'GET /orders/{id}')=>{
+  const observation=diagnostic(op,res,stage);
+  try{return {...facts(op,res.data),diagnostic:observation};}
+  catch(error){if(error instanceof ManualFeeError)throw withManualFeeDiagnostic(error,observation,'integrity_failure');throw error;}
+ };
  const facts=(op:FeeOperation,data:any):FeeFacts=>{
   if((data.charges?.length??0)>1||(data.qr_codes?.length??0)>1)throw new ManualFeeError('manual_fee_order_ambiguous');
   const art=extractPagbankPixArtifacts(data);const charge=data.charges?.[0];const paid=charge?.status==='PAID';
@@ -25,8 +32,8 @@ export function pagbankFeeAdapter(params:{environment:string;accessToken:string;
   // a documented replay window and the original request, require reconciliation.
   if(!op.external_id)throw new ManualFeeError('manual_fee_order_id_required');
   const res=await call('GET',`/orders/${encodeURIComponent(op.external_id)}`);
-  if(!res.ok||!res.data)throw new ManualFeeError('manual_fee_query_failed',503);
-  return facts(op,res.data);
+  if(!res.ok||!res.data)throw withManualFeeDiagnostic(new ManualFeeError('manual_fee_query_failed',503),diagnostic(op,res,'GET /orders/{id}'));
+  return responseFacts(op,res,'GET /orders/{id}');
  };
  return {query,async create(op){
   check(op);
@@ -42,10 +49,10 @@ export function pagbankFeeAdapter(params:{environment:string;accessToken:string;
   // The entire fee goes technically to the platform; third-party rights stay in the common ledger.
   const res=await call('POST','/orders',body,op.idempotency_key);
   if(!res.ok&&!res.indeterminate&&[400,401,403,422].includes(res.status)&&!res.data?.id)
-   throw new ManualFeeError('manual_fee_create_rejected',422);
-  if(!res.ok||!res.data)throw new ManualFeeError('manual_fee_create_unresolved',503);
+   throw withManualFeeDiagnostic(new ManualFeeError('manual_fee_create_rejected',422),diagnostic(op,res,'POST /orders'));
+  if(!res.ok||!res.data)throw withManualFeeDiagnostic(new ManualFeeError('manual_fee_create_unresolved',503),diagnostic(op,res,'POST /orders'));
   // Persist a validated Order identity even if its QR text is not available yet.
   // The same operation can then recover it by GET without another POST.
-  return facts(op,res.data);
+  return responseFacts(op,res,'POST /orders');
  }};
 }

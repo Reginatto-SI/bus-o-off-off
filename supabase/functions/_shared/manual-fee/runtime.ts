@@ -4,7 +4,17 @@ import {asaasFeeAdapter} from './asaas.ts';
 import {pagbankFeeAdapter} from './pagbank.ts';
 import {synchronizeManualFee} from './service.ts';
 import {resolvePaymentContext} from '../payment-context-resolver.ts';
-import {logSaleOperationalEvent} from '../payment-observability.ts';
+import {logSaleOperationalEvent,logSaleIntegrationEvent,logPaymentTrace} from '../payment-observability.ts';
+import {ManualFeeDiagnosticError} from './diagnostics.ts';
+export async function recordManualFeeDiagnostic(db:any,op:any,error:unknown) {
+ if(op.gateway!=='pagbank'||!(error instanceof ManualFeeDiagnosticError))return;
+ const details={...error.diagnostic,gateway:op.gateway,environment:op.environment,company_id:op.company_id,sale_id:op.sale_id,operation_id:op.id,internal_error_code:error.code,internal_http_status:error.status};
+ const first=details.provider_errors[0];
+ const message=`Taxa manual PagBank: ${details.classification}; etapa=${details.stage}; HTTP original=${details.http_status_original??'sem resposta'}; operação=${op.id}; código=${first?.code??'não informado'}; parâmetro=${first?.parameter_name??'não informado'}; ${first?.description??'Sem detalhes estruturados do provedor.'}`;
+ let stored=false;
+ try{stored=await logSaleIntegrationEvent({supabaseAdmin:db,saleId:op.sale_id,companyId:op.company_id,paymentEnvironment:op.environment,environmentDecisionSource:'sale',provider:'pagbank',direction:'outgoing_request',eventType:'manual_fee_gateway_failure',paymentId:op.external_id,httpStatus:details.http_status_original,processingStatus:'failed',resultCategory:'error',incidentCode:error.code,message:message.slice(0,800),responseJson:details});}catch{/* Observability cannot replace the original financial error. */}
+ if(!stored){try{logPaymentTrace('error','manual-fee','manual_fee_gateway_failure',details);}catch{/* Keep the original error even if the fallback logger fails. */}}
+}
 export async function readManualFeeOperation(db:any,sale:any) {
  const found=await db.from('platform_fee_operations').select('*').eq('sale_id',sale.id).eq('company_id',sale.company_id).maybeSingle();
  if(found.error)throw new ManualFeeError('manual_fee_read_failed',503);
@@ -31,7 +41,8 @@ export async function handleManualFeeOperation(db:any,sale:any,op:any,allowCreat
  if(!result.paid){
   if(op.state==='prepared'&&!allowCreate)return {operation:op,paid:false,finalized:false};
   if(allowCreate){const config=await db.from('companies').select('manual_fee_flow_enabled').eq('id',sale.company_id).single();if(config.error||!config.data.manual_fee_flow_enabled)allowCreate=false;}
-  result=await synchronizeManualFee(db,op,adapterForManualFee(op,getSecret),allowCreate);
+  try{result=await synchronizeManualFee(db,op,adapterForManualFee(op,getSecret),allowCreate);}
+  catch(error){await recordManualFeeDiagnostic(db,op,error);throw error;}
  }
  if(!result.paid)return {...result,finalized:false};
  const ledger=await db.rpc('record_manual_fee_allocations',{p_operation_id:op.id});
