@@ -108,6 +108,7 @@ import { PassengerTicketList } from '@/components/public/PassengerTicketList';
 import { formatCurrencyBRL } from '@/lib/currency';
 import { formatPaymentMethodLabel } from '@/lib/paymentMethodLabels';
 import { startPlatformFeeCheckout } from '@/lib/platformFeeCheckout';
+import {useManualSaleReceipt} from '@/hooks/use-manual-sale-receipt';
 import { resolveTicketPurchaseConfirmedAt, resolveTicketPurchaseOriginLabel } from '@/lib/ticketPurchaseMetadata';
 
 function formatCpfMask(value: string): string {
@@ -515,6 +516,9 @@ export default function Sales() {
 
   // Ticket generation states
   const [ticketGenSale, setTicketGenSale] = useState<Sale | null>(null);
+  const ticketGenIsManual=Boolean(ticketGenSale&&['admin_manual','admin_reservation_conversion','seller_manual'].includes(ticketGenSale.sale_origin));
+  const ticketGenScopeMatches=ticketGenSale?.company_id===activeCompanyId;
+  const ticketReceipt=useManualSaleReceipt({saleId:ticketGenSale?.id??null,companyId:ticketGenSale?.company_id??null,enabled:ticketGenIsManual&&ticketGenScopeMatches});
   const [ticketGenTickets, setTicketGenTickets] = useState<TicketRecord[]>([]);
   const [ticketGenBoardingTime, setTicketGenBoardingTime] = useState<string | null>(null);
   const [ticketGenBoardingDate, setTicketGenBoardingDate] = useState<string | null>(null);
@@ -1754,11 +1758,13 @@ export default function Sales() {
     return actions;
   };
   // Constrói TicketCardData para TODOS os tickets da venda (agrupamento por passageiro no componente)
-  const allTicketGenCards: TicketCardData[] = ticketGenSale && activeCompany
-    ? ticketGenTickets.map((ticket) =>
+  const ticketGenDisplaySale=ticketGenSale&&ticketGenIsManual?{...ticketGenSale,...ticketReceipt.snapshot?.sale,
+    status:ticketReceipt.snapshot?.phase==='complete'?'pago':ticketReceipt.snapshot?.phase==='closed'?ticketReceipt.snapshot.sale.status:'reservado'} as Sale:ticketGenSale;
+  const allTicketGenCards: TicketCardData[] = ticketGenDisplaySale && activeCompany && ticketGenScopeMatches
+    ? (ticketReceipt.snapshot?.tickets??ticketGenTickets).map((ticket) =>
         buildTicketCardData(
           ticket,
-          ticketGenSale,
+          ticketGenDisplaySale,
           activeCompany,
           ticketGenBoardingTime,
           ticketGenBoardingDate,
@@ -2448,12 +2454,12 @@ export default function Sales() {
           <DialogContent className="admin-modal flex h-[95vh] max-h-[95vh] w-[100vw] max-w-none flex-col gap-0 overflow-hidden p-0 sm:h-[90vh] sm:max-h-[90vh] sm:w-[95vw] sm:max-w-4xl">
             <DialogHeader className="admin-modal__header shrink-0 px-6 py-4">
               <DialogTitle>
-                {ticketGenSale?.status === 'reservado' ? 'Comprovante de Reserva' : 'Gerar Passagem'}
+                {ticketGenDisplaySale?.status === 'reservado' ? 'Comprovante de Reserva' : 'Gerar Passagem'}
               </DialogTitle>
             </DialogHeader>
             {/* Área com scroll interno para garantir visualização completa da passagem sem rolar o fundo da tela. */}
             <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6">
-              {ticketGenLoading ? (
+              {!ticketGenScopeMatches?<p>Selecione a empresa da venda para consultar este comprovante.</p>:ticketGenLoading ? (
                 <div className="flex justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
                 </div>
@@ -2467,13 +2473,20 @@ export default function Sales() {
                     allowReservedDownloads
                     // Quando a venda ainda está reservada, forçamos visual de comprovante
                     // para evitar semelhança com ticket operacional de embarque.
-                    reservedPresentation={ticketGenSale?.status === 'reservado' ? 'receipt' : 'default'}
+                    reservedPresentation={ticketGenDisplaySale?.status === 'reservado' ? 'receipt' : 'default'}
                     context="admin"
                   />
                 </div>
               )}
             </div>
             <DialogFooter className="admin-modal__footer shrink-0 px-6 py-4">
+              {ticketGenIsManual&&<>
+                <div className="text-sm text-muted-foreground" role="status">
+                  {ticketReceipt.snapshot?.phase==='complete'?'Venda concluída. Passagens atualizadas.':ticketReceipt.snapshot?.phase==='issuing'?'Pagamento confirmado. Estamos finalizando suas passagens.':ticketReceipt.snapshot?.phase==='closed'?'Venda encerrada. Consulte a situação na listagem.':'A reserva aguarda confirmação financeira.'}
+                  {(ticketReceipt.error||ticketReceipt.paused)&&<p>{ticketReceipt.error?'Não foi possível atualizar agora. Os últimos dados foram preservados.':'Acompanhamento automático pausado. Consulte novamente.'}</p>}
+                </div>
+                <Button variant="outline" onClick={()=>void ticketReceipt.refresh()} disabled={ticketReceipt.loading||!ticketGenScopeMatches}>Consultar novamente</Button>
+              </>}
               <Button variant="outline" onClick={() => { setTicketGenSale(null); setTicketGenTickets([]); }}>
                 Fechar
               </Button>

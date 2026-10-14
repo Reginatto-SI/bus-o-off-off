@@ -318,3 +318,24 @@ validação anterior à criação externa, com testes sintéticos e homologaçã
 O capítulo 30 do [checkpoint](./00_LEIA_PRIMEIRO_PAGBANK_SANDBOX.md) registra fontes,
 limites da análise e os pontos de código. Esta entrega é somente documental:
 sem migration, publicação de função, mudança cadastral/financeira ou liberação.
+
+## Comprovante manual após confirmação (2026-10-13)
+
+A melhoria frontend acompanha os dados oficiais enquanto o comprovante está
+aberto. A confirmação PIX existente apenas solicita uma recarga; o estado não
+é inferido de toast ou evento. A mesma leitura atende Asaas/PagBank/futuros
+gateways e o diálogo reaberto pela listagem. O backend continua responsável por
+confirmar taxa e emitir integralmente as passagens.
+
+Se a taxa estiver confirmada e a emissão incompleta, não pagar novamente: o
+comprovante mostra “Pagamento confirmado. Estamos finalizando suas passagens.”
+Somente após venda paga e consistência dos tickets/manifesto exibe QR/status
+definitivos e atualiza o PDF existente. A janela permanece aberta e o botão de
+pagamento é retirado. Falhas de leitura preservam a confirmação já conhecida.
+
+Há leitura a cada 10 segundos, até 30 atualizações automáticas, suspensa em aba
+oculta e encerrada na conclusão/fechamento. “Consultar novamente” recarrega dados
+oficiais e retoma o acompanhamento, sem criar cobrança. Publicação somente do
+frontend, após autorização; sem migration/Edge Function nova ou a republicar.
+Ver evidências e limites no capítulo 31 do
+[checkpoint](./00_LEIA_PRIMEIRO_PAGBANK_SANDBOX.md). PagBank em Produção bloqueado.
