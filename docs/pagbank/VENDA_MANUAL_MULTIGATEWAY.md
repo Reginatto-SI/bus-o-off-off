@@ -301,3 +301,20 @@ As operações inconclusivas continuam preservadas. Sem nova migration, mudança
 de payload Pix, regra financeira, flag ou liberação de Produção. Evidências,
 testes e publicação coordenada das seis funções no capítulo 29 do
 [checkpoint](./00_LEIA_PRIMEIRO_PAGBANK_SANDBOX.md).
+
+## Pendência de customer.name na taxa manual (2026-10-13)
+
+O incidente relatado na operação `256d3750-1d20-423e-9c24-e34eeeafe20c` confirmou
+HTTP 400 / código `40002` / campo `customer.name`. A causa específica não foi
+comprovada: a descrição original não está disponível. A documentação oficial
+permite caracteres especiais, aceita apóstrofos/números e não informa limites
+numéricos ou regex desse campo no schema consultado. Não remover acentos/parênteses,
+copiar o truncamento público de 60 caracteres ou substituir a identidade por hipótese.
+
+Solicitar ao PagBank a regra violada pelo horário/referência da tentativa original,
+e conferir nome e tipo CPF/CNPJ do pagador por procedimento autorizado. Não repetir
+POST nem reprocessar operações inconclusivas. Após esclarecimento, definir a menor
+validação anterior à criação externa, com testes sintéticos e homologação autorizada.
+O capítulo 30 do [checkpoint](./00_LEIA_PRIMEIRO_PAGBANK_SANDBOX.md) registra fontes,
+limites da análise e os pontos de código. Esta entrega é somente documental:
+sem migration, publicação de função, mudança cadastral/financeira ou liberação.

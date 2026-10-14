@@ -1224,3 +1224,109 @@ de uma próxima tentativa Sandbox explicitamente autorizada antes de propor ajus
 financeiro. Não reproduzir a rejeição nem repetir pagamentos nesta sessão. Não
 reabrir OAuth/Connect, PIX/cartão públicos, GET Split/Charge ou assinatura encerrados.
 PagBank em Produção permanece bloqueado.
+
+## 30. customer.name na taxa manual — causa específica pendente (2026-10-13)
+
+Base da análise: `main` em `bf85e6967c2a85fed3d6984ec7b47d88751c5217`.
+O responsável informou publicação da #781 e um incidente na operação
+`256d3750-1d20-423e-9c24-e34eeeafe20c`, venda
+`43d67b91-8d28-401b-ac99-a0e71251f2b4`: `POST /orders`, Sandbox, taxa R$ 6,00,
+HTTP original 400, código `40002`, parâmetro `customer.name`, com o nome empresarial
+`Empresa Padrão (Teste)`. Não houve leitura do banco/logs privados ou reprodução
+financeira pelo Codex. O responsável confirmou que não possui a descrição original.
+
+**COMPROVADO pelo relato:** o parâmetro rejeitado. **NÃO COMPROVADO:** a regra
+específica violada e a causa raiz. Não atribuir o erro a acentos, parênteses,
+limite de tamanho, uso de nome empresarial ou identidade divergente por hipótese.
+
+### Fontes oficiais atuais consultadas
+
+- [Criar pedido](https://developer.pagbank.com.br/reference/criar-pedido), página
+  e OpenAPI oficiais consultados nesta sessão, versão indicada `4.1`, documento
+  atualizado em 2026-09-01. `customer.name` é string, descrito assim:
+
+  > Nome do cliente, devendo conter nome e sobrenome. Caracteres especiais são
+  > permitidos, porém eles serão removidos. Apóstrofo e números são aceitos e não
+  > serão removidos.
+
+  O texto não especifica regex/conjunto de caracteres, tratamento exato de
+  acentos/parênteses nem limites numéricos (`minLength`/`maxLength`) para esse campo.
+  No objeto customer consultado, somente `tax_id` aparece em `required`; a descrição
+  do nome não fornece uma regra executável completa para nomes empresariais.
+  `tax_id` admite CPF de 11 ou CNPJ de 14 caracteres. Isso não comprova que qualquer
+  nome cadastrado represente corretamente o titular do documento de uma operação.
+- [Códigos de erro Order](https://developer.pagbank.com.br/reference/codigos-de-erro-order),
+  documento atualizado em 2026-08-26: `40002` = `invalid_parameter`, “Valor informado
+  no parâmetro é inválido ou não corresponde ao formato esperado”, HTTP 400.
+  O código não identifica sozinho qual caractere, tamanho ou condição foi rejeitado.
+
+Essas são leituras de documentação pública, sem chamadas à API financeira. O
+texto sobre remoção de caracteres descreve o comportamento do provedor; não prova
+que uma remoção arbitrária no cliente corrigiria o incidente nem autoriza mudar
+identidade, acrescentar sobrenome fictício ou truncar razão social.
+
+### Código e identidade do pagador
+
+- `manual-fee/decision.ts`, `prepareManualFeeDecision`: congela
+  `snapshot.customer.name = company.name`, documento de `document_number` ou `cnpj`
+  somente com dígitos, e e-mail da empresa. Não escolhe `legal_name`/`trade_name`.
+- `manual-fee/pagbank.ts`: transmite exatamente esse nome congelado. Há validação
+  de e-mail, mas não há normalização ou validação específica de `customer.name`.
+  A decisão valida o comprimento do documento como CPF/CNPJ, sem demonstrar
+  correspondência cadastral entre o documento e o nome do pagador.
+- Checkout público, `create-pagbank-payment`: usa o comprador da venda,
+  `String(sale.customer_name ?? "Cliente").slice(0, 60)`, sem remover acentos ou
+  parênteses. O limite 60 é uma implementação existente, **não um limite oficial
+  demonstrado nesta investigação**; não copiá-lo para a taxa manual como prova.
+- Asaas manual: cria/reutiliza customer pelo documento e usa o mesmo nome
+  congelado. Não impor a ele restrições presumidas do PagBank.
+
+A empresa é a pagadora da taxa no fluxo aprovado. Uma identidade empresarial
+pode ser coerente com CNPJ, mas é necessário confirmar nome/razão social e tipo
+CPF/CNPJ do titular real por procedimento autorizado. O tipo do documento desta
+operação não foi fornecido nem consultado; não inferir inconsistência. Se houver
+CPF, confirmar a identidade real do pagador antes de propor qualquer mudança.
+Não trocar para proprietário, operador ou passageiro apenas para passar na API.
+O campo `legal_name` existente não deve substituir automaticamente um snapshot
+congelado ou um nome verdadeiro sem evidência e decisão sobre esse vínculo.
+
+### Resultado e próximo passo mínimo
+
+**Nenhuma transformação ou correção funcional implementada.** A Draft desta
+sessão contém somente checkpoint/runbook. Não foram inventados validadores,
+limites, regex, nomes substitutos ou testes de aceitação que presumam essas regras.
+Caracterização do código não provaria que o PagBank aceita a string: a pendência
+é do contrato/regra externa. Nenhum teste financeiro real ou Sandbox foi executado.
+
+Alternativa mais segura: o responsável deve solicitar ao suporte PagBank a regra
+exata violada em `customer.name`, usando o horário e a referência originais da
+requisição rejeitada na conta emissora Sandbox. Pedir confirmação de caracteres,
+comprimento e tratamento de nome empresarial para CPF/CNPJ. Transcrever somente
+regra/motivo sem segredos ou dados pessoais; não enviar tokens ou payload bruto
+por canais de diagnóstico do SmartBus. Conferir a identidade cadastral em paralelo.
+Não repetir POST para descobrir por tentativa e erro, nem reprocessar a operação.
+
+Se a descrição original ainda estiver disponível em um registro autorizado,
+analisá-la sem persistir/expor o conteúdo bruto. Ela não está no diagnóstico
+sanitizado existente: não afirmar recuperação retroativa. Somente após a regra
+confirmada preparar a menor validação/normalização permitida, antes da criação
+externa, preservando o cadastro e a identidade. Os testes futuros deverão cobrir
+acentos/parênteses, apóstrofos/números, vazios/tipos e limites então comprovados,
+payload exato, preservação do original, validação prévia, ausência de retries e
+regressões Asaas/checkout público. Mocks não homologam aceitação real.
+
+Operações `bff984ad-246d-493e-b527-cabacc6cef89`,
+`534d9db0-fb36-4359-9805-f59a97cfbc4a` e
+`256d3750-1d20-423e-9c24-e34eeeafe20c` permanecem intactas, inconclusivas sem ID.
+Nenhum estado, referência, chave, snapshot, reserva ou passagem foi alterado.
+A observabilidade da #781 e as regras financeiras permanecem integralmente iguais.
+
+Validação desta entrega documental: `git diff --check` e conferência de ausência
+de mudanças em código/migrations. Não foram repetidas suítes de regressão sem
+mudança funcional. **Sem migration e sem Edge Function a republicar por esta PR.**
+Não reaplicar 0002–0006. Sem SQL, backfill, merge, deploy, alteração de cadastro,
+credencial, flag, beneficiário, payload Pix, webhook ou regra comercial.
+
+A próxima venda manual não é declarada pronta para homologar uma correção deste
+incidente: a regra ainda precisa ser esclarecida. Não habilitar fluxo ou pagamentos
+por este documento. PagBank em Produção permanece bloqueado.
