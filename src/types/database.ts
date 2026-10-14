@@ -531,6 +531,7 @@ export interface EventBoardingLocation {
 
 export interface Sale {
   id: string;
+  company_id: string;
   event_id: string;
   trip_id: string;
   boarding_location_id: string;

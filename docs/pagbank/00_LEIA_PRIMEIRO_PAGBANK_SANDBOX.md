@@ -1330,3 +1330,88 @@ credencial, flag, beneficiário, payload Pix, webhook ou regra comercial.
 A próxima venda manual não é declarada pronta para homologar uma correção deste
 incidente: a regra ainda precisa ser esclarecida. Não habilitar fluxo ou pagamentos
 por este documento. PagBank em Produção permanece bloqueado.
+
+## 31. Comprovante manual acompanha confirmação e emissão (2026-10-13)
+
+Base: `main` em `09a6fcbafa3d2c10738a6592f6a6bbd23722c9ea`. O responsável relatou
+novo teste manual PagBank Sandbox na venda `b4203646-a1c9-453d-85eb-d0ea4f255d97`:
+taxa R$ 6,00, operação `confirmed`, externo `PAID`, venda `pago` e dois registros
+em tickets. O comprovante continuou reservado mesmo após o toast de confirmação.
+Esse relato não é uma conferência individual dos tickets ou de liquidação; o
+Codex não acessou o banco nem reproduziu pagamento. Não atribuir esse resultado
+à Draft documental #782 como se tivesse implementado correção de customer.name.
+
+**Causa comprovada no frontend:** `NewSaleModal` guardava `confirmationData` e
+`createdSaleSummary` da criação; o construtor local fixava a apresentação reservada,
+e o rodapé permanecia estático. `ManualFeePixDialog` consultava o backend e mostrava
+o toast, mas o callback em Sales recarregava somente a listagem, sem atualizar o
+comprovante aberto. O diálogo reaberto por Sales também guardava uma cópia antiga
+da venda e dos tickets. Não era evidência de nova falha da confirmação financeira.
+
+**Correção somente frontend:** a apresentação da etapa final foi extraída para
+`ManualSaleReceiptContent`, preservando os componentes/estilo atuais. Um único
+hook `useManualSaleReceipt` é usado tanto por esse conteúdo quanto pelo diálogo
+manual de Sales. Lê a venda, tickets e somente `state`/`snapshot.items` da operação
+privada, filtrados por empresa/venda e protegidos pelas RLS existentes. Não lê
+credenciais, cliente pagador, alocações ou ledger. O ambiente é o persistido na venda;
+não cria branch por gateway nem decide o financeiro por hostname/notificação.
+
+A confirmação PIX existente emite apenas uma dica de recarga, por sale ID. Essa
+dica não marca pago: o comprovante relê os registros oficiais. Para Asaas/checkout
+externo e futuros gateways, a mesma leitura observa o resultado dos webhooks e da
+recuperação backend existente, inclusive ao voltar de outra aba. Não há nova
+consulta automática ao gateway ou POST financeiro por esse acompanhamento.
+
+Estados visuais:
+
+- Taxa pendente: reserva, sem QR operacional e com ação de pagamento quando
+  elegível. Antes da ação, relê o estado; clique repetido é coalescido e usa o
+  `startPlatformFeeCheckout` existente, com as proteções backend intactas.
+- Taxa confirmada/isenta, emissão ainda não integral: “Pagamento confirmado.
+  Estamos finalizando suas passagens.” Sem solicitar novo pagamento ou apresentar
+  QR operacional/PDF de passagem liberada; comprovante de reserva permanece disponível.
+- Conclusão: exige confirmação oficial e venda `pago`, tickets completos com IDs
+  e QR únicos. Para emissão com identidade, confere contagem esperada e IDs dos
+  itens; quando há operação gerida, confronta também o manifesto imutável por
+  item/trecho/assento. Contagem igual, sozinha, não basta. Snapshots geridos ausentes
+  ou divergentes não liberam o comprovante. Legados sem operação preservam o
+  contrato histórico de venda paga/tickets, sem inventar manifesto retroativo.
+
+Após conclusão, a janela permanece aberta, o título/status/rodapé se atualizam,
+a ação de pagamento desaparece e os cards recebem IDs, números, QR, dados de
+passageiro e horário de confirmação persistidos. Reutiliza PassengerTicketList,
+TicketCard e exportador PDF existentes. A indicação de conclusão é discreta, sem
+toasts novos repetitivos ou recarga da página; a janela fecha só por ação do usuário.
+
+Leitura a cada 10 segundos enquanto o comprovante estiver ativo, até 30 atualizações
+automáticas; pausa em aba oculta e para em concluído/encerrado. Requisições
+simultâneas do mesmo comprovante são coalescidas, com abort/timeout de 15 segundos.
+Há botão “Consultar novamente” para retomar explicitamente. Falha temporária
+preserva o último snapshot e confirmação conhecida, sem voltar a pedir pagamento;
+respostas de contexto anterior são ignoradas. Trocar empresa não exibe dados de
+outro contexto. Fechar desliga o acompanhamento; reabrir consulta o estado atual.
+O backend continua sua recuperação independente de janela/navegador.
+
+**Validação:** 107 testes passaram em 9 arquivos, com 49 novos cenários de dados,
+hook, comprovante e confirmação PIX. Cobrem pendente → confirmada/emissão → concluída,
+um ticket existente de dois esperados, igual contagem com item/trecho/assento
+errado, QR duplicado/ausente, ida/volta/itens legítimos sem assento, isolamento,
+evento sem prova de pagamento, falha/timeout, concorrência, pausa/fechamento/reabertura,
+retirada da ação de pagamento, prevenção de clique duplicado e dados definitivos
+na chamada real do TicketCard ao exportador PDF mockado. Regressões direcionadas
+Asaas, criação PIX pública e fluxo comum passaram. TypeScript do app, lint dos
+três módulos novos de produção e `git diff --check` aprovados. Build Vite aprovado,
+com saída em `/tmp`, sem executar o gerador de versão ou publicar artefatos.
+
+**Sem nova migration; não reaplicar 0002–0006. Nenhuma Edge Function a republicar.**
+Após revisão/merge autorizado, basta publicar o frontend pelo fluxo habitual do
+Lovable. Não há modificação em banco, RPC, backend, webhook, credenciais, flags,
+cálculo/divisão, ledger ou regras de emissão. Nenhum SQL, backfill, pagamento,
+venda externa, merge ou deploy foi executado nesta tarefa.
+
+Pendente após publicação autorizada: validar no navegador conectado a leitura
+com as RLS reais, atualização sem fechar o comprovante, PDF e reabertura; conferir
+individualmente os itens da venda relatada pelo procedimento autorizado. Os testes
+com mocks não homologam o registro real, assinatura ou liquidação. A pendência do
+capítulo 30 permanece como histórico sem causa específica comprovada. PagBank em
+Produção permanece bloqueado.

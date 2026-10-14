@@ -33,7 +33,6 @@ import {
   CommandList,
 } from '@/components/ui/command';
 import { SeatMap } from '@/components/public/SeatMap';
-import { PassengerTicketList } from '@/components/public/PassengerTicketList';
 import {
   Loader2,
   ChevronLeft,
@@ -48,7 +47,6 @@ import {
   Users,
   CreditCard,
   ChevronsUpDown,
-  ExternalLink,
   Check,
   ShieldBan,
   Sparkles,
@@ -66,7 +64,7 @@ import { formatCurrencyBRL, formatCurrencyInputFromDigits, parseCurrencyInputBRL
 import { CalculationSimulationCard } from '@/components/admin/CalculationSimulationCard';
 import { cn } from '@/lib/utils';
 import { useRuntimePaymentEnvironment } from '@/hooks/use-runtime-payment-environment';
-import { startPlatformFeeCheckout } from '@/lib/platformFeeCheckout';
+import {ManualSaleReceiptContent} from '@/components/admin/ManualSaleReceiptContent';
 import {
   BENEFIT_PRICING_RULE_VERSION,
   resolvePassengerBenefitPrice,
@@ -205,6 +203,7 @@ function getTripTypeLabel(tripType?: string) {
 
 type CreatedSaleSummary = {
   id: string;
+  companyId: string;
   status: 'reservado' | 'bloqueado';
   platformFeeStatus: 'pending' | 'failed' | 'paid' | 'waived' | 'not_applicable';
   platformFeeAmount: number | null;
@@ -269,7 +268,6 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
   // no comprovante final sem precisar recriar regra financeira no frontend.
   const [createdSaleSummary, setCreatedSaleSummary] = useState<CreatedSaleSummary | null>(null);
   const manualRequestKey = useRef(crypto.randomUUID());
-  const [payingPlatformFee, setPayingPlatformFee] = useState(false);
   // activeTicketIndex removido — agora PassengerTicketList gerencia internamente
   const [eventFees, setEventFees] = useState<EventFeeInput[]>([]);
   const [eventTicketTypes, setEventTicketTypes] = useState<EventTicketType[]>([]);
@@ -334,7 +332,6 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       setSelectedSellerId('');
       setConfirmationData(null);
       setCreatedSaleSummary(null);
-      setPayingPlatformFee(false);
       // activeTicketIndex reset removido
       fetchEvents();
       fetchSellers();
@@ -1063,7 +1060,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
             seat_id: p.seatId || null, seat_label: p.seatLabel, ticket_type_id: p.ticketTypeId })),
         }});
         if (error || !data?.sale_id) throw new Error(data?.error || 'Não foi possível registrar a venda manual.');
-        setCreatedSaleSummary({ id: data.sale_id, status: data.status,
+        setCreatedSaleSummary({ id: data.sale_id, companyId:activeCompanyId, status: data.status,
           platformFeeStatus: data.platform_fee_status, platformFeeAmount: data.platform_fee_amount });
         const receipts = (data.receipt_items ?? []).map((p: any) => {
           const ticket = { ...p, sale_id: data.sale_id, qr_code_token: p.qr_code_token ?? '', boarding_status: 'pendente' } as TicketRecord;
@@ -1118,6 +1115,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       // Persistimos um resumo mínimo da venda recém-criada para que o comprovante final
       // consiga oferecer 'Pagar taxa agora' usando o mesmo fluxo já existente da listagem.
       setCreatedSaleSummary({
+        companyId:activeCompanyId,
         id: saleId,
         status: isBlock ? 'bloqueado' : 'reservado',
         platformFeeStatus: isBlock ? 'not_applicable' : (hasPlatformFee ? 'pending' : 'not_applicable'),
@@ -1283,36 +1281,6 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
     onOpenChange(false);
   };
 
-  const canPayCreatedSalePlatformFee = Boolean(
-    createdSaleSummary
-    && isGerente
-    && (createdSaleSummary.platformFeeStatus === 'pending' || createdSaleSummary.platformFeeStatus === 'failed')
-  );
-
-  const handlePayCreatedSalePlatformFee = async () => {
-    if (!createdSaleSummary || payingPlatformFee) return;
-
-    setPayingPlatformFee(true);
-    try {
-      // Prevenção de múltiplos cliques: enquanto a cobrança está sendo criada,
-      // mantemos o CTA desabilitado para evitar abrir checkout duplicado por engano.
-      const result = await startPlatformFeeCheckout({
-        saleId: createdSaleSummary.id,
-        onWaived: () => {
-          setCreatedSaleSummary((current) => current
-            ? { ...current, platformFeeStatus: 'waived' }
-            : current);
-        },
-      });
-
-      if (result.status === 'waived') {
-        return;
-      }
-    } finally {
-      setPayingPlatformFee(false);
-    }
-  };
-
   // ── Render ──
   const isConfirmationStep = step === 4 && !!confirmationData;
   return (
@@ -1324,7 +1292,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
             : "admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-3xl flex-col gap-0 p-0"
         }
       >
-        <DialogHeader
+        {!isConfirmationStep&&<DialogHeader
           className={
             isConfirmationStep
               ? "px-6 py-4 border-b border-[hsl(var(--ticket-border))] bg-[hsl(var(--ticket-surface))]"
@@ -1344,45 +1312,20 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
               </p>
             )}
           </div>
-        </DialogHeader>
+        </DialogHeader>}
 
         {isConfirmationStep ? (
-          // ── Step 4: Confirmation using the same virtual ticket component used across the app ──
-          <>
-            <ScrollArea className="flex-1 px-4 py-4 sm:px-6">
-              <div className="mx-auto w-full max-w-[460px]">
-                {/* Agrupamento por passageiro com ida/volta sob demanda */}
-                <PassengerTicketList
-                  tickets={confirmationData!.map((item) => item.ticketCardData)}
-                  allowReservedDownloads
-                  // No fluxo de venda manual reservada, usamos modo de comprovante para descaracterizar
-                  // a aparência de passe operacional (sem QR funcional e com alerta explícito).
-                  reservedPresentation="receipt"
-                  context="admin"
-                />
-              </div>
-            </ScrollArea>
-            <DialogFooter className="px-6 py-4 border-t border-[hsl(var(--ticket-border))] bg-[hsl(var(--ticket-surface))]">
-              <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-sm text-[hsl(var(--ticket-muted))]">
-                  {canPayCreatedSalePlatformFee
-                    ? 'A reserva continua ativa até a confirmação financeira da taxa da plataforma.'
-                    : 'A reserva continua ativa até a confirmação financeira correspondente.'}
-                </div>
-                <div className="flex flex-col-reverse gap-2 sm:flex-row">
-                  <Button variant="outline" onClick={handleClose} className="border-[hsl(var(--ticket-border))] bg-transparent text-[hsl(var(--ticket-text))] hover:bg-[hsl(var(--ticket-surface-2))] hover:text-[hsl(var(--ticket-text))]">
-                    {canPayCreatedSalePlatformFee ? 'Fechar e pagar depois' : 'Fechar'}
-                  </Button>
-                  {canPayCreatedSalePlatformFee && (
-                    <Button onClick={handlePayCreatedSalePlatformFee} disabled={payingPlatformFee}>
-                      {payingPlatformFee ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ExternalLink className="mr-2 h-4 w-4" />}
-                      Pagar taxa agora
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </DialogFooter>
-          </>
+          <ManualSaleReceiptContent
+            key={createdSaleSummary!.id}
+            saleId={createdSaleSummary!.id}
+            companyId={createdSaleSummary!.companyId}
+            activeCompanyId={activeCompanyId}
+            open={open}
+            canManage={isGerente}
+            initialTickets={confirmationData!}
+            buildTicketCardData={buildTicketCardData}
+            onClose={handleClose}
+          />
         ) : (
           // ── Steps 1-3: Wizard ──
           <Tabs value={activeTab} onValueChange={handleTabChange} className="flex h-full flex-col overflow-hidden">
