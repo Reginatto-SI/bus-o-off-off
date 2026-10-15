@@ -115,20 +115,6 @@ export function getPagbankOrder(params: { environment: PagbankEnvironment; acces
   });
 }
 
-/** Busca pedidos por referência própria (recuperação após resultado indeterminado). */
-export function findPagbankOrdersByReference(params: {
-  environment: PagbankEnvironment;
-  accessToken: string;
-  referenceId: string;
-}) {
-  return pagbankRequest({
-    environment: params.environment,
-    accessToken: params.accessToken,
-    method: "GET",
-    path: `/orders?reference_id=${encodeURIComponent(params.referenceId)}`,
-  });
-}
-
 /**
  * Prova SOMENTE de autenticação: o token é aceito pela API oficial.
  * Não comprova identidade da conta, PIX habilitado nem split habilitado —
