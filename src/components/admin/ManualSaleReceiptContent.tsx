@@ -44,7 +44,7 @@ export function ManualSaleReceiptContent({saleId,companyId,activeCompanyId,open,
      {(receipt.error||receipt.paused)&&<p>{receipt.error?'Não foi possível atualizar agora. Os últimos dados foram preservados.':'Acompanhamento automático pausado. Consulte novamente.'}</p>}
     </div>
     <div className="flex flex-col-reverse gap-2 sm:flex-row">
-     <Button variant="outline" onClick={()=>void receipt.refresh()} disabled={receipt.loading||!sameCompany}>Consultar novamente</Button>
+     {snapshot?.phase!=='complete'&&snapshot?.phase!=='closed'&&<Button variant="outline" className="border-[hsl(var(--ticket-border))] bg-transparent text-[hsl(var(--ticket-text))] hover:bg-[hsl(var(--ticket-surface-2))] hover:text-[hsl(var(--ticket-text))] disabled:opacity-50" onClick={()=>void receipt.refresh()} disabled={receipt.loading||!sameCompany}>Consultar novamente</Button>}
      <Button variant="outline" onClick={onClose} className="border-[hsl(var(--ticket-border))] bg-transparent text-[hsl(var(--ticket-text))] hover:bg-[hsl(var(--ticket-surface-2))] hover:text-[hsl(var(--ticket-text))]">{canPay?'Fechar e pagar depois':'Fechar'}</Button>
      {canPay&&<Button onClick={()=>void pay()} disabled={paying||receipt.loading}>{paying?<Loader2 className="mr-2 h-4 w-4 animate-spin"/>:<ExternalLink className="mr-2 h-4 w-4"/>}Pagar taxa agora</Button>}
     </div>
