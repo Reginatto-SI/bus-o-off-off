@@ -64,7 +64,6 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   ShoppingCart,
-  Bus,
   Loader2,
   FileSpreadsheet,
   FileText,
@@ -1941,7 +1940,6 @@ export default function Sales() {
       <div className="page-container hidden lg:block">
         {/* Piloto visual desktop de Vendas */}
         <header className="relative mb-5 overflow-hidden rounded-2xl border border-orange-100 bg-gradient-to-r from-orange-50 via-white to-white p-5 shadow-[0_8px_28px_-18px_rgba(194,65,12,0.2)]">
-          <Bus aria-hidden="true" className="pointer-events-none absolute right-[26%] top-1/2 h-28 w-28 -translate-y-1/2 text-orange-100/70" />
           <div className="relative flex flex-wrap items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-4">
               <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-[0_8px_18px_-8px_rgba(234,88,12,0.6)]">
@@ -1952,7 +1950,7 @@ export default function Sales() {
                 <p className="mt-1 text-sm text-muted-foreground">Gerenciamento de vendas e suporte ao cliente</p>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-3">
               <Button className="h-11 rounded-xl px-5 font-semibold shadow-[0_8px_20px_-9px_rgba(234,88,12,0.65)] hover:shadow-[0_10px_24px_-9px_rgba(234,88,12,0.8)]" onClick={() => setNewSaleModalOpen(true)}>
                 <ShoppingCart className="mr-2 h-4 w-4" aria-hidden="true" /> Nova venda
               </Button>
@@ -2048,7 +2046,8 @@ export default function Sales() {
         {/* Filters */}
         <div className="mb-5">
           <FilterCard
-            className="rounded-2xl border-slate-200/80 bg-card p-5 shadow-[0_8px_26px_-18px_rgba(15,23,42,0.2)] [&_input]:rounded-xl [&_input]:bg-slate-50/60 [&_[role=combobox]]:rounded-xl"
+            className="rounded-2xl border-slate-200/80 bg-card p-4 shadow-[0_8px_26px_-18px_rgba(15,23,42,0.2)] [&_input]:rounded-xl [&_input]:bg-slate-50/60 [&_[role=combobox]]:rounded-xl"
+            compact
             mainGridClassName="2xl:grid-cols-5"
             searchValue={searchInput}
             onSearchChange={setSearchInput}
@@ -2228,7 +2227,7 @@ export default function Sales() {
                     <TableHead>{renderSortHeader('Embarque', 'boarding_location_name')}</TableHead>
                     <TableHead>{renderSortHeader('Passagem', 'quantity')}</TableHead>
                     {canViewFinancials && <TableHead className="whitespace-nowrap">{renderSortHeader('Valor', 'gross_amount')}</TableHead>}
-                    <TableHead className="whitespace-nowrap">{renderSortHeader('Status', 'status')}</TableHead>
+                    <TableHead className="min-w-[165px] whitespace-nowrap">{renderSortHeader('Status', 'status')}</TableHead>
                     <TableHead className="w-[50px] text-primary-foreground">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -2248,10 +2247,10 @@ export default function Sales() {
                       : null;
                     return (
                       <TableRow key={sale.id} className={cn('transition-colors hover:bg-orange-50/40', isBlock && 'bg-muted/30')}>
-                        <TableCell className="text-sm whitespace-nowrap">
+                        <TableCell className="whitespace-nowrap text-sm text-slate-600">
                           {format(new Date(sale.created_at), 'dd/MM/yy HH:mm', { locale: ptBR })}
                         </TableCell>
-                        <TableCell className="text-sm">{formatEventDisplayName(sale.event) || '-'}</TableCell>
+                        <TableCell className="text-sm font-medium text-foreground">{formatEventDisplayName(sale.event) || '-'}</TableCell>
                         <TableCell>
                           {isBlock ? (
                             <div>
@@ -2261,7 +2260,7 @@ export default function Sales() {
                           ) : (
                             <div>
                               <div className="flex items-center gap-1.5">
-                                <p className="font-medium text-sm">{getSaleCustomerDisplayName(sale)}</p>
+                                <p className="text-sm font-semibold text-foreground">{getSaleCustomerDisplayName(sale)}</p>
                               </div>
                               <p className="text-xs text-muted-foreground">{sale.customer_cpf}</p>
                               {sale.seller?.name && (
@@ -2272,8 +2271,8 @@ export default function Sales() {
                         </TableCell>
                         {/* Embarque: veículo + local agrupados */}
                         <TableCell>
-                          <div className="space-y-0.5">
-                            <p className="text-sm font-medium">
+                          <div className="space-y-1">
+                            <p className="text-sm font-semibold text-foreground">
                               {isStandaloneServiceSale(sale)
                                 ? 'Venda de serviço avulsa'
                                 : vehicle
@@ -2285,8 +2284,8 @@ export default function Sales() {
                         </TableCell>
                         {/* Passagem: quantidade + poltronas agrupados */}
                         <TableCell>
-                          <div className="space-y-0.5">
-                            <p className="text-sm">
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium text-foreground">
                               {sale.quantity}{' '}
                               {sale.quantity === 1
                                 ? (isBlock ? 'poltrona' : isStandaloneServiceSale(sale) ? 'serviço' : 'passagem')
@@ -2311,17 +2310,17 @@ export default function Sales() {
                           </div>
                         </TableCell>
                         {canViewFinancials && (
-                          <TableCell className="font-medium whitespace-nowrap text-sm">
+                          <TableCell className="whitespace-nowrap text-sm font-semibold text-foreground">
                             {isBlock ? '—' : formatCurrencyBRL(sale.quantity * sale.unit_price)}
                           </TableCell>
                         )}
-                        <TableCell>
-                          <div className="flex flex-col gap-0.5">
-                            <StatusBadge status={sale.status} />
+                        <TableCell className="min-w-[165px]">
+                          <div className="flex flex-col items-start gap-1.5">
+                            <StatusBadge status={sale.status} className="w-fit whitespace-nowrap" />
                             {operationalSignal && (
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 cursor-help">
+                                  <span className="inline-flex items-center gap-1 text-[11px] leading-4 font-medium text-amber-700 cursor-help">
                                     <AlertCircle className="h-3 w-3" />
                                     {operationalSignal.label}
                                   </span>
@@ -2335,7 +2334,7 @@ export default function Sales() {
                               <>
                                 <span
                                   className={cn(
-                                    'inline-flex w-fit rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                                    'inline-flex w-fit rounded-full px-2 py-0.5 text-[11px] leading-4 font-semibold',
                                     reservationVisibility.expired
                                       ? 'bg-destructive/10 text-destructive'
                                       : reservationVisibility.nearExpiry
@@ -2349,7 +2348,7 @@ export default function Sales() {
                                   <TooltipTrigger asChild>
                                     <span
                                       className={cn(
-                                        'inline-flex items-center gap-1 text-[10px] font-medium cursor-help',
+                                        'inline-flex items-center gap-1 text-[11px] leading-4 font-medium cursor-help',
                                         reservationVisibility.expired
                                           ? 'text-destructive'
                                           : reservationVisibility.nearExpiry
@@ -2371,7 +2370,7 @@ export default function Sales() {
                             {hasConfiguredPlatformFee && (sale as any).platform_fee_status === 'pending' && (
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground cursor-help">
+                                  <span className="inline-flex items-center gap-1 text-[11px] leading-4 text-muted-foreground cursor-help">
                                     <AlertCircle className="h-3 w-3" />
                                     Taxa pendente
                                   </span>
@@ -2384,7 +2383,7 @@ export default function Sales() {
                             {hasConfiguredPlatformFee && (sale as any).platform_fee_status === 'failed' && (
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <span className="inline-flex items-center gap-0.5 text-[10px] text-destructive cursor-help">
+                                  <span className="inline-flex items-center gap-1 text-[11px] leading-4 text-destructive cursor-help">
                                     <AlertCircle className="h-3 w-3" />
                                     Taxa falhou
                                   </span>
