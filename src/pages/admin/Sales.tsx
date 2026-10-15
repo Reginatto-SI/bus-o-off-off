@@ -2247,7 +2247,7 @@ export default function Sales() {
                       : null;
                     return (
                       <TableRow key={sale.id} className={cn('transition-colors hover:bg-orange-50/40', isBlock && 'bg-muted/30')}>
-                        <TableCell className="whitespace-nowrap text-sm text-slate-600">
+                        <TableCell className="whitespace-nowrap text-sm text-foreground/80">
                           {format(new Date(sale.created_at), 'dd/MM/yy HH:mm', { locale: ptBR })}
                         </TableCell>
                         <TableCell className="text-sm font-medium text-foreground">{formatEventDisplayName(sale.event) || '-'}</TableCell>
