@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
 
 import {
   buildCheckoutFinancialIntegritySnapshot,
@@ -155,21 +154,11 @@ describe('homologação local da política de retentativa PIX PagBank', () => {
   it.each([
     [null, 'create'],
     [{ state: 'pending', external_order_id: null }, 'wait_in_flight'],
-    [{ state: 'indeterminate', external_order_id: null }, 'recover_by_reference'],
+    [{ state: 'indeterminate', external_order_id: null }, 'needs_reconciliation'],
     [{ state: 'succeeded', external_order_id: 'ORDE_1' }, 'reuse_order'],
-    [{ state: 'failed', external_order_id: 'ORDE_1' }, 'needs_reconciliation'],
+    [{ state: 'failed', external_order_id: 'ORDE_1' }, 'reuse_order'],
   ] as const)('decide %s como %s', (attempt, expected) => {
     expect(resolvePagbankRetryDecision(attempt)).toBe(expected);
-  });
-
-  it('submete criação normal e recuperação por referência ao mesmo gate de Order', () => {
-    const source = readFileSync(
-      `${process.cwd()}/supabase/functions/create-pagbank-payment/index.ts`,
-      'utf8',
-    );
-
-    expect(source).toContain('const art = await requireUsableOrder(recoveredOrder, existing.id)');
-    expect(source).toContain('const art = await requireUsableOrder(res.data, attemptId)');
   });
 });
 

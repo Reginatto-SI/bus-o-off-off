@@ -52,7 +52,6 @@ export function pagbankFailureAllowsSaleRollback(params: {
 
 export type PagbankRetryDecision =
   | "reuse_order"
-  | "recover_by_reference"
   | "wait_in_flight"
   | "needs_reconciliation"
   | "create";
@@ -60,7 +59,7 @@ export type PagbankRetryDecision =
 /**
  * Decide o que fazer numa nova tentativa da MESMA venda (mesma chave de
  * idempotência). Tentativa falha que já carrega `external_order_id` nunca
- * autoriza um segundo Order: exige consulta/reconciliação do Order existente.
+ * autoriza um segundo Order: exige consulta/reconciliação do Order existente. Sem ID, nenhum replay é autorizado.
  */
 export function resolvePagbankRetryDecision(attempt: {
   state?: string | null;
@@ -68,9 +67,9 @@ export function resolvePagbankRetryDecision(attempt: {
 } | null | undefined): PagbankRetryDecision {
   if (!attempt) return "create";
   if (attempt.external_order_id) {
-    return attempt.state === "succeeded" ? "reuse_order" : "needs_reconciliation";
+    return "reuse_order";
   }
-  if (attempt.state === "indeterminate") return "recover_by_reference";
+  if (attempt.state === "indeterminate") return "needs_reconciliation";
   if (attempt.state === "pending") return "wait_in_flight";
-  return "create";
+  return "needs_reconciliation";
 }

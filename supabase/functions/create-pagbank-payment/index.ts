@@ -31,18 +31,16 @@ import {
   PagbankError,
   assertPagbankEnvironmentAllowed,
   buildPagbankIdempotencyKey,
-  extractPagbankPixArtifacts,
   normalizePagbankStatus,
   validatePagbankPixOrder,
   validatePagbankCardOrder,
   extractPagbankSplitLinkIds,
   attachPagbankSplitToOrder,
 } from "../_shared/pagbank/core.ts";
-import { findPagbankOrdersByReference, getPagbankOrder, getPagbankSplit, pagbankRequest, toPagbankError } from "../_shared/pagbank/client.ts";
-import { pagbankSecretNames, resolvePagbankCredentialForSale, resolvePlatformAccessToken } from "../_shared/pagbank/credentials.ts";
+import { getPagbankSplit, pagbankRequest, toPagbankError } from "../_shared/pagbank/client.ts";
+import { pagbankSecretNames, resolvePagbankCredentialForSale } from "../_shared/pagbank/credentials.ts";
 import { resolvePagbankSplitRecipients } from "../_shared/pagbank/split-recipients.ts";
 import { buildPagbankFixedSplitPlan } from "../_shared/pagbank/split-plan.ts";
-import { finalizeConfirmedPayment } from "../_shared/payment-finalization.ts";
 import { syncPagbankSaleStatus } from "../_shared/pagbank/status-sync.ts";
 import { isValidCustomerEmail, normalizeCustomerEmail } from "../_shared/customer-email.ts";
 
@@ -177,7 +175,7 @@ Deno.serve(async (req) => {
       operation,
     });
     // Uma única cobrança PagBank por venda: trocar de meio nunca gera outra cobrança.
-    const { data: otherAttempt } = await supabaseAdmin
+    const { data: otherAttempt, error: otherAttemptError } = await supabaseAdmin
       .from("payment_attempts")
       .select("id, operation, external_order_id")
       .eq("sale_id", sale.id)
@@ -185,22 +183,29 @@ Deno.serve(async (req) => {
       .eq("gateway", "pagbank")
       .neq("operation", operation)
       .maybeSingle();
+    if (otherAttemptError) {
+      throw new PagbankError("pagbank_order_needs_reconciliation", "Não foi possível verificar a cobrança anterior. Nenhuma nova cobrança será criada.", 503);
+    }
     if (otherAttempt) {
       return json({
         error: "Esta compra já possui uma cobrança com outro meio de pagamento.",
-        error_code: "payment_method_locked",
+        error_code: "pagbank_order_needs_reconciliation",
         message: "Esta compra já possui uma cobrança com outro meio de pagamento.",
         detail: { order_id: otherAttempt.external_order_id ?? null },
       }, 409);
     }
 
     // 1) Recuperação idempotente: tentativa existente nunca gera novo Order.
-    const { data: existing } = await supabaseAdmin
+    const { data: existing, error: existingError } = await supabaseAdmin
       .from("payment_attempts")
       .select("*")
       .eq("idempotency_key", idempotencyKey)
       .eq("company_id", sale.company_id)
       .maybeSingle();
+
+    if (existingError) {
+      throw new PagbankError("pagbank_order_needs_reconciliation", "Não foi possível verificar a cobrança anterior. Nenhuma nova cobrança será criada.", 503);
+    }
 
     if (sale.status === "pago") {
       return json({ ...(existing ? attemptToPublic(existing) : { gateway: "pagbank" }), already_paid: true }, 200);
@@ -209,94 +214,39 @@ Deno.serve(async (req) => {
       return json({ error: "A venda não está aguardando pagamento.", error_code: "sale_status_invalid" }, 409);
     }
 
+    if (existing?.external_order_id) {
+      // Every known Order, including an incomplete creation, uses the same
+      // authoritative query and integrity gate. A retry never sends another POST.
+      const synced = await syncPagbankSaleStatus(supabaseAdmin, {
+        sale,
+        source: "verify-payment-status",
+        eventType: "pagbank_query_on_create_retry",
+      }).catch(() => {
+        // Credential/transport exceptions do not authorize frontend rollback either.
+        throw new PagbankError("pagbank_order_needs_reconciliation", "Não foi possível consultar a cobrança existente. A compra foi preservada para verificação.", 503, {
+          order_id: existing.external_order_id,
+        });
+      });
+      if (synced.state === "query_failed" || synced.state === "no_attempt" ||
+          (synced.state === "paid" && !synced.finalizationOk)) {
+        throw new PagbankError("pagbank_order_needs_reconciliation", "A cobrança existente exige verificação. Nenhuma nova cobrança será criada.", 409, {
+          order_id: existing.external_order_id,
+        });
+      }
+      return json({ ...attemptToPublic(synced.attempt), reused: true, payment_status: synced.paymentStatus }, 200);
+    }
+    if (existing) {
+      // No local ID does not prove absence at PagBank. Preserve the original
+      // operation/key/payload hash; unsupported reference lookup cannot authorize replay.
+      throw new PagbankError("pagbank_order_needs_reconciliation", "Estamos verificando a cobrança anterior desta compra. Nenhuma nova cobrança será criada.", 409);
+    }
+
     const credential = await resolvePagbankCredentialForSale(supabaseAdmin, { sale });
     if (sale.external_account_id && credential.connection.external_account_id &&
         sale.external_account_id !== credential.connection.external_account_id) {
       throw new PagbankError("pagbank_tenant_mismatch", "Conta PagBank da venda diverge da conexão.", 409);
     }
-    // `pix_ready`/`split_ready` são resultado de homologação (primeira cobrança
-    // aceita), não pré-requisito. A operacionalidade exigida aqui é a conexão
-    // corrente e conectada, já validada em resolvePagbankCredentialForSale.
-
-    if (existing && existing.state === "succeeded" && existing.external_order_id) {
-      // Retorna o mesmo QR; atualiza status por consulta (barato e seguro).
-      const q = await getPagbankOrder({ environment, accessToken: credential.accessToken, orderId: existing.external_order_id });
-      if (q.ok && q.data) {
-        const art = extractPagbankPixArtifacts(q.data);
-        const normalized = normalizePagbankStatus(art.rawStatus);
-        await supabaseAdmin.from("payment_attempts").update({
-          external_status_raw: art.rawStatus,
-          normalized_status: normalized,
-          external_charge_id: art.chargeId ?? existing.external_charge_id,
-          last_queried_at: new Date().toISOString(),
-        }).eq("id", existing.id).eq("company_id", sale.company_id);
-        if (normalized === "paid") {
-          await finalizeConfirmedPayment({
-            supabaseAdmin,
-            sale: { id: sale.id, company_id: sale.company_id, status: sale.status, payment_environment: environment },
-            confirmedAt: new Date().toISOString(),
-            asaasStatus: art.rawStatus ?? "PAID",
-            source: "verify-payment-status",
-            paymentId: art.chargeId ?? art.orderId,
-            eventType: "pagbank_query_on_create_retry",
-            gateway: "pagbank",
-          });
-        }
-        return json({ ...attemptToPublic({ ...existing, external_status_raw: art.rawStatus, normalized_status: normalized }), reused: true }, 200);
-      }
-      return json({ ...attemptToPublic(existing), reused: true }, 200);
-    }
-
-    let recoveredOrder: any = null;
-    if (existing && existing.state === "indeterminate") {
-      // Recupera por referência antes de qualquer nova criação.
-      const found = await findPagbankOrdersByReference({ environment, accessToken: credential.accessToken, referenceId: sale.id });
-      const orders: any[] = Array.isArray(found.data?.orders) ? found.data.orders : Array.isArray(found.data) ? found.data : [];
-      if (found.ok && orders.length > 0) {
-        // A Order encontrada ainda não é utilizável. Ela será validada contra o
-        // mesmo plano financeiro da criação normal antes de virar `succeeded`.
-        recoveredOrder = orders[0];
-      }
-      if (!found.ok && found.indeterminate) {
-        throw new PagbankError("pagbank_indeterminate", "Ainda não foi possível confirmar a cobrança anterior. Aguarde alguns segundos.", 504);
-      }
-      // Comprovadamente inexistente: reutiliza a MESMA chave e payload abaixo (attempt_count+1).
-      // Cartão: o payload criptografado muda a cada tentativa, então não há
-      // "mesmo payload" — exige reconciliação manual, nunca nova cobrança.
-      if (isCard && !recoveredOrder) {
-        throw new PagbankError("pagbank_order_needs_reconciliation", "Estamos verificando o pagamento anterior desta compra. Não faremos nova cobrança.", 409);
-      }
-    }
-    if (isCard && existing && existing.state === "failed" && !existing.external_order_id) {
-      throw new PagbankError("pagbank_order_needs_reconciliation", "O pagamento anterior desta compra não foi concluído. Não faremos nova cobrança automaticamente.", 409, { previous_error: existing.error_code ?? null });
-    }
-    // Tentativa falha que JÁ carrega Order externo (ex.: split não confirmado ou
-    // QR ausente) nunca autoriza um segundo Order: exige consulta/reconciliação.
-    if (existing && existing.external_order_id && existing.state !== "succeeded") {
-      await logSaleIntegrationEvent({
-        supabaseAdmin, saleId: sale.id, companyId: sale.company_id, paymentEnvironment: environment, environmentDecisionSource: "sale",
-        provider: "pagbank", direction: "outgoing_request", eventType: "create_pix", externalReference: sale.id,
-        paymentId: existing.external_order_id, processingStatus: "warning", resultCategory: "warning",
-        incidentCode: "pagbank_order_needs_reconciliation",
-        message: "Order PagBank já existe para esta venda; criação bloqueada até reconciliação.",
-        payloadJson: { previous_state: existing.state, previous_error: existing.error_code ?? null },
-      });
-      throw new PagbankError(
-        "pagbank_order_needs_reconciliation",
-        "Já existe uma cobrança PagBank para esta compra em verificação. Não geramos outra cobrança.",
-        409,
-        { order_id: existing.external_order_id, previous_error: existing.error_code ?? null },
-      );
-    }
-    if (existing && existing.state === "pending") {
-      const ageMs = Date.now() - Date.parse(existing.created_at);
-      if (ageMs < 45_000) {
-        throw new PagbankError("pagbank_idempotency_conflict", "Já estamos gerando o PIX desta compra. Aguarde.", 409);
-      }
-      // Tentativa órfã (crash antes de gravar resultado): tratar como indeterminada.
-      await supabaseAdmin.from("payment_attempts").update({ state: "indeterminate" }).eq("id", existing.id).eq("company_id", sale.company_id);
-      throw new PagbankError("pagbank_indeterminate", "Estamos verificando a cobrança anterior. Tente novamente em instantes.", 504);
-    }
+    // Capability flags record evidence; creation still requires the current connection.
 
     // 2) Termos do evento (mesma rotina do Asaas).
     const terms = await ensureSaleTermsAcceptance({ supabaseAdmin, sale, termsAcceptance });
@@ -381,7 +331,7 @@ Deno.serve(async (req) => {
       representativeEligible: recipients.representative.eligible, engine: platformFeeEngine, distribution,
     });
 
-    // Gate único para respostas do POST e Orders recuperadas por reference_id.
+    // Gate da resposta inicial do POST. Orders conhecidas usam status-sync no retry.
     // Falha preserva qualquer ID externo encontrado e nunca autoriza novo Order.
     const requireUsableOrder = async (rawOrder: any, paymentAttemptId: string) => {
       // Split confirmado pelo recurso SPLI_ (link rel SPLIT), lido com o token
@@ -471,36 +421,6 @@ Deno.serve(async (req) => {
       });
     };
 
-    if (recoveredOrder && existing) {
-      const art = await requireUsableOrder(recoveredOrder, existing.id);
-      const { data: recovered } = await supabaseAdmin.from("payment_attempts").update({
-        state: "succeeded",
-        external_order_id: art.orderId,
-        external_charge_id: art.chargeId,
-        external_status_raw: art.rawStatus,
-        normalized_status: normalizePagbankStatus(art.rawStatus),
-        ...(!isCard ? { split_status: art.splitStatus } : {}),
-        pix_qr_text: art.qrText,
-        pix_qr_image_url: art.qrImageUrl,
-        pix_expires_at: art.expiresAt,
-        last_queried_at: new Date().toISOString(),
-        error_code: null,
-        error_message_sanitized: null,
-      }).eq("id", existing.id).eq("company_id", sale.company_id).select("*").single();
-      await logSaleIntegrationEvent({
-        supabaseAdmin, saleId: sale.id, companyId: sale.company_id, paymentEnvironment: environment,
-        environmentDecisionSource: "sale", provider: "pagbank", direction: "outgoing_request",
-        eventType: "create_pix_recovered", paymentId: art.orderId, externalReference: sale.id,
-        processingStatus: "success", resultCategory: "success", message: "Order recuperado e validado após resultado indeterminado.",
-        payloadJson: { idempotency_key: idempotencyKey }, responseJson: {
-          order_id: art.orderId, status: art.rawStatus,
-          split_validated: isCard ? true : art.splitStatus === "confirmed", has_qr: isCard ? true : Boolean(art.qrText),
-          ...(!isCard ? { split_status: art.splitStatus, split_id: art.splitId } : {}),
-        },
-      });
-      return json({ ...attemptToPublic(recovered), recovered: true }, 200);
-    }
-
     // 4) Payload Order PIX (reference_id = sale.id; valores em centavos).
     const expiresAt = new Date(Date.now() + PAGBANK_PIX_EXPIRATION_MINUTES * 60_000);
     const phone = onlyDigits(sale.customer_phone);
@@ -570,25 +490,17 @@ Deno.serve(async (req) => {
     })();
 
     // 5) Persistir tentativa ANTES da chamada externa (barreira local por UNIQUE).
-    let attemptId: string;
-    if (existing) {
-      const { data: reused } = await supabaseAdmin.from("payment_attempts").update({
-        state: "pending", attempt_count: (existing.attempt_count ?? 1) + 1, payload_hash: payloadHash, error_code: null, error_message_sanitized: null,
-      }).eq("id", existing.id).eq("company_id", sale.company_id).select("id").single();
-      attemptId = reused.id;
-    } else {
-      const { data: inserted, error: insertError } = await supabaseAdmin.from("payment_attempts").insert({
-        sale_id: sale.id, company_id: sale.company_id, connection_id: credential.connection.id, gateway: "pagbank",
-        environment, operation, idempotency_key: idempotencyKey, payload_hash: payloadHash,
-        state: "pending", external_reference: sale.id, amount_cents: splitPlan.totalCents,
-        card_last_digits: cardInput?.lastDigits ?? null, card_brand: cardInput?.brand ?? null,
-      }).select("id").single();
-      if (insertError) {
-        // 23505 = outra requisição concorrente já criou a tentativa.
-        throw new PagbankError("pagbank_idempotency_conflict", "Já estamos gerando o PIX desta compra. Aguarde.", 409, { db: insertError.code });
-      }
-      attemptId = inserted.id;
+    const { data: inserted, error: insertError } = await supabaseAdmin.from("payment_attempts").insert({
+      sale_id: sale.id, company_id: sale.company_id, connection_id: credential.connection.id, gateway: "pagbank",
+      environment, operation, idempotency_key: idempotencyKey, payload_hash: payloadHash,
+      state: "pending", external_reference: sale.id, amount_cents: splitPlan.totalCents,
+      card_last_digits: cardInput?.lastDigits ?? null, card_brand: cardInput?.brand ?? null,
+    }).select("id").single();
+    if (insertError || !inserted) {
+      // UNIQUE elects a single first sender. Any persistence error prevents the POST.
+      throw new PagbankError("pagbank_idempotency_conflict", "Já estamos verificando esta compra. Nenhuma nova cobrança será criada.", 409);
     }
+    const attemptId = inserted.id;
     await logSaleIntegrationEvent({
       supabaseAdmin, saleId: sale.id, companyId: sale.company_id, paymentEnvironment: environment, environmentDecisionSource: "sale",
       provider: "pagbank", direction: "outgoing_request", eventType: operation, externalReference: sale.id,
@@ -598,12 +510,12 @@ Deno.serve(async (req) => {
 
     const res = await pagbankRequest({ environment, accessToken: credential.accessToken, method: "POST", path: "/orders", body: orderPayload, idempotencyKey });
 
-    if (res.indeterminate) {
+    if (res.indeterminate || res.status === 409 || res.status === 429 || res.status >= 500 || (res.ok && !res.data)) {
       await supabaseAdmin.from("payment_attempts").update({ state: "indeterminate", error_code: "pagbank_indeterminate" }).eq("id", attemptId).eq("company_id", sale.company_id);
       await logSaleIntegrationEvent({
         supabaseAdmin, saleId: sale.id, companyId: sale.company_id, paymentEnvironment: environment, environmentDecisionSource: "sale",
         provider: "pagbank", direction: "outgoing_request", eventType: "create_pix", externalReference: sale.id,
-        processingStatus: "warning", resultCategory: "warning", incidentCode: "pagbank_indeterminate", message: "Timeout após envio; recuperação por reference_id na próxima tentativa.",
+        processingStatus: "warning", resultCategory: "warning", incidentCode: "pagbank_indeterminate", message: "Resultado de criação inconclusivo; preservar a tentativa para conciliação, sem reenviar a cobrança.",
         payloadJson: { idempotency_key: idempotencyKey }, durationMs: Date.now() - startedAt,
       });
       throw new PagbankError("pagbank_indeterminate", "Sem resposta conclusiva do PagBank. Aguarde e tente novamente — não será gerada cobrança duplicada.", 504);
@@ -623,7 +535,7 @@ Deno.serve(async (req) => {
     const art = await requireUsableOrder(res.data, attemptId);
     const normalized = normalizePagbankStatus(art.rawStatus ?? "WAITING");
 
-    const { data: finalAttempt } = await supabaseAdmin.from("payment_attempts").update(isCard ? {
+    const { data: finalAttempt, error: attemptSaveError } = await supabaseAdmin.from("payment_attempts").update(isCard ? {
       state: "succeeded", external_order_id: art.orderId, external_charge_id: art.chargeId, external_status_raw: art.rawStatus,
       normalized_status: normalized, split_status: (art as any).splitStatus ?? null,
     } : {
@@ -631,6 +543,16 @@ Deno.serve(async (req) => {
       normalized_status: normalized, pix_qr_text: art.qrText, pix_qr_image_url: art.qrImageUrl, pix_expires_at: art.expiresAt ?? expiresAt.toISOString(),
       split_status: art.splitStatus,
     }).eq("id", attemptId).eq("company_id", sale.company_id).select("*").single();
+    if (attemptSaveError || !finalAttempt) {
+      await logSaleIntegrationEvent({
+        supabaseAdmin, saleId: sale.id, companyId: sale.company_id, paymentEnvironment: environment,
+        environmentDecisionSource: "sale", provider: "pagbank", direction: "outgoing_request",
+        eventType: "order_result_persistence_failed", paymentId: art.orderId, externalReference: sale.id,
+        httpStatus: res.status, processingStatus: "failed", resultCategory: "error", incidentCode: "pagbank_order_needs_reconciliation",
+        message: "Order criada no PagBank, mas não foi possível persistir seu resultado. Conciliação necessária, sem novo POST.",
+      });
+      throw new PagbankError("pagbank_order_needs_reconciliation", "A cobrança foi criada, mas exige conciliação. Não será criada outra cobrança.", 503, { order_id: art.orderId });
+    }
 
     // Capacidades comprovadas por cobrança real (nunca por chamada genérica).
     // Split "aceito, consulta pendente" não comprova split_ready (PIX ou cartão).
@@ -703,6 +625,8 @@ Deno.serve(async (req) => {
       return json({ error: error.publicMessage, error_code: error.code, message: error.publicMessage, detail: error.detail ?? null }, error.httpStatus);
     }
     logPaymentTrace("error", SOURCE, "unhandled_error", { sale_id: sale?.id ?? null, message: error instanceof Error ? error.message : String(error) });
-    return json({ error: "Erro interno ao gerar o PIX.", error_code: "internal_error" }, 500);
+    // An unexpected local error can happen after the provider created the Order.
+    // The public checkout must preserve the sale/staging rather than roll it back.
+    return json({ error: "A cobrança exige verificação. Nenhuma nova cobrança será criada.", error_code: "pagbank_order_needs_reconciliation" }, 500);
   }
 });

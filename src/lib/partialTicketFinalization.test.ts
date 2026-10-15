@@ -49,6 +49,14 @@ describe('partial ticket finalization', () => {
     expect((await finalizeConfirmedPayment(params)).ok).toBe(true);
     expect(admin.state.tickets).toBe(2);
   });
+  it.each(['pagbank', 'asaas'] as const)('concurrent %s confirmations reuse atomic issuance and converge to two tickets', async gateway => {
+    const admin = db();
+    const params = {supabaseAdmin:admin,sale:{id:'s',company_id:'c',status:'pago'},confirmedAt:'2026-10-11T00:00:00Z',asaasStatus:'PAID',source:'verify-payment-status' as const,gateway};
+    const results = await Promise.all([finalizeConfirmedPayment(params), finalizeConfirmedPayment(params)]);
+    expect(results.every(result => result.ok)).toBe(true);
+    expect(admin.state).toEqual({tickets:2,staged:0,expected:2});
+    expect(admin.rpc.mock.calls.filter(([name]) => name === 'issue_sale_tickets_from_staging')).toHaveLength(2);
+  });
   it('partial conflict never reports successful finalization or cleans locks', async () => {
     const admin=db({rpcError:true});
     const result=await finalizeConfirmedPayment({supabaseAdmin:admin,sale:{id:'s',company_id:'c',status:'pago'},confirmedAt:'now',asaasStatus:'PAID',source:'verify-payment-status',gateway:'pagbank'});

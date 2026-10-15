@@ -88,14 +88,14 @@ describe('PagBank — venda local nunca some quando o Order pode existir', () =>
 });
 
 describe('PagBank — retry nunca cria segundo Order', () => {
-  it('tentativa falha com Order externo exige reconciliação', () => {
-    expect(resolvePagbankRetryDecision({ state: 'failed', external_order_id: 'ORDE_1' })).toBe('needs_reconciliation');
+  it('tentativa falha com Order externo reutiliza a consulta dessa Order', () => {
+    expect(resolvePagbankRetryDecision({ state: 'failed', external_order_id: 'ORDE_1' })).toBe('reuse_order');
   });
 
   it('reaproveita Order já bem-sucedido e aguarda tentativa em voo', () => {
     expect(resolvePagbankRetryDecision({ state: 'succeeded', external_order_id: 'ORDE_1' })).toBe('reuse_order');
     expect(resolvePagbankRetryDecision({ state: 'pending', external_order_id: null })).toBe('wait_in_flight');
-    expect(resolvePagbankRetryDecision({ state: 'indeterminate', external_order_id: null })).toBe('recover_by_reference');
+    expect(resolvePagbankRetryDecision({ state: 'indeterminate', external_order_id: null })).toBe('needs_reconciliation');
     expect(resolvePagbankRetryDecision(null)).toBe('create');
   });
 });

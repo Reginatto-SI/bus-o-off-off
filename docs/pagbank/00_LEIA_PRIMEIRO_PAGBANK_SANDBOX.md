@@ -6,7 +6,7 @@
 >
 > **Objetivo atual é simples:** fazer **PIX e cartão de crédito funcionarem em Sandbox com Split**, ponta a ponta, antes de buscar uma integração "perfeita".
 
-Atualizado em: **2026-10-13**
+Atualizado em: **2026-10-14**
 
 ---
 
@@ -1415,3 +1415,96 @@ individualmente os itens da venda relatada pelo procedimento autorizado. Os test
 com mocks não homologam o registro real, assinatura ou liquidação. A pendência do
 capítulo 30 permanece como histórico sem causa específica comprovada. PagBank em
 Produção permanece bloqueado.
+
+## 32. Checkout público — resultado incerto e integridade no reaproveitamento (2026-10-14)
+
+Base: `main` em `21feda0c05c57d6c7f4328f6a96f2219eeba2bad`, com #783/#784.
+Correção localizada preparada para uma única Draft PR; não implantada nem
+homologada financeiramente. Os marcos públicos PIX/cartão/recusa (§§13–15) e o
+ciclo nominal manual informado permanecem válidos; não foram repetidos.
+
+### Causas comprovadas e correção
+
+- O retry público usava `GET /orders?reference_id=...` e podia cair em outro POST
+  sem provar ausência de Order. A API oficial por parâmetros documenta `charge_id`,
+  não esse filtro; retenção/replay de Orders e reconstrução do payload original
+  não estão comprovados. A mesma limitação já estava registrada para o manual
+  (§28); não reabrir a investigação ou copiar regras específicas de sua taxa.
+- A criação pública agora envia POST somente após inserir uma tentativa nova pela
+  barreira UNIQUE existente. Tentativa já registrada sem ID, inclusive falha ou
+  órfã, exige conciliação sem POST, consulta por referência, troca de chave,
+  atualização do hash original ou reset de estado. Erros ao ler/inserir a tentativa
+  também impedem criação. Troca de meio com tentativa existente não permite
+  rollback do checkout. O helper HTTP sem contrato de busca por referência foi
+  removido; o transporte utilizado pelos demais consumidores não mudou.
+- Timeout/rede, HTTP 409/429/5xx e sucesso sem corpo são inconclusivos: preservam a
+  tentativa e devolvem código que o frontend já reconhece para manter venda e
+  staging. Falha ao salvar o resultado de uma Order criada registra seu ID em
+  `sale_integration_logs`, evento `order_result_persistence_failed`, sem declarar
+  confirmação financeira. Devolve o ID e bloqueia outra criação. Erro local
+  inesperado também não autoriza o frontend a apagar a venda.
+- O reaproveitamento de Order conhecida finalizava diretamente ao encontrar PAID,
+  sem o gate integral do sincronizador. Agora usa `syncPagbankSaleStatus`, inclusive
+  para tentativa incompleta com ID: GET com credencial da venda, integridade e
+  finalização compartilhada. Falha de credencial/consulta/integridade/emissão
+  preserva a compra e não cria nova Order. Não muda split, preço ou snapshot.
+- `status-sync` ignorava erro de leitura e tratava tentativa sem ID como
+  `no_attempt`; o cleanup podia cancelar e apagar staging. Agora retorna
+  `query_failed` com `pagbank_attempt_read_failed` ou
+  `pagbank_order_needs_reconciliation`. `no_attempt` fica reservado à leitura
+  bem-sucedida sem registro. O cleanup preserva a venda nos demais casos incertos.
+- A validação existente de ID da Order, referência, centavos, BRL, ambiente e
+  conexão ocorre antes de persistir status PAID/DECLINED/CANCELED ou autorizar
+  finalização/cancelamento. Estado terminal divergente também não libera reserva.
+  Sem tentativa após leitura conclusiva, ou Order terminal íntegra, mantém-se o
+  cancelamento normal. A captura/autenticação de webhook não foi alterada.
+
+### Reserva, conciliação e limites
+
+Venda/staging permanecem disponíveis. A RPC de ocupação e os triggers físicos
+existentes consideram `sale_passengers` de vendas pendentes/reservadas; a proteção
+não depende de manter um lock técnico expirado. Não foram alterados TTL, cron de
+cinco minutos, janela pública de 24h ou recuperação de pagas incompletas.
+
+Não usar preservação como abandono operacional: acompanhar os incidentes acima
+em `/admin/diagnostico-vendas`, os eventos `order_recovery_required` e os motivos
+`pagbank_guard` do cleanup. Quando houver ID confiável, usar a consulta existente
+(`verify-payment-status`); para venda paga com emissão incompleta, usar o
+procedimento de `reconcile-sale-payment`. Sem ID, o responsável deve conferir a
+referência original na conta Connect/ambiente corretos e obter evidência do
+PagBank antes de autorizar vínculo ou resolução. Não usar token da plataforma
+para Order pública do vendedor. Não inventar passageiros, liberar assentos,
+resetar tentativa ou gerar nova chave por ausência de ID/consulta vazia.
+Esta PR não cria endpoint de vínculo, cobrança ou cancelamento administrativo.
+
+### Validação e implantação futura
+
+230 testes em 13 arquivos aprovados: transporte/banco simulados com sincronizador,
+gate e guard reais; timeout, HTTPs inconclusivos, falhas de leitura/persistência,
+repetição e disputa de inserção, tentativa sem ID, consulta indisponível, Order
+íntegra/divergente, cancelamento seguro, PIX e cartão aprovado/recusado; regressões
+manuais PagBank/Asaas e finalização repetida/concorrente da emissão parcial.
+A concorrência desta sessão é simulada; a RPC, UNIQUE e triggers de banco não
+mudaram. Os testes PostgreSQL anteriores da emissão continuam como evidência
+histórica, não foram reexecutados nem tratados como teste do ambiente conectado.
+
+TypeScript do app, Deno dos oito consumidores verificados, build Vite em `/tmp`
+e lint dos quatro testes alterados aprovados. O lint backend mantém 18 erros e
+um aviso preexistentes nos cinco arquivos tocados, por `@ts-nocheck`/`any`;
+comparação com a main não encontrou diagnósticos novos. O build mantém avisos
+anteriores de bundles, browsers data e `eval` da dependência eruda.
+
+**Sem migration. Não modificar nem reaplicar 0002–0006.** Após revisão/merge e
+publicação explicitamente autorizados, republicar `create-pagbank-payment`,
+`verify-payment-status`, `cleanup-expired-locks` e `pagbank-webhook`, consumidores
+do sincronizador/guard alterados. Os demais consumidores do cliente HTTP usam
+funções preservadas; Asaas e fluxo manual não tiveram comportamento modificado.
+Não há alteração de frontend a publicar nesta correção.
+
+Próximo teste mínimo após implantação autorizada: comprovar no Sandbox publicado
+recuperação com navegador fechado e repetição sem nova cobrança; conferir reserva,
+passagens e diagnóstico nos casos de falha controlada. Mocks não homologam API,
+cron, RLS ou versões do runtime. Nenhum banco conectado, SQL, migration, pagamento,
+credencial, flag, webhook externo, merge ou deploy foi executado/alterado.
+PagBank em Produção permanece bloqueado. Não repetir OAuth/Connect, comparação de
+tokens, assinatura, GET Split/Charge ou incidentes antigos da taxa manual.

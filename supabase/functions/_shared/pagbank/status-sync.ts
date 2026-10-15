@@ -31,7 +31,7 @@ export async function syncPagbankSaleStatus(supabaseAdmin: any, params: {
   eventType?: string | null;
 }): Promise<PagbankSyncResult> {
   const { sale, source } = params;
-  const { data: attempt } = await supabaseAdmin
+  const { data: attempt, error: attemptError } = await supabaseAdmin
     .from("payment_attempts")
     .select("*")
     .eq("sale_id", sale.id)
@@ -42,7 +42,18 @@ export async function syncPagbankSaleStatus(supabaseAdmin: any, params: {
     .limit(1)
     .maybeSingle();
 
-  if (!attempt || !attempt.external_order_id) {
+  if (attemptError || (attempt && !attempt.external_order_id)) {
+    const code = attemptError ? "pagbank_attempt_read_failed" : "pagbank_order_needs_reconciliation";
+    await logSaleIntegrationEvent({
+      supabaseAdmin, saleId: sale.id, companyId: sale.company_id, paymentEnvironment: sale.payment_environment,
+      environmentDecisionSource: "sale", provider: "pagbank", direction: "manual_sync",
+      eventType: "order_recovery_required", processingStatus: "warning", resultCategory: "warning", incidentCode: code,
+      message: "Não foi possível comprovar o resultado da tentativa PagBank; reserva preservada para conciliação.",
+    });
+    return { state: "query_failed", paymentStatus: sale.status, code, attempt: attemptError ? null : attempt };
+  }
+  // Only a successful read with no attempt proves that creation has not started.
+  if (!attempt) {
     return { state: "no_attempt", paymentStatus: sale.status };
   }
 
@@ -67,6 +78,27 @@ export async function syncPagbankSaleStatus(supabaseAdmin: any, params: {
 
   const art = extractPagbankPixArtifacts(res.data);
   const normalized = normalizePagbankStatus(art.rawStatus);
+  // Payment and terminal cancellation decisions require the same Order identity.
+  // Reject before persisting a divergent status or exposing it to callers.
+  if (normalized === "paid" || normalized === "failed" || normalized === "canceled") {
+    const integrity = validatePagbankOrderIntegrity(res.data, {
+      saleId: sale.id,
+      saleEnvironment: sale.payment_environment,
+      saleConnectionId: sale.payment_connection_id,
+      credentialEnvironment: credential.environment,
+      attempt,
+    });
+    if (!integrity.ok) {
+      await logSaleIntegrationEvent({
+        supabaseAdmin, saleId: sale.id, companyId: sale.company_id, paymentEnvironment: credential.environment,
+        environmentDecisionSource: "sale", provider: "pagbank", direction: source === "pagbank-webhook" ? "incoming_webhook" : "manual_sync",
+        eventType: "order_integrity_rejected", paymentId: attempt.external_order_id, externalReference: sale.id,
+        httpStatus: 409, processingStatus: "rejected", resultCategory: "rejected", incidentCode: `pagbank_${integrity.reason}`,
+        message: "Order PagBank não corresponde à venda; confirmação ou cancelamento bloqueado.",
+      });
+      return { state: "query_failed", paymentStatus: sale.status, code: `pagbank_${integrity.reason}`, attempt };
+    }
+  }
   const { data: updatedAttempt } = await supabaseAdmin
     .from("payment_attempts")
     .update({
@@ -91,25 +123,6 @@ export async function syncPagbankSaleStatus(supabaseAdmin: any, params: {
 
   if (normalized !== "paid") {
     return { state: "pending", paymentStatus: sale.status, normalized, rawStatus: art.rawStatus, attempt: updatedAttempt ?? attempt };
-  }
-
-  // PAID só finaliza se a Order identificar exatamente a cobrança desta venda.
-  const integrity = validatePagbankOrderIntegrity(res.data, {
-    saleId: sale.id,
-    saleEnvironment: sale.payment_environment,
-    saleConnectionId: sale.payment_connection_id,
-    credentialEnvironment: credential.environment,
-    attempt,
-  });
-  if (!integrity.ok) {
-    await logSaleIntegrationEvent({
-      supabaseAdmin, saleId: sale.id, companyId: sale.company_id, paymentEnvironment: credential.environment,
-      environmentDecisionSource: "sale", provider: "pagbank", direction: source === "pagbank-webhook" ? "incoming_webhook" : "manual_sync",
-      eventType: "order_integrity_rejected", paymentId: attempt.external_order_id, externalReference: sale.id,
-      httpStatus: 409, processingStatus: "rejected", resultCategory: "rejected", incidentCode: `pagbank_${integrity.reason}`,
-      message: "Order PAID não corresponde à venda; finalização bloqueada.",
-    });
-    return { state: "query_failed", paymentStatus: sale.status, code: `pagbank_${integrity.reason}`, attempt: updatedAttempt ?? attempt };
   }
 
   // Somente PAID (capturado) e íntegro finaliza. Finalização idempotente comum.

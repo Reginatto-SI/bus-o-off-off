@@ -16,7 +16,8 @@ export async function evaluatePagbankSale(supabaseAdmin: any, sale: any): Promis
       source: "verify-payment-status",
       eventType: "pagbank_background_recovery",
     });
-    if (result.state === "no_attempt") return { decision: "allow_cancel", reason: "no_external_order" };
+    // no_attempt now means a successful read proved absence, never a missing ID.
+    if (result.state === "no_attempt") return { decision: "allow_cancel", reason: "no_payment_attempt" };
     if (result.state === "paid") {
       return result.finalizationOk
         ? { decision: "finalized", reason: "order_paid_finalized" }
