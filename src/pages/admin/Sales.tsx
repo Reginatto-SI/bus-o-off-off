@@ -1968,7 +1968,7 @@ export default function Sales() {
           </div>
         </header>
 
-                {/* Agrupamento mínimo dos KPIs: operação na primeira linha e financeiro na segunda.
+        {/* Agrupamento mínimo dos KPIs: operação na primeira linha e financeiro na segunda.
             Isso reduz a competição visual entre volume/status e valores consolidados. */}
         <section className="mb-5 space-y-4 rounded-2xl border border-slate-200/80 bg-card p-4 shadow-[0_8px_26px_-18px_rgba(15,23,42,0.2)]">
           <div className="flex items-center gap-3">
@@ -2048,6 +2048,7 @@ export default function Sales() {
         <div className="mb-5">
           <FilterCard
             className="rounded-2xl border-slate-200/80 bg-card p-5 shadow-[0_8px_26px_-18px_rgba(15,23,42,0.2)] [&_input]:rounded-xl [&_input]:bg-slate-50/60 [&_[role=combobox]]:rounded-xl"
+            mainGridClassName="2xl:grid-cols-5"
             searchValue={searchInput}
             onSearchChange={setSearchInput}
             searchPlaceholder="Buscar por nº da passagem, nome, CPF ou evento..."
@@ -2216,7 +2217,8 @@ export default function Sales() {
         ) : (
           <Card className="overflow-hidden rounded-2xl border-slate-200/80 shadow-[0_10px_30px_-18px_rgba(15,23,42,0.24)]">
             <CardContent className="p-0">
-              <Table>
+              <div className="w-full overflow-x-auto">
+              <Table className="min-w-[1100px]">
                 <TableHeader className="bg-primary [&_tr]:border-0 [&_th]:text-primary-foreground">
                   <TableRow className="hover:bg-primary">
                     <TableHead className="whitespace-nowrap">{renderSortHeader('Data', 'created_at')}</TableHead>
@@ -2401,6 +2403,7 @@ export default function Sales() {
                   })}
                 </TableBody>
               </Table>
+              </div>
 
               <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
