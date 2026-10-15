@@ -1508,3 +1508,115 @@ cron, RLS ou versões do runtime. Nenhum banco conectado, SQL, migration, pagame
 credencial, flag, webhook externo, merge ou deploy foi executado/alterado.
 PagBank em Produção permanece bloqueado. Não repetir OAuth/Connect, comparação de
 tokens, assinatura, GET Split/Charge ou incidentes antigos da taxa manual.
+
+## 33. Matriz operacional de homologação e pendências para go-live (2026-10-14)
+
+> **Status:** fluxos nominais Sandbox comprovados; **PagBank Produção NÃO liberado**.
+> Evidência de origem: relatório de análise **somente leitura** apresentado pelo
+> responsável após investigação no Lovable Cloud. A análise do GitHub e os testes
+> não substituem a prova de liquidação no PagBank ou a homologação formal do
+> provedor. Não converter resultados da amostra em garantia universal.
+
+### Resultado consolidado — não repetir homologações nominais sem motivo novo
+
+| Fluxo | Evidência relatada no ambiente conectado | Classificação |
+| --- | --- | --- |
+| Checkout público PIX | Venda `2696f598-9d03-4bc2-a1d1-e57ca7a2cc4b`, Order `ORDE_FBF87AA9-DA77-4E84-B319-DA725212E8B4`, status `pago`, passagens `SB-001707` e `SB-001708` | Fluxo nominal homologado no Sandbox |
+| Cartão público à vista aprovado | Venda `846105d5-a79c-4e6e-81c3-f72e8d841551`, Order `ORDE_169FFAE3-A7C2-4411-B865-19AA92CB452F`, `pago`, passagens `SB-001709` e `SB-001710` | Fluxo nominal homologado no Sandbox |
+| Cartão público recusado | Venda `bb2d3ab9-4977-410f-9902-e9281a01bcb9`, Order `ORDE_642A69DB-3413-499D-8731-357770DFB74A`, cancelada, nenhuma passagem emitida | Recusa homologada no Sandbox |
+| Venda manual PIX da taxa | Vendas `b4203646-a1c9-453d-85eb-d0ea4f255d97` e `23bad125-d7f1-4859-b445-1a40aacaf204`, taxa separada de R$ 6,00, Orders `ORDE_23E77749-9FC6-46A3-AAAD-3C40D3564F29` e `ORDE_353B6C99-CF53-42A9-811F-452F3523ECD4`, passagens `SB-001711` a `SB-001714` | Fluxo nominal homologado no Sandbox |
+| Recuperação sem navegador | Venda pública `2696f598-9d03-4bc2-a1d1-e57ca7a2cc4b`: webhook rejeitado com 401, consulta de fundo retornou `WAITING` às 11:20 UTC e `PAID` às 11:25 UTC, com venda finalizada e bilhetes emitidos | Recuperação em background comprovada em um caso real |
+| Criação do Split público | Order retornou referência `SPLI_...`, registrada como `accepted_unverified` | Aceitação de recurso comprovada; distribuição/liquidação **NÃO** comprovadas |
+| Proteções de incerteza/retry da PR #785 | PR integrada (merge `cc90aacd`), quatro funções publicadas e 72 testes direcionados informados. Sem reprodução real controlada do timeout após a publicação | Implementada/testada, **homologação da exceção pendente** |
+
+No conjunto de vendas consultado, o Lovable relatou dois bilhetes por venda
+paga, com identificadores e QR Codes únicos, sem emissão incompleta ou cobrança
+duplicada detectada **na amostra**. Checkout público cobrou R$ 106,00 nos
+exemplos de passagem de R$ 100,00 + taxa de R$ 6,00; venda manual cobrou
+apenas os R$ 6,00 da taxa. Não inferir, desses números isolados, liquidação de
+comissões, extrato dos recebedores ou garantia universal contra duplicações.
+O cálculo oficial continua no PRD 01, por passagem e por faixa.
+
+### Pendências reais antes da autorização de Produção
+
+1. **Webhook público Connect — autenticação não homologada.** Notificações
+   reais da venda pública chegaram, mas foram rejeitadas com HTTP 401. Cinco
+   candidatos de credencial já foram comparados sem correspondência. **Não
+   repetir esse diagnóstico por tentativa e erro** nem aceitar assinatura
+   inválida. Consulta autoritativa e recuperação de fundo funcionaram em um
+   caso, mas não substituem aprovação expressa do requisito de webhook.
+2. **Split — distribuição e liquidação não comprovadas.** Há identificador
+   `SPLI_...`, porém `GET /splits/{id}` retornou 403. A referência oficial
+   [Consultar divisão do pagamento](https://developer.pagbank.com.br/reference/consultar-divisao-do-pagamento)
+   especifica **token do recebedor primário**; não está comprovado qual
+   identidade/credencial exerce esse papel no nosso fluxo Orders/Connect, nem
+   se faltam permissões. Confirmar com o PagBank e/ou conferir extrato de cada
+   beneficiário. `accepted_unverified` **não** equivale a dinheiro recebido.
+3. **PR #785 — caso excepcional pós-publicação.** A proteção contra
+   resultado incerto, segundo POST indevido, cancelamento sem evidência e
+   reaproveitamento sem validação integral foi implementada/testada. Falta
+   **uma validação dirigida e segura**, preferencialmente simulada sem criar
+   cobranças externas ou deixar reservas reais presas. Não repetir toda a
+   homologação nominal de PIX e cartão.
+4. **Homologação formal PagBank e contas reais.** Não há aprovação de
+   Produção comprovada. Confirmar acesso Connect, Pix, cartão à vista, Split,
+   regras de credenciais/webhook, taxas, prazos e responsabilidade por
+   cancelamentos/contestações. Manter Produção bloqueada até liberação
+   explícita e plano de ativação controlado.
+5. **Operações manuais históricas inconclusivas.** As vendas
+   `72897a70...`, `e2b38d78...`, `43d67b91...` e
+   `d103bf38...` foram relatadas sem Order externo recuperável. Permanecem
+   preservadas para conciliação; não resetar estado/idempotência, reenviar POST,
+   liberar assentos ou presumir ausência de cobrança.
+
+### Documentação oficial de webhooks — ambiguidade nova, não solução autorizada
+
+A documentação oficial exibe **dois métodos distintos**, sem que esta consulta
+tenha comprovado qual se aplica às notificações **Orders + Connect** deste
+projeto:
+
+- [Confirmar autenticidade da notificação](https://developer.pagbank.com.br/reference/confirmar-autenticidade-da-notificacao):
+  `x-authenticity-token` comparado ao SHA-256 de token + hífen + corpo original.
+- [Validação de autenticidade](https://developer.pagbank.com.br/reference/validacao-de-autenticidade):
+  documentação de API de Notificação mais recente, com
+  `x-payload-signature`, ECDSA/SHA-256, corpo bruto e chave pública consultada
+  em `GET /public-keys?type=webhook`. Essa página explica a diferença para
+  o método anterior, **mas não comprova que nosso webhook Orders/Connect esteja
+  usando o novo protocolo**.
+
+**Decisão:** solicitar orientação escrita do PagBank sobre o modelo aplicável,
+header, credencial/chave, conta conectada, tratamento de Sandbox e Produção.
+Não trocar a validação existente para ECDSA nem flexibilizar assinatura por
+inferência. Não voltar a comparar as cinco credenciais anteriores sem nova
+evidência.
+
+### Próximas ações objetivas, sem nova rodada de desenvolvimento geral
+
+1. Abrir chamado técnico/comercial ao PagBank com as questões de webhook,
+   consulta/recebimento Split e requisitos de homologação Produção, incluindo
+   referências `ORDE_...` do Sandbox **sem tokens, CPF/CNPJ ou payload bruto**.
+2. Registrar a resposta **com fonte, data e escopo (Orders/Connect)** neste
+   checkpoint. Se houver mudança de contrato necessária, preparar correção
+   pequena, com testes, e somente após confirmação.
+3. Comprovar a conciliação real de recebedores (extrato/prova do PagBank) e
+   definir procedimento autorizado para operações incertas, estornos e cartão.
+4. Validar a exceção da #785 de forma controlada; preservar vendas e reservas.
+5. Solicitar homologação formal, preparar liberação por empresa e ambiente e
+   executar piloto de Produção **somente após autorização específica**.
+
+### Critério para não voltar em círculos
+
+**Resolvido e não reabrir sem evidência nova:** PIX público nominal, cartão
+à vista aprovado/recusado, taxa manual PIX nominal, comprovante manual,
+emissão integral nos casos auditados e recuperação via cron em um caso real;
+erros históricos de criação por referência e `customer.name` já têm registros
+próprios nos capítulos anteriores.
+
+**Pendente não é bug comprovado:** assinatura Connect, autorização da consulta
+Split, prova de recebimento, exceções controladas da #785 e liberação formal
+Produção. Não abrir refatoração, alterar gateway ou cobrar novamente para obter
+logs quando uma confirmação documental/operacional é a etapa correta.
+
+**Mudança nesta atualização:** somente documentação. Nenhum código, banco,
+migração, flag, credencial, pagamento, webhook, cron ou deploy foi alterado.
+PagBank em Produção continua bloqueado.
