@@ -10,6 +10,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -52,6 +53,7 @@ import {
   Sparkles,
   Clock3,
   MapPin,
+  Ticket,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { buildEventOperationalEndMap, filterOperationallyVisibleEvents } from '@/lib/eventOperationalWindow';
@@ -69,6 +71,9 @@ import {
   BENEFIT_PRICING_RULE_VERSION,
   resolvePassengerBenefitPrice,
 } from '@/lib/benefitEligibility';
+
+import { NewSaleWizardProgress, NewSaleWizardStageTitle, NewSaleWizardTransport, NewSaleWizardSummary } from './NewSaleWizardVisuals';
+import './NewSaleModal.css';
 
 // ── Types ──
 type SaleTab = 'manual' | 'reserva' | 'bloqueio';
@@ -1283,13 +1288,36 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
   // ── Render ──
   const isConfirmationStep = step === 4 && !!confirmationData;
+  const wizardScrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const viewport = wizardScrollRef.current?.querySelector<HTMLDivElement>('[data-radix-scroll-area-viewport]');
+    if (viewport && window.matchMedia('(min-width: 1024px)').matches) viewport.scrollTop = 0;
+  }, [step]);
+  // Display models use the existing selections and availability values only.
+  const transportChoices = (groupedTransportPolicy ? trips.filter((trip) => trip.trip_type === 'ida') : trips).map((trip) => ({
+    id: trip.id,
+    name: trip.vehicle ? `${vehicleTypeLabels[trip.vehicle.type] ?? trip.vehicle.type} ${trip.vehicle.plate}` : trip.id.slice(0, 8),
+    journey: getTripTypeLabel(trip.trip_type),
+    departure: trip.departure_time?.slice(0, 5),
+    capacity: trip.vehicle?.capacity,
+    remaining: trip.vehicle ? Math.max(trip.vehicle.capacity - (tripSoldSeats[trip.id] ?? 0), 0) : undefined,
+  }));
+  const contextSummary = <NewSaleWizardSummary
+    event={selectedEvent?.name}
+    date={selectedEvent?.date ? formatDateOnlyBR(selectedEvent.date) : undefined}
+    transport={selectedVehicle ? `${vehicleTypeLabels[selectedVehicle.type] ?? selectedVehicle.type} ${selectedVehicle.plate}` : undefined}
+    boarding={selectedBoarding?.name}
+    departure={selectedBoarding?.departure_time?.slice(0, 5)}
+    seatLabels={selectedSeats.map(id => seats.find(seat => seat.id === id)?.label).filter((label): label is string => Boolean(label))}
+    onEdit={() => setStep(1)}
+  />;
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
       <DialogContent
         className={
           isConfirmationStep
-            ? "flex h-[90vh] max-h-[90vh] w-[95vw] max-w-3xl flex-col gap-0 p-0 rounded-lg border border-[hsl(var(--ticket-border))] bg-[hsl(var(--ticket-bg))] text-[hsl(var(--ticket-text))] shadow-sm"
-            : "admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-3xl flex-col gap-0 p-0"
+            ? "new-sale-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-3xl flex-col gap-0 p-0 rounded-lg border border-[hsl(var(--ticket-border))] bg-[hsl(var(--ticket-bg))] text-[hsl(var(--ticket-text))] shadow-sm"
+            : "new-sale-modal new-sale-wizard admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-3xl flex-col gap-0 p-0"
         }
       >
         {!isConfirmationStep&&<DialogHeader
@@ -1300,17 +1328,22 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
           }
         >
           {/* Ajuste fino de alinhamento: título e subtítulo compartilham a mesma coluna visual sem padding manual. */}
-          <div className="flex flex-col gap-1">
+          <div className="new-sale-wizard__identity">
+            <span className="new-sale-wizard__brand-icon hidden lg:flex"><Ticket className="h-6 w-6" aria-hidden="true"/></span>
+            <div className="flex flex-col gap-1">
+            <span className="new-sale-wizard__eyebrow hidden lg:block">SMARTBUS · OPERAÇÃO DE PASSAGENS</span>
             <DialogTitle className={`flex items-center gap-2 ${isConfirmationStep ? 'text-[hsl(var(--ticket-text))]' : ''}`}>
-              {step < 4 && <Sparkles className="h-4 w-4 text-primary/80" />}
-              {step === 4 ? 'Comprovante de Reserva' : 'Nova Venda'}
+              {step < 4 && <Sparkles className="h-4 w-4 text-primary/80 lg:hidden" />}
+              <span className="lg:hidden">{step === 4 ? 'Comprovante de Reserva' : 'Nova Venda'}</span>
+              <span className="hidden lg:inline">{activeTab === 'manual' ? 'Nova venda' : activeTab === 'reserva' ? 'Nova reserva' : 'Bloquear poltronas'}</span>
             </DialogTitle>
             {/* Melhoria visual orientativa: mantém o mesmo fluxo, mas deixa o objetivo do modal explícito. */}
             {step < 4 && (
-              <p className="text-sm text-muted-foreground">
+              <DialogDescription>
                 Registre uma venda, reserva ou bloqueio de assento
-              </p>
+              </DialogDescription>
             )}
+            </div>
           </div>
         </DialogHeader>}
 
@@ -1343,7 +1376,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <p className="truncate text-xs leading-4 text-muted-foreground">Venda imediata com pagamento</p>
+                          <p className="truncate text-xs leading-4 text-muted-foreground"><span className="lg:hidden">Venda imediata com pagamento</span><span className="hidden lg:inline">Registre o recebimento presencial</span></p>
                         </TooltipTrigger>
                         <TooltipContent>
                           <p>Venda imediata com pagamento</p>
@@ -1401,9 +1434,10 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
               </TabsTrigger>
             </TabsList>
 
-            <ScrollArea className="flex-1 px-6 py-3">
+            <NewSaleWizardProgress step={step} mode={activeTab} onBack={setStep}/>
+            <ScrollArea ref={wizardScrollRef} className="new-sale-wizard__scroll flex-1 px-6 py-3">
               {/* Step indicators */}
-              <div className="mb-4 rounded-xl border bg-muted/20 px-4 py-3">
+              <div className="mb-4 rounded-xl border bg-muted/20 px-4 py-3 lg:hidden">
                 <div className="flex items-center gap-2">
                   {stepMeta.map((item, index) => {
                     const isCompleted = item.value < step;
@@ -1438,11 +1472,13 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                 </div>
               </div>
 
+              <NewSaleWizardStageTitle step={step} mode={activeTab}/>
+
               {/* All tabs share the same wizard */}
               <TabsContent value={activeTab} className="mt-0" forceMount>
                 {/* STEP 1 — Context */}
                 {step === 1 && (
-                  <div className="space-y-5">
+                  <div className="new-sale-context space-y-5">
                     {/* Event */}
                     <div className="space-y-2 rounded-lg border bg-muted/20 p-4">
                       <Label>Evento *</Label>
@@ -1454,6 +1490,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                             <Button
                               variant="outline"
                               role="combobox"
+                              aria-label="Evento"
                               aria-expanded={eventComboboxOpen}
                               className={cn('w-full justify-between font-normal', !selectedEventId && 'text-muted-foreground')}
                             >
@@ -1493,7 +1530,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                     </div>
 
                     {selectedEvent && (
-                      <div className="space-y-2 rounded-lg border bg-background/90 p-4">
+                      <div className="new-sale-event-detail space-y-2 rounded-lg border bg-background/90 p-4">
                         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Resumo do evento</p>
                         <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
                           <div>
@@ -1519,11 +1556,14 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                     )}
 
                     {/* Trip/Vehicle */}
-                    <div className="space-y-2 rounded-lg border bg-muted/20 p-4">
+                    <div className="new-sale-transport-section space-y-2 rounded-lg border bg-muted/20 p-4">
                       <Label>Transporte *</Label>
                       {loadingTrips ? (
                         <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Carregando...</div>
                       ) : (
+                        <>
+                        <NewSaleWizardTransport choices={transportChoices} value={selectedTripId} onChange={setSelectedTripId} hasEvent={Boolean(selectedEventId)}/>
+                        <div className="lg:hidden">
                         <Select value={selectedTripId} onValueChange={setSelectedTripId} disabled={!selectedEventId}>
                           <SelectTrigger><SelectValue placeholder="Selecione o transporte" /></SelectTrigger>
                           <SelectContent>
@@ -1543,6 +1583,8 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                             })}
                           </SelectContent>
                         </Select>
+                        </div>
+                        </>
                       )}
                       {selectedEventId && selectedEventPolicy === 'trecho_independente' && (
                         <p className="text-xs text-muted-foreground">Vagas controladas por trecho.</p>
@@ -1583,7 +1625,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                         <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Carregando...</div>
                       ) : (
                         <Select value={selectedBoardingId} onValueChange={setSelectedBoardingId} disabled={!selectedTripId}>
-                          <SelectTrigger><SelectValue placeholder="Selecione o embarque" /></SelectTrigger>
+                          <SelectTrigger aria-label="Local e horário de embarque"><SelectValue placeholder="Selecione o embarque" /></SelectTrigger>
                           <SelectContent>
                             {boardingOptions.map((b) => (
                               <SelectItem key={b.id} value={b.id}>
@@ -1614,7 +1656,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                     )}
 
                     {!!selectedTrip && (
-                      <div className="space-y-3 rounded-lg border bg-card p-4">
+                      <div className="new-sale-availability space-y-3 rounded-lg border bg-card p-4">
                         <div className="flex items-center justify-between">
                           <p className="text-sm font-semibold text-foreground">Disponibilidade do transporte</p>
                           <Badge variant="secondary" className="text-primary">Disponíveis: {availableSeats}</Badge>
@@ -1634,6 +1676,8 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                 {/* STEP 2 — Seat map */}
                 {step === 2 && (
                   <div>
+                    {contextSummary}
+                    <div className="new-sale-seat-map">
                     {loadingSeats ? (
                       <div className="flex items-center justify-center py-12">
                         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -1667,12 +1711,13 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                         showSelectionQuantityLabel
                       />
                     )}
+                    </div>
                   </div>
                 )}
 
                 {/* STEP 3 — Passenger data */}
                 {step === 3 && (
-                  <div className="space-y-6">
+                  <div className="new-sale-passengers space-y-6">
                     {/* Tab-specific fields */}
                     {activeTab === 'manual' && (
                       <div className="space-y-4 p-4 rounded-lg border bg-muted/30">
@@ -1808,14 +1853,14 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
                     {/* Passenger forms */}
                     {activeTab !== 'bloqueio' && (
-                      <div className="space-y-4">
+                      <div className="new-sale-passenger-list space-y-4">
                         <h3 className="text-sm font-medium">Dados dos passageiros ({passengers.length})</h3>
                         {passengers.map((p, i) => {
                           const passengerSnapshot = passengerBenefitSnapshots[i];
                           return (
-                          <div key={p.seatId} className="space-y-3 rounded-xl border bg-card p-4 shadow-sm">
+                          <div key={p.seatId} className="new-sale-passenger-card space-y-3 rounded-xl border bg-card p-4 shadow-sm">
                             <div className="flex items-center gap-2">
-                              <Badge variant="outline" className="font-mono">{p.seatLabel}</Badge>
+                              <Badge variant="outline" className="new-sale-passenger-seat font-mono"><span className="hidden lg:inline">Poltrona&nbsp;</span>{p.seatLabel}</Badge>
                               <span className="text-sm font-medium text-foreground">Passageiro {i + 1}</span>
                               {eventTicketTypes.length > 0 && p.ticketTypeName && (
                                 <Badge variant="secondary" className="text-[10px] ml-auto">
@@ -1937,9 +1982,11 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                       </div>
                     )}
 
+                    {contextSummary}
+
                     {/* Simulação de cálculo compartilhada com /admin/eventos (sem card resumo extra). */}
                     {activeTab !== 'bloqueio' && adminCheckoutSummary && (
-                      <div className="rounded-lg border bg-muted/20 p-4 space-y-2">
+                      <div className="new-sale-financial rounded-lg border bg-muted/20 p-4 space-y-2">
                         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Resumo financeiro da venda</p>
                         <div className="flex items-center justify-between text-sm">
                           <span className="text-muted-foreground">Subtotal original</span>
@@ -1997,7 +2044,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                         const estimatedNet = roundCurrency(totalSale - resolvedPlatformFee);
 
                         return (
-                          <div className="rounded-lg border bg-muted/50 p-3">
+                          <div className="new-sale-financial rounded-lg border bg-muted/50 p-3">
                             <p className="text-xs text-muted-foreground mb-1">Simulação de cálculo</p>
                             <div className="text-sm space-y-0.5">
                               {composition.map((item) => (
@@ -2038,7 +2085,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
                       const price = composition[0]?.price ?? fallbackPrice;
                       return (
-                        <CalculationSimulationCard
+                        <div className="new-sale-financial-wrapper"><CalculationSimulationCard
                           basePrice={price}
                           fees={eventFees}
                           quantity={passengers.length}
@@ -2046,7 +2093,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                           platformFeeAmountOverride={hasConfiguredPlatformFee ? (manualPlatformFeePreview ?? undefined) : undefined}
                           platformFeeLabelOverride="Taxa da plataforma (motor progressivo)"
                           passPlatformFeeToCustomer={false}
-                        />
+                        /></div>
                       );
                     })()}
                   </div>
@@ -2058,7 +2105,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
         {/* Footer navigation (steps 1-3 only) */}
         {step < 4 && (
-          <DialogFooter className="border-t px-6 py-3 flex-row justify-between">
+          <DialogFooter className="new-sale-wizard__footer border-t px-6 py-3 flex-row justify-between">
             <div>
               {step > 1 && (
                 <Button variant="outline" onClick={() => setStep((s) => s - 1)}>
@@ -2066,6 +2113,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                 </Button>
               )}
             </div>
+            <div className="hidden lg:block new-sale-wizard__footer-note">{step === 3 ? 'Revise os dados antes de confirmar a operação.' : 'As escolhas ficam disponíveis nas próximas etapas.'}</div>
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
               {step < 3 && (
@@ -2073,13 +2121,13 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                   onClick={step === 2 ? handleGoToPaymentStep : () => setStep((s) => s + 1)}
                   disabled={step === 1 ? !canGoStep2 : !canGoStep3}
                 >
-                  {step === 1 ? 'Escolher assentos' : 'Ir para pagamento'} <ChevronRight className="h-4 w-4 ml-1" />
+                  <span className="lg:hidden">{step === 1 ? 'Escolher assentos' : 'Ir para pagamento'}</span><span className="hidden lg:inline">{step === 1 ? 'Escolher poltronas' : activeTab === 'bloqueio' ? 'Revisar bloqueio' : 'Dados e recebimento'}</span> <ChevronRight className="h-4 w-4 ml-1" />
                 </Button>
               )}
               {step === 3 && (
                 <Button onClick={handleConfirm} disabled={!canConfirm}>
                   {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                  Confirmar venda
+                  <span className="lg:hidden">Confirmar venda</span><span className="hidden lg:inline">{activeTab === 'bloqueio' ? 'Confirmar bloqueio' : activeTab === 'reserva' ? 'Confirmar reserva' : 'Registrar venda'}</span>
                 </Button>
               )}
             </div>
