@@ -10,8 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { PageHeader } from '@/components/admin/PageHeader';
-import { StatsCard } from '@/components/admin/StatsCard';
+import type { LucideIcon } from 'lucide-react';
 import { FilterCard, FilterInput } from '@/components/admin/FilterCard';
 import { ActionsDropdown, ActionItem } from '@/components/admin/ActionsDropdown';
 import { ExportExcelModal, ExportColumn } from '@/components/admin/ExportExcelModal';
@@ -64,6 +63,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   ShoppingCart,
+  Bus,
   Loader2,
   FileSpreadsheet,
   FileText,
@@ -447,6 +447,34 @@ function buildTicketCardData(
 }
 
 // ── Component ──
+
+type SalesMetricTone = 'orange' | 'green' | 'amber' | 'blue' | 'red' | 'purple';
+const salesMetricColors: Record<SalesMetricTone, string> = {
+  orange: 'bg-orange-50 text-orange-600',
+  green: 'bg-green-50 text-green-600',
+  amber: 'bg-amber-50 text-amber-600',
+  blue: 'bg-blue-50 text-blue-600',
+  red: 'bg-red-50 text-red-600',
+  purple: 'bg-violet-50 text-violet-600',
+};
+
+// Componente de apresentação restrito ao piloto /admin/vendas; nenhuma nova regra de dados.
+function SalesMetricCard({ label, value, icon: Icon, tone }: {
+  label: string; value: string | number; icon: LucideIcon; tone: SalesMetricTone;
+}) {
+  return (
+    <div className="flex min-h-[112px] min-w-0 items-center gap-3 rounded-xl border border-slate-200/80 bg-card p-4 shadow-[0_6px_20px_-13px_rgba(15,23,42,0.25)] transition-shadow hover:shadow-[0_12px_26px_-15px_rgba(15,23,42,0.35)]">
+      <span className={cn('flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl', salesMetricColors[tone])}>
+        <Icon className="h-6 w-6" aria-hidden="true" />
+      </span>
+      <div className="min-w-0">
+        <p className="text-xs font-medium leading-snug text-muted-foreground">{label}</p>
+        <p className="mt-1 break-words text-xl font-bold tracking-tight text-foreground 2xl:text-2xl">{value}</p>
+      </div>
+    </div>
+  );
+}
+
 export default function Sales() {
   const location = useLocation();
   const { isGerente, canViewFinancials, activeCompanyId, activeCompany, user, userRole, isDeveloper, canAccessTemplatesLayout } = useAuth();
@@ -1910,54 +1938,60 @@ export default function Sales() {
           <AdminMobileMoreMenu open={mobileMoreMenuOpen} onOpenChange={setMobileMoreMenuOpen} />
         </div>
       <div className="page-container hidden lg:block">
-        {/* Header */}
-        <PageHeader
-          title="Vendas"
-          description="Gerenciamento de vendas e suporte ao cliente"
-          actions={
-            <>
-              <Button onClick={() => setNewSaleModalOpen(true)}>
-                + Nova venda
+        {/* Piloto visual desktop de Vendas */}
+        <header className="relative mb-5 overflow-hidden rounded-2xl border border-orange-100 bg-gradient-to-r from-orange-50 via-white to-white p-5 shadow-[0_8px_28px_-18px_rgba(194,65,12,0.2)]">
+          <Bus aria-hidden="true" className="pointer-events-none absolute right-[26%] top-1/2 h-28 w-28 -translate-y-1/2 text-orange-100/70" />
+          <div className="relative flex flex-wrap items-center justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-4">
+              <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-[0_8px_18px_-8px_rgba(234,88,12,0.6)]">
+                <ShoppingCart className="h-7 w-7" aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <h1 className="text-2xl font-bold tracking-tight text-foreground">Vendas</h1>
+                <p className="mt-1 text-sm text-muted-foreground">Gerenciamento de vendas e suporte ao cliente</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button className="h-11 rounded-xl px-5 font-semibold shadow-[0_8px_20px_-9px_rgba(234,88,12,0.65)] hover:shadow-[0_10px_24px_-9px_rgba(234,88,12,0.8)]" onClick={() => setNewSaleModalOpen(true)}>
+                <ShoppingCart className="mr-2 h-4 w-4" aria-hidden="true" /> Nova venda
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setExportModalOpen(true)}>
-                <FileSpreadsheet className="h-4 w-4 mr-2" />
-                Excel
+              <Button className="h-10 rounded-xl bg-white shadow-sm" variant="outline" size="sm" onClick={() => setExportModalOpen(true)}>
+                <FileSpreadsheet className="mr-2 h-4 w-4" /> Excel
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setPdfModalOpen(true)}>
-                <FileText className="h-4 w-4 mr-2" />
-                PDF
+              <Button className="h-10 rounded-xl bg-white shadow-sm" variant="outline" size="sm" onClick={() => setPdfModalOpen(true)}>
+                <FileText className="mr-2 h-4 w-4" /> PDF
               </Button>
-              <Button variant="outline" size="sm" onClick={() => { setLoading(true); fetchSales(); }}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Atualizar
+              <Button className="h-10 rounded-xl bg-white shadow-sm" variant="outline" size="sm" onClick={() => { setLoading(true); fetchSales(); }}>
+                <RefreshCw className="mr-2 h-4 w-4" /> Atualizar
               </Button>
-            </>
-          }
-        />
+            </div>
+          </div>
+        </header>
 
         {/* Agrupamento mínimo dos KPIs: operação na primeira linha e financeiro na segunda.
             Isso reduz a competição visual entre volume/status e valores consolidados. */}
-        <section className="mb-6 space-y-3">
-          <div className="flex flex-col gap-1">
-            <h2 className="text-sm font-semibold text-foreground">Operação</h2>
-            <p className="text-sm text-muted-foreground">
-              Leitura rápida do pipeline comercial e do status atual das vendas.
-            </p>
+        <section className="mb-5 space-y-4 rounded-2xl border border-slate-200/80 bg-card p-4 shadow-[0_8px_26px_-18px_rgba(15,23,42,0.2)]">
+          <div className="flex items-center gap-3">
+            <span className="rounded-xl bg-orange-50 p-2 text-primary"><ShoppingCart className="h-5 w-5" aria-hidden="true" /></span>
+            <div>
+              <h2 className="text-base font-bold text-foreground">Operação</h2>
+              <p className="text-sm text-muted-foreground">Leitura rápida do pipeline comercial e do status atual das vendas.</p>
+            </div>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4">
-            <StatsCard label="Vendas registradas" value={stats.total} icon={ShoppingCart} />
-            <StatsCard label="Pagas" value={stats.pagas} icon={CheckCircle} variant="success" />
-            <StatsCard label="Pendentes de pagamento" value={stats.pendentesPagamento} icon={Clock} variant="warning" />
-            <StatsCard label="Reservas em aberto" value={stats.reservasEmAberto} icon={AlertCircle} />
-            <StatsCard label="Canceladas" value={stats.canceladas} icon={XCircle} variant="destructive" />
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
+            <SalesMetricCard label="Vendas registradas" value={stats.total} icon={ShoppingCart} tone="orange" />
+            <SalesMetricCard label="Pagas" value={stats.pagas} icon={CheckCircle} tone="green" />
+            <SalesMetricCard label="Pendentes de pagamento" value={stats.pendentesPagamento} icon={Clock} tone="amber" />
+            <SalesMetricCard label="Reservas em aberto" value={stats.reservasEmAberto} icon={Calendar} tone="blue" />
+            <SalesMetricCard label="Canceladas" value={stats.canceladas} icon={XCircle} tone="red" />
           </div>
           <Alert className={cn(
-            'border',
+            'rounded-xl border px-4 py-3 shadow-none',
             globalReservationRiskSummary.expired > 0
               ? 'border-destructive/40 bg-destructive/5'
               : globalReservationRiskSummary.nearExpiry > 0
                 ? 'border-amber-300 bg-amber-50'
-                : 'border-border bg-muted/30',
+                : 'border-blue-100 bg-blue-50/50',
           )}>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -1994,24 +2028,27 @@ export default function Sales() {
         {/* Financeiro consolidado fica em bloco próprio e continua restrito a gerente/developer
             via canViewFinancials para impedir exposição de valores ao perfil operador. */}
         {canViewFinancials && (
-          <section className="mb-6 rounded-lg border bg-card p-4 space-y-3">
-            <div className="flex flex-col gap-1">
-              <h2 className="text-sm font-semibold text-foreground">Financeiro</h2>
-              <p className="text-sm text-muted-foreground">
-                Valores consolidados apenas de vendas pagas, separados do bloco operacional.
-              </p>
+          <section className="mb-5 space-y-4 rounded-2xl border border-orange-100 bg-gradient-to-br from-orange-50/70 via-card to-orange-50/30 p-4 shadow-[0_8px_26px_-18px_rgba(194,65,12,0.16)]">
+            <div className="flex items-center gap-3">
+              <span className="rounded-xl bg-orange-100/80 p-2 text-primary"><DollarSign className="h-5 w-5" aria-hidden="true" /></span>
+              <div>
+                <h2 className="text-base font-bold text-foreground">Financeiro</h2>
+                <p className="text-sm text-muted-foreground">Valores consolidados apenas de vendas pagas, separados do bloco operacional.</p>
+              </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-              <StatsCard label="Total arrecadado" value={formatCurrencyBRL(stats.totalValue)} icon={DollarSign} variant="success" />
-              <StatsCard label="Custo da plataforma" value={formatCurrencyBRL(stats.totalPlatformFee)} icon={DollarSign} />
-              <StatsCard label="Comissão dos vendedores" value={formatCurrencyBRL(stats.totalSellersCommission)} icon={Users} />
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+              <SalesMetricCard label="Total arrecadado" value={formatCurrencyBRL(stats.totalValue)} icon={DollarSign} tone="green" />
+              <SalesMetricCard label="Custo da plataforma" value={formatCurrencyBRL(stats.totalPlatformFee)} icon={CreditCard} tone="orange" />
+              <SalesMetricCard label="Comissão dos vendedores" value={formatCurrencyBRL(stats.totalSellersCommission)} icon={Users} tone="purple" />
             </div>
           </section>
         )}
 
         {/* Filters */}
-        <div className="mb-6">
+        <div className="mb-5">
           <FilterCard
+            className="rounded-2xl border-slate-200/80 bg-card p-5 shadow-[0_8px_26px_-18px_rgba(15,23,42,0.2)] [&_input]:rounded-xl [&_input]:bg-slate-50/60 [&_[role=combobox]]:rounded-xl"
+            mainGridClassName="2xl:grid-cols-5"
             searchValue={searchInput}
             onSearchChange={setSearchInput}
             searchPlaceholder="Buscar por nº da passagem, nome, CPF ou evento..."
@@ -2178,11 +2215,12 @@ export default function Sales() {
             description={hasActiveFilters ? 'Tente ajustar os filtros' : 'As vendas aparecerão aqui quando forem realizadas'}
           />
         ) : (
-          <Card>
+          <Card className="overflow-hidden rounded-2xl border-slate-200/80 shadow-[0_10px_30px_-18px_rgba(15,23,42,0.24)]">
             <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
+              <div className="w-full overflow-x-auto">
+              <Table className="min-w-[1100px]">
+                <TableHeader className="bg-primary [&_tr]:border-0 [&_th]:text-primary-foreground">
+                  <TableRow className="hover:bg-primary">
                     <TableHead className="whitespace-nowrap">{renderSortHeader('Data', 'created_at')}</TableHead>
                     <TableHead>{renderSortHeader('Evento', 'event_name')}</TableHead>
                     <TableHead>{renderSortHeader('Cliente', 'customer_name')}</TableHead>
@@ -2190,7 +2228,7 @@ export default function Sales() {
                     <TableHead>{renderSortHeader('Passagem', 'quantity')}</TableHead>
                     {canViewFinancials && <TableHead className="whitespace-nowrap">{renderSortHeader('Valor', 'gross_amount')}</TableHead>}
                     <TableHead className="whitespace-nowrap">{renderSortHeader('Status', 'status')}</TableHead>
-                    <TableHead className="w-[50px]">Ações</TableHead>
+                    <TableHead className="w-[50px] text-primary-foreground">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -2208,7 +2246,7 @@ export default function Sales() {
                       ? getReservationVisibility(sale.reservation_expires_at)
                       : null;
                     return (
-                      <TableRow key={sale.id} className={isBlock ? 'bg-muted/30' : undefined}>
+                      <TableRow key={sale.id} className={cn('transition-colors hover:bg-orange-50/40', isBlock && 'bg-muted/30')}>
                         <TableCell className="text-sm whitespace-nowrap">
                           {format(new Date(sale.created_at), 'dd/MM/yy HH:mm', { locale: ptBR })}
                         </TableCell>
@@ -2365,6 +2403,7 @@ export default function Sales() {
                   })}
                 </TableBody>
               </Table>
+              </div>
 
               <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
