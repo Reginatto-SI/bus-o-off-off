@@ -52,6 +52,7 @@ interface FilterCardProps {
   hasActiveFilters?: boolean;
   className?: string;
   mainGridClassName?: string;
+  compact?: boolean;
 }
 
 export function FilterCard({
@@ -69,12 +70,13 @@ export function FilterCard({
   hasActiveFilters = false,
   className,
   mainGridClassName,
+  compact = false,
 }: FilterCardProps) {
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
 
   return (
     <div className={cn('filter-card', className)}>
-      <div className="flex flex-col gap-3 sm:gap-4">
+      <div className={cn('flex flex-col gap-3 sm:gap-4', compact && 'sm:gap-3')}>
         {/* Cabeçalho do card */}
         <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
           <span className="text-sm font-semibold text-foreground">{title}</span>
