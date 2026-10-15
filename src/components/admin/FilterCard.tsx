@@ -51,6 +51,7 @@ interface FilterCardProps {
   onClearFilters: () => void;
   hasActiveFilters?: boolean;
   className?: string;
+  mainGridClassName?: string;
 }
 
 export function FilterCard({
@@ -67,6 +68,7 @@ export function FilterCard({
   onClearFilters,
   hasActiveFilters = false,
   className,
+  mainGridClassName,
 }: FilterCardProps) {
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
 
@@ -91,7 +93,7 @@ export function FilterCard({
         </div>
 
         {/* Filtros Simples */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
+        <div className={cn('grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4', mainGridClassName)}>
           <div className="space-y-1.5">
             <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
               <SearchIcon className="h-4 w-4" />
