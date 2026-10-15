@@ -2485,7 +2485,7 @@ export default function Sales() {
                   {ticketReceipt.snapshot?.phase==='complete'?'Venda concluída. Passagens atualizadas.':ticketReceipt.snapshot?.phase==='issuing'?'Pagamento confirmado. Estamos finalizando suas passagens.':ticketReceipt.snapshot?.phase==='closed'?'Venda encerrada. Consulte a situação na listagem.':'A reserva aguarda confirmação financeira.'}
                   {(ticketReceipt.error||ticketReceipt.paused)&&<p>{ticketReceipt.error?'Não foi possível atualizar agora. Os últimos dados foram preservados.':'Acompanhamento automático pausado. Consulte novamente.'}</p>}
                 </div>
-                <Button variant="outline" onClick={()=>void ticketReceipt.refresh()} disabled={ticketReceipt.loading||!ticketGenScopeMatches}>Consultar novamente</Button>
+                {ticketReceipt.snapshot?.phase!=='complete'&&ticketReceipt.snapshot?.phase!=='closed'&&<Button variant="outline" className="border-[hsl(var(--ticket-border))] bg-transparent text-[hsl(var(--ticket-text))] hover:bg-[hsl(var(--ticket-surface-2))] hover:text-[hsl(var(--ticket-text))] disabled:opacity-50" onClick={()=>void ticketReceipt.refresh()} disabled={ticketReceipt.loading||!ticketGenScopeMatches}>Consultar novamente</Button>}
               </>}
               <Button variant="outline" onClick={() => { setTicketGenSale(null); setTicketGenTickets([]); }}>
                 Fechar
