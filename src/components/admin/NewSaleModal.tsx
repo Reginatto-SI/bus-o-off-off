@@ -40,6 +40,7 @@ import {
   ChevronRight,
   AlertTriangle,
   Bus,
+  ChartColumn,
   Route,
   CalendarClock,
   Circle,
@@ -1312,6 +1313,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
     remaining: trip.vehicle ? Math.max(trip.vehicle.capacity - (tripSoldSeats[trip.id] ?? 0), 0) : undefined,
   }));
   const contextSummary = <NewSaleWizardSummary
+    detailed={step === 3}
     event={selectedEvent?.name}
     date={selectedEvent?.date ? formatDateOnlyBR(selectedEvent.date) : undefined}
     transport={selectedVehicle ? `${vehicleTypeLabels[selectedVehicle.type] ?? selectedVehicle.type} ${selectedVehicle.plate}` : undefined}
@@ -1324,6 +1326,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
       <DialogContent
+        data-wizard-step={isConfirmationStep ? undefined : step}
         className={
           isConfirmationStep
             ? "new-sale-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-3xl flex-col gap-0 p-0 rounded-lg border border-[hsl(var(--ticket-border))] bg-[hsl(var(--ticket-bg))] text-[hsl(var(--ticket-text))] shadow-sm"
@@ -1869,7 +1872,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                     {/* Passenger forms */}
                     {activeTab !== 'bloqueio' && (
                       <div className="new-sale-passenger-list space-y-4">
-                        <h3 className="text-sm font-medium">Dados dos passageiros ({passengers.length})</h3>
+                        <h3 className="text-sm font-medium"><Users className="hidden lg:inline-block" aria-hidden="true"/>Dados dos passageiros ({passengers.length})</h3>
                         {passengers.map((p, i) => {
                           const passengerSnapshot = passengerBenefitSnapshots[i];
                           return (
@@ -2000,10 +2003,11 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                     <div className="new-sale-passenger-review contents space-y-6">
                     {contextSummary}
 
-                    {/* Simulação de cálculo compartilhada com /admin/eventos (sem card resumo extra). */}
+                    <div className="new-sale-financial-panel contents space-y-6 [&>*]:mt-6">
+                    {/* Valores e simulação existentes agrupados apenas para apresentação desktop. */}
                     {activeTab !== 'bloqueio' && adminCheckoutSummary && (
-                      <div className="new-sale-financial rounded-lg border bg-muted/20 p-4 space-y-2">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Resumo financeiro da venda</p>
+                      <div className="new-sale-financial new-sale-financial-benefits rounded-lg border bg-muted/20 p-4 space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"><ChartColumn className="hidden lg:inline-block" aria-hidden="true"/>Resumo financeiro da venda</p>
                         <div className="flex items-center justify-between text-sm">
                           <span className="text-muted-foreground">Subtotal original</span>
                           <span>{formatCurrencyBRL(adminCheckoutSummary.originalSubtotal)}</span>
@@ -2060,8 +2064,8 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                         const estimatedNet = roundCurrency(totalSale - resolvedPlatformFee);
 
                         return (
-                          <div className="new-sale-financial rounded-lg border bg-muted/50 p-3">
-                            <p className="text-xs text-muted-foreground mb-1">Simulação de cálculo</p>
+                          <div className="new-sale-financial new-sale-financial-simulation rounded-lg border bg-muted/50 p-3">
+                            <p className="sale-calculation__heading text-xs text-muted-foreground mb-1">Simulação de cálculo</p>
                             <div className="text-sm space-y-0.5">
                               {composition.map((item) => (
                                 <div key={`${item.label}-${item.price}`} className="flex justify-between text-muted-foreground">
@@ -2069,7 +2073,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                                   <span>{item.quantity} × {formatCurrencyBRL(item.price)}</span>
                                 </div>
                               ))}
-                              <div className="flex justify-between pt-1 border-t mt-1">
+                              <div className="sale-calculation__subtotal flex justify-between pt-1 border-t mt-1">
                                 <span>Subtotal</span>
                                 <span>{formatCurrencyBRL(resolvedSubtotal)}</span>
                               </div>
@@ -2077,7 +2081,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                                 <span>Taxa de serviço</span>
                                 <span>+ {formatCurrencyBRL(totalServiceFee)}</span>
                               </div>
-                              <div className="flex justify-between font-medium border-t pt-1 mt-1">
+                              <div className="sale-calculation__total flex justify-between font-medium border-t pt-1 mt-1">
                                 <span>Total da venda</span>
                                 <span>{formatCurrencyBRL(totalSale)}</span>
                               </div>
@@ -2090,7 +2094,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                                 <span>Responsável</span>
                                 <span>Organizador</span>
                               </div>
-                              <div className="flex justify-between font-medium text-primary">
+                              <div className="sale-calculation__net flex justify-between font-medium text-primary">
                                 <span>Líquido estimado</span>
                                 <span>{formatCurrencyBRL(estimatedNet)}</span>
                               </div>
@@ -2112,6 +2116,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                         /></div>
                       );
                     })()}
+                    </div>
                     </div>
                   </div>
                 )}

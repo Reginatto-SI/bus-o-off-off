@@ -259,3 +259,56 @@
   .new-sale-passenger-card .new-sale-passenger-fields { grid-template-columns: 1.25fr 1fr 1fr; }
   .new-sale-passenger-fields > div:first-child { grid-column: auto; }
 }
+
+/* Step 3 follows the approved workstation composition; other stages keep their layout. */
+@media (min-width: 1024px) {
+  .new-sale-wizard[data-wizard-step="3"] .new-sale-stage-title { display: none; }
+  .new-sale-wizard[data-wizard-step="3"] .new-sale-passengers { grid-template-columns: minmax(0, 1fr) minmax(280px, 28%); gap: 12px; }
+  .new-sale-passengers .new-sale-operation-fields { background: white; }
+  .new-sale-operation-fields > [role=alert] { border-radius: 10px; }
+  .new-sale-passengers .new-sale-operation-fields label { font-size: 12px; font-weight: 650; }
+  .new-sale-passengers .new-sale-passenger-list { padding: 14px; border: 1px solid #e2e8f0; border-radius: 16px; background: white; }
+  .new-sale-passenger-list > h3 { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 700; letter-spacing: -.02em; }
+  .new-sale-passenger-list > h3 > svg { width: 21px; height: 21px; color: #f97316; flex-shrink: 0; }
+  .new-sale-passengers .new-sale-passenger-card { box-shadow: none; padding: 14px; }
+  .new-sale-passenger-card > div:first-child { min-height: 36px; gap: 8px; }
+  .new-sale-passenger-card > div:first-child > span:nth-child(2) { font-weight: 650; }
+  .new-sale-passenger-card > div:first-child > span:last-child:not(:nth-child(2)) { border-radius: 999px; background: #e2e8f0; color: #0f172a; padding: 4px 10px; }
+  .new-sale-passengers .new-sale-passenger-seat { border-radius: 999px; font-size: 12px; padding: 6px 10px; }
+  .new-sale-passenger-card .new-sale-passenger-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .new-sale-passenger-fields > div:first-child { grid-column: 1 / -1; }
+  .new-sale-passenger-card label { font-weight: 600; }
+
+  .new-sale-summary--detailed .new-sale-summary__heading { padding: 8px 14px; }
+  .new-sale-summary--detailed .new-sale-summary__heading > span { font-size: 12px; letter-spacing: .02em; color: #334e73; }
+  .new-sale-summary--detailed .new-sale-summary__details { display: grid; gap: 8px; padding: 10px 14px; font-size: 12px; }
+  .new-sale-summary__details > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); align-items: baseline; gap: 10px; }
+  .new-sale-summary__details dt { display: flex; align-items: center; gap: 8px; color: #475569; }
+  .new-sale-summary__details dt svg { flex-shrink: 0; align-self: center; }
+  .new-sale-summary__details dd { min-width: 0; overflow-wrap: anywhere; }
+  .new-sale-summary__details > div:first-child dd, .new-sale-summary__details > div:nth-last-child(1) dd { font-weight: 650; }
+  .new-sale-summary--detailed .new-sale-summary__quantity { margin: 0 14px; padding: 8px 0 2px; border-top-style: solid; }
+  .new-sale-summary--detailed .new-sale-summary__seats { padding: 8px 14px 10px; background: white; color: #475569; font-weight: 400; }
+  .new-sale-summary--detailed .new-sale-summary__seats > div > span { padding: 5px 10px; border-radius: 999px; color: #9a3412; background: #fff7ed; font-weight: 650; }
+
+  .new-sale-passenger-review .new-sale-financial-panel { display: block; padding: 12px; background: white; border: 1px solid #e2e8f0; border-radius: 16px; }
+  .new-sale-passenger-review .new-sale-financial-panel:not(:has(> div)) { display: none; }
+  .new-sale-financial-panel > * { margin: 0 !important; }
+  .new-sale-passenger-review .new-sale-financial-panel .new-sale-financial,
+  .new-sale-passenger-review .new-sale-financial-panel .new-sale-financial-wrapper > div { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+  .new-sale-financial-panel .new-sale-financial-benefits > p { display: flex; align-items: center; gap: 8px; padding-bottom: 12px; margin-bottom: 10px; border-bottom: 1px solid #eef2f6; color: #334e73; font-size: 12px; letter-spacing: 0; }
+  .new-sale-financial-benefits > p > svg { width: 17px; height: 17px; color: #f97316; flex-shrink: 0; }
+  .new-sale-financial-panel .new-sale-financial-benefits > div { padding: 2px 0; }
+  .new-sale-financial-panel:has(.new-sale-financial-benefits) .sale-calculation__heading,
+  .new-sale-financial-panel:has(.new-sale-financial-benefits) .sale-calculation__subtotal,
+  .new-sale-financial-panel .sale-calculation__unit,
+  .new-sale-financial-panel .sale-calculation__quantity { display: none; }
+  .new-sale-financial-panel .new-sale-financial-wrapper,
+  .new-sale-financial-panel .new-sale-financial-simulation { padding-top: 12px; margin-top: 10px !important; border-top: 1px solid #eef2f6 !important; }
+  .new-sale-financial-panel .sale-calculation__total { align-items: center; gap: 10px; padding: 10px; margin-top: 10px; border: 1px solid #ffedd5; border-radius: 10px; background: #fff7ed; font-size: 16px; font-weight: 750; color: #0f172a; }
+  .new-sale-financial-panel .sale-calculation__total > span:last-child { white-space: nowrap; }
+  .new-sale-financial-panel .sale-calculation__net { gap: 10px; margin-top: 8px; padding: 8px 0 0; border-top: 1px solid #ffedd5; color: #334e73; }
+}
+@media (min-width: 1280px) {
+  .new-sale-wizard[data-wizard-step="3"] .new-sale-passengers { grid-template-columns: minmax(0, 1fr) minmax(320px, 28%); gap: 16px; }
+}

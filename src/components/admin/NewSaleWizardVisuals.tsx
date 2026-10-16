@@ -53,14 +53,20 @@ export function NewSaleWizardTransport({choices, value, onChange, hasEvent}: {ch
 }
 
 /** Accepts formatted, already selected facts; never calculates price or availability. */
-export function NewSaleWizardSummary({event, date, transport, boarding, departure, seatLabels, onEdit, amount}: {
-  event?: string; date?: string; transport?: string; boarding?: string; departure?: string | null; seatLabels: string[]; onEdit?: () => void; amount?: string;
+export function NewSaleWizardSummary({event, date, transport, boarding, departure, seatLabels, onEdit, amount, detailed = false}: {
+  event?: string; date?: string; transport?: string; boarding?: string; departure?: string | null; seatLabels: string[]; onEdit?: () => void; amount?: string; detailed?: boolean;
 }) {
   if (!event) return null;
-  return <section className="new-sale-summary hidden lg:block" aria-label="Resumo da operação">
+  return <section className={cn("new-sale-summary hidden lg:block", detailed && "new-sale-summary--detailed")} aria-label="Resumo da operação">
     <div className="new-sale-summary__heading"><span><Ticket size={16} aria-hidden="true"/> Sua viagem</span>{onEdit && <Button type="button" variant="ghost" size="sm" onClick={onEdit}>Rever viagem <ArrowRight size={13} aria-hidden="true"/></Button>}</div>
-    <div className="new-sale-summary__facts"><div><strong>{event}</strong>{date && <span><CalendarDays size={13} aria-hidden="true"/>{date}</span>}</div>{transport && <div><span className="new-sale-summary__label">Transporte</span><strong>{transport}</strong></div>}{boarding && <div><span className="new-sale-summary__label">Embarque{departure ? ` · ${departure}` : ''}</span><strong><MapPin size={13} aria-hidden="true"/>{boarding}</strong></div>}</div>
-    <div className="new-sale-summary__quantity"><span>Passagens selecionadas</span><strong>{seatLabels.length}</strong>{amount && <><span>Subtotal calculado</span><strong>{amount}</strong></>}</div>
-    {seatLabels.length > 0 && <div className="new-sale-summary__seats"><span>{seatLabels.length} {seatLabels.length === 1 ? 'poltrona selecionada' : 'poltronas selecionadas'}</span><div>{seatLabels.map((label, i) => <span key={`${label}-${i}`}>{label}</span>)}</div></div>}
+    {detailed ? <dl className="new-sale-summary__details">
+      <div><dt><CalendarDays size={15} aria-hidden="true"/>Evento</dt><dd>{event}</dd></div>
+      {date && <div><dt><CalendarDays size={15} aria-hidden="true"/>Data</dt><dd>{date}</dd></div>}
+      {transport && <div><dt><Bus size={15} aria-hidden="true"/>Transporte</dt><dd>{transport}</dd></div>}
+      {departure && <div><dt><Clock3 size={15} aria-hidden="true"/>Embarque</dt><dd>{departure}</dd></div>}
+      {boarding && <div><dt><MapPin size={15} aria-hidden="true"/>Local de embarque</dt><dd>{boarding}</dd></div>}
+    </dl> : <div className="new-sale-summary__facts"><div><strong>{event}</strong>{date && <span><CalendarDays size={13} aria-hidden="true"/>{date}</span>}</div>{transport && <div><span className="new-sale-summary__label">Transporte</span><strong>{transport}</strong></div>}{boarding && <div><span className="new-sale-summary__label">Embarque{departure ? ` · ${departure}` : ''}</span><strong><MapPin size={13} aria-hidden="true"/>{boarding}</strong></div>}</div>}
+    <div className="new-sale-summary__quantity"><span>Passagens selecionadas</span><strong>{seatLabels.length}</strong>{!detailed && amount && <><span>Subtotal calculado</span><strong>{amount}</strong></>}</div>
+    {seatLabels.length > 0 && <div className="new-sale-summary__seats"><span>{detailed ? 'Poltronas selecionadas' : <>{seatLabels.length} {seatLabels.length === 1 ? 'poltrona selecionada' : 'poltronas selecionadas'}</>}</span><div>{seatLabels.map((label, i) => <span key={`${label}-${i}`}>{label}</span>)}</div></div>}
   </section>;
 }

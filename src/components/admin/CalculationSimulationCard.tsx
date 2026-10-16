@@ -102,20 +102,20 @@ export function CalculationSimulationCard({
       : 'Taxa da plataforma');
 
   return (
-    <Card className="p-3 bg-muted/50">
-      <p className="text-xs text-muted-foreground mb-1">Simulação de cálculo</p>
+    <Card className="sale-calculation p-3 bg-muted/50">
+      <p className="sale-calculation__heading text-xs text-muted-foreground mb-1">Simulação de cálculo</p>
       <div className="text-sm space-y-0.5">
         {isAggregatedSaleView ? (
           <>
-            <div className="flex justify-between">
+            <div className="sale-calculation__unit flex justify-between">
               <span>Preço por passagem</span>
               <span>{formatCurrencyBRL(basePrice)}</span>
             </div>
-            <div className="flex justify-between text-muted-foreground">
+            <div className="sale-calculation__quantity flex justify-between text-muted-foreground">
               <span>Quantidade</span>
               <span>{quantity}</span>
             </div>
-            <div className="flex justify-between pt-1">
+            <div className="sale-calculation__subtotal flex justify-between pt-1">
               <span>Subtotal</span>
               <span>{formatCurrencyBRL(subtotal)}</span>
             </div>
@@ -123,7 +123,7 @@ export function CalculationSimulationCard({
               <span>Taxa de serviço</span>
               <span>+ {formatCurrencyBRL(totalFees)}</span>
             </div>
-            <div className="flex justify-between font-medium border-t pt-1 mt-1">
+            <div className="sale-calculation__total flex justify-between font-medium border-t pt-1 mt-1">
               <span>Total da venda</span>
               <span>{formatCurrencyBRL(totalSale)}</span>
             </div>
@@ -166,7 +166,7 @@ export function CalculationSimulationCard({
               <span>Responsável</span>
               <span>{passPlatformFeeToCustomer ? 'Cliente' : 'Organizador'}</span>
             </div>
-            <div className="flex justify-between font-medium text-primary">
+            <div className="sale-calculation__net flex justify-between font-medium text-primary">
               <span>Líquido estimado</span>
               <span>{formatCurrencyBRL(isAggregatedSaleView ? totalOrganizerNet : organizerNet)}</span>
             </div>

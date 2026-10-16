@@ -53,4 +53,19 @@ describe('desktop wizard presentation', () => {
     expect(screen.getByText('Subtotal calculado')).toBeInTheDocument();
     expect(screen.getByText('R$ 150,00')).toBeInTheDocument();
   });
+  it('shows the detailed review with separate boarding time and location and no invented amount', () => {
+    render(<NewSaleWizardSummary detailed event="Festival" date="25/12/2026" transport="Ônibus AJY-7E61" boarding="Terminal" departure="09:00" seatLabels={['58','59']} amount="R$ 200,00"/>);
+    expect(screen.getByText('Evento', {selector:'dt'})).toBeInTheDocument();
+    expect(screen.getByText('Embarque', {selector:'dt'}).nextElementSibling).toHaveTextContent('09:00');
+    expect(screen.getByText('Local de embarque', {selector:'dt'}).nextElementSibling).toHaveTextContent('Terminal');
+    expect(screen.getByText('Poltronas selecionadas')).toBeInTheDocument();
+    expect(screen.getByText('58')).toBeInTheDocument();
+    expect(screen.queryByText(/R\$/)).toBeNull();
+  });
+  it('omits missing facts in the detailed review', () => {
+    render(<NewSaleWizardSummary detailed event="Festival" seatLabels={[]}/>);
+    expect(screen.queryByText('Data', {selector:'dt'})).toBeNull();
+    expect(screen.queryByText('Embarque', {selector:'dt'})).toBeNull();
+    expect(screen.queryByText('Local de embarque', {selector:'dt'})).toBeNull();
+  });
 });
