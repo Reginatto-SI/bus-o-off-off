@@ -197,3 +197,65 @@
   .new-sale-seat-map .seat-map--desktop-horizontal > .seat-map__selection-count { grid-column: 2; grid-row: 1; align-self: center; font-size: 12px; }
   .new-sale-seat-map .seat-map__grid > .seat-map__row { margin: 0 !important; }
 }
+
+/* Desktop density: context columns and a passenger workspace with review beside it. */
+@media (min-width: 1024px) {
+  .new-sale-wizard .new-sale-context { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+  .new-sale-wizard .new-sale-context > .new-sale-event-field { grid-column: 1; grid-row: 1; }
+  .new-sale-wizard .new-sale-context > .new-sale-event-detail { grid-column: 1; grid-row: 2; }
+  .new-sale-wizard .new-sale-context > .new-sale-transport-section { grid-column: 2; grid-row: 1 / span 2; }
+  .new-sale-wizard .new-sale-context > .new-sale-boarding-field { grid-column: 1; grid-row: 3; }
+  .new-sale-wizard .new-sale-context > .new-sale-boarding-detail { grid-column: 2; grid-row: 3; }
+  .new-sale-wizard .new-sale-context > .new-sale-availability { grid-column: 1 / -1; grid-row: 4; }
+  .new-sale-wizard .new-sale-context > div { padding: 14px; border-radius: 14px; }
+  .new-sale-context .new-sale-transports { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .new-sale-context .new-sale-transport { padding: 10px; gap: 8px; }
+  .new-sale-context .new-sale-transport__icon { width: 34px; height: 34px; border-radius: 9px; }
+  .new-sale-context .new-sale-transport-empty { padding: 12px; }
+  .new-sale-context .new-sale-transport-section > div:last-child { margin-top: 8px; }
+  .new-sale-wizard .new-sale-context > div > label { margin-bottom: 6px; }
+
+  .new-sale-wizard .new-sale-passengers { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 12px; align-items: start; }
+  .new-sale-wizard .new-sale-passengers > * { min-width: 0; margin-top: 0 !important; }
+  .new-sale-passengers .new-sale-operation-fields { grid-column: 1; grid-row: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 14px; border-radius: 14px; }
+  .new-sale-operation-fields > * { min-width: 0; margin-top: 0 !important; }
+  .new-sale-operation-fields > [role=alert], .new-sale-operation-fields > .new-sale-operation-grid { grid-column: 1 / -1; }
+  .new-sale-operation-fields > [role=alert] { padding-top: 10px; padding-bottom: 10px; }
+  .new-sale-operation-fields .new-sale-operation-grid { gap: 12px; }
+  .new-sale-operation-fields[data-mode=manual] > .new-sale-operation-notes { grid-column: 1 / -1; }
+  .new-sale-operation-fields[data-mode=reserva] .new-sale-operation-grid { display: contents; }
+  .new-sale-operation-fields textarea { min-height: 60px; height: 60px; }
+  .new-sale-passengers [role=combobox], .new-sale-passengers input:not([type=checkbox]) { min-height: 38px; height: 38px; }
+
+  .new-sale-passengers .new-sale-passenger-list { grid-column: 1; grid-row: 2; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .new-sale-passenger-list > h3 { margin: 0; }
+  .new-sale-passengers .new-sale-passenger-card { padding: 14px; border-radius: 14px; margin: 0 !important; }
+  .new-sale-passenger-card > div:first-child { padding-bottom: 8px; }
+  .new-sale-passenger-card .new-sale-passenger-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .new-sale-passenger-fields > div { min-width: 0; }
+  .new-sale-passenger-fields > div:first-child { grid-column: 1 / -1; }
+  .new-sale-passengers .new-sale-block-details { grid-column: 1; grid-row: 2; }
+
+  .new-sale-passengers .new-sale-passenger-review { display: flex; flex-direction: column; gap: 12px; grid-column: 2; grid-row: 1 / span 2; }
+  .new-sale-passenger-review > * { min-width: 0; margin: 0 !important; }
+  .new-sale-passenger-review .new-sale-summary__heading { flex-wrap: wrap; gap: 4px; padding: 8px 12px; }
+  .new-sale-passenger-review .new-sale-summary__facts { grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 12px; }
+  .new-sale-passenger-review .new-sale-summary__quantity, .new-sale-passenger-review .new-sale-summary__seats { padding: 8px 12px; }
+  .new-sale-passenger-review .new-sale-financial, .new-sale-passenger-review .new-sale-financial-wrapper > div { padding: 12px; border-radius: 14px; }
+}
+@media (min-width: 1280px) {
+  .new-sale-wizard .new-sale-context { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .new-sale-wizard .new-sale-context > .new-sale-boarding-field { grid-column: 3; grid-row: 1; }
+  .new-sale-wizard .new-sale-context > .new-sale-boarding-detail { grid-column: 3; grid-row: 2; }
+  .new-sale-wizard .new-sale-context > .new-sale-availability { grid-row: 3; }
+  .new-sale-wizard .new-sale-passengers { grid-template-columns: minmax(0, 1fr) 300px; }
+}
+@media (min-width: 1440px) {
+  .new-sale-passengers .new-sale-operation-fields[data-mode=manual] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .new-sale-operation-fields[data-mode=manual] > .new-sale-operation-grid { display: contents; }
+  .new-sale-operation-fields[data-mode=manual] > .new-sale-operation-notes { grid-column: auto; }
+}
+@media (min-width: 1600px) {
+  .new-sale-passenger-card .new-sale-passenger-fields { grid-template-columns: 1.25fr 1fr 1fr; }
+  .new-sale-passenger-fields > div:first-child { grid-column: auto; }
+}

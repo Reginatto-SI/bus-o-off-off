@@ -1490,7 +1490,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                 {step === 1 && (
                   <div className="new-sale-context space-y-5">
                     {/* Event */}
-                    <div className="space-y-2 rounded-lg border bg-muted/20 p-4">
+                    <div className="new-sale-event-field space-y-2 rounded-lg border bg-muted/20 p-4">
                       <Label>Evento *</Label>
                       {loadingEvents ? (
                         <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Carregando...</div>
@@ -1629,7 +1629,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                     </div>
 
                     {/* Boarding location */}
-                    <div className="space-y-2 rounded-lg border bg-muted/20 p-4">
+                    <div className="new-sale-boarding-field space-y-2 rounded-lg border bg-muted/20 p-4">
                       <Label>Local / Horário de Embarque *</Label>
                       {loadingBoarding ? (
                         <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Carregando...</div>
@@ -1653,7 +1653,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                     </div>
 
                     {selectedBoarding && (
-                      <div className="space-y-2 rounded-lg border bg-background/90 p-4">
+                      <div className="new-sale-boarding-detail space-y-2 rounded-lg border bg-background/90 p-4">
                         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Resumo do embarque</p>
                         <div className="space-y-1 text-sm">
                           <p className="font-medium text-foreground">{selectedBoarding.name}</p>
@@ -1735,14 +1735,14 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                   <div className="new-sale-passengers space-y-6">
                     {/* Tab-specific fields */}
                     {activeTab === 'manual' && (
-                      <div className="space-y-4 p-4 rounded-lg border bg-muted/30">
+                      <div className="new-sale-operation-fields space-y-4 p-4 rounded-lg border bg-muted/30" data-mode={activeTab}>
                         <Alert className="border-amber-300 bg-amber-50 text-amber-900">
                           <AlertTriangle className="h-4 w-4" />
                           <AlertDescription>
                             A venda manual nasce como <strong>reservada</strong> e expira em <strong>{reservationDurationLabel}</strong> ({format(nextReservationExpiryPreview, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}) até a confirmação financeira.
                           </AlertDescription>
                         </Alert>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="new-sale-operation-grid grid grid-cols-1 sm:grid-cols-3 gap-4">
                           <div className="space-y-2">
                             <Label>Forma de recebimento *</Label>
                             <Select value={paymentMethod} onValueChange={(value) => setPaymentMethod(value as ManualReceiptMethod)}>
@@ -1793,7 +1793,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                             </Select>
                           </div>
                         </div>
-                        <div className="space-y-2">
+                        <div className="new-sale-operation-notes space-y-2">
                           <Label>Observação</Label>
                           <Textarea
                             value={observation}
@@ -1807,14 +1807,14 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                     )}
 
                     {activeTab === 'reserva' && (
-                      <div className="space-y-4 p-4 rounded-lg border bg-muted/30">
+                      <div className="new-sale-operation-fields space-y-4 p-4 rounded-lg border bg-muted/30" data-mode={activeTab}>
                         <Alert className="border-amber-300 bg-amber-50 text-amber-900">
                           <AlertTriangle className="h-4 w-4" />
                           <AlertDescription>
                             Reserva temporária com validade de <strong>{reservationDurationLabel}</strong>. Expiração prevista para <strong>{format(nextReservationExpiryPreview, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</strong>.
                           </AlertDescription>
                         </Alert>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="new-sale-operation-grid grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div className="space-y-2">
                             <Label>Vendedor (opcional)</Label>
                             <Select value={selectedSellerId || '__none__'} onValueChange={(v) => setSelectedSellerId(v === '__none__' ? '' : v)}>
@@ -1828,7 +1828,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                             </Select>
                           </div>
                         </div>
-                        <div className="space-y-2">
+                        <div className="new-sale-operation-notes space-y-2">
                           <Label>Observação</Label>
                           <Textarea
                             value={observation}
@@ -1841,7 +1841,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                     )}
 
                     {activeTab === 'bloqueio' && (
-                      <div className="space-y-4 p-4 rounded-lg border bg-muted/30">
+                      <div className="new-sale-operation-fields space-y-4 p-4 rounded-lg border bg-muted/30" data-mode={activeTab}>
                         <div className="space-y-2">
                           <Label>Motivo do bloqueio *</Label>
                           <Select value={blockReason} onValueChange={setBlockReason}>
@@ -1854,7 +1854,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                             </SelectContent>
                           </Select>
                         </div>
-                        <div className="space-y-2">
+                        <div className="new-sale-operation-notes space-y-2">
                           <Label>Observação</Label>
                           <Textarea
                             value={observation}
@@ -1917,7 +1917,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                                 )}
                               </div>
                             )}
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="new-sale-passenger-fields grid grid-cols-1 sm:grid-cols-3 gap-3">
                               <div className="space-y-1">
                                 <Label className="text-xs">Nome *</Label>
                                 <Input
@@ -1984,7 +1984,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                     )}
 
                     {activeTab === 'bloqueio' && (
-                      <div className="space-y-3 text-sm text-muted-foreground">
+                      <div className="new-sale-block-details space-y-3 text-sm text-muted-foreground">
                         <p>{passengers.length} poltrona(s) serão bloqueadas.</p>
                         <div className="flex flex-wrap gap-2">
                           {passengers.map((p) => (
@@ -1997,6 +1997,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                       </div>
                     )}
 
+                    <div className="new-sale-passenger-review contents space-y-6">
                     {contextSummary}
 
                     {/* Simulação de cálculo compartilhada com /admin/eventos (sem card resumo extra). */}
@@ -2111,6 +2112,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                         /></div>
                       );
                     })()}
+                    </div>
                   </div>
                 )}
               </TabsContent>
