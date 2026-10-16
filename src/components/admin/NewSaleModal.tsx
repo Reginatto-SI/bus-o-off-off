@@ -256,6 +256,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
   // Step 3: Passengers
   const [passengers, setPassengers] = useState<PassengerData[]>([]);
+  const passengerDraftContextRef = useRef('');
   const [passengerBenefitSnapshots, setPassengerBenefitSnapshots] = useState<Array<PassengerBenefitSnapshot | null>>([]);
   const [paymentMethod, setPaymentMethod] = useState<ManualReceiptMethod>('pix');
   const [observation, setObservation] = useState('');
@@ -650,6 +651,14 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
   // ── Initialize passengers when moving to step 3 ──
   const initPassengers = () => {
+    const draftContext = `${selectedTripId}:${activeTab}`;
+    // Desktop back/forward navigation must not reseed an unchanged passenger form.
+    // Keep the mobile workflow and initialization for new selections unchanged.
+    if (window.matchMedia('(min-width: 1024px)').matches
+      && passengerDraftContextRef.current === draftContext
+      && passengers.length === selectedSeats.length
+      && passengers.every((passenger, index) => passenger.seatId === selectedSeats[index])) return;
+    passengerDraftContextRef.current = draftContext;
     const isBlock = activeTab === 'bloqueio';
     const newPassengers: PassengerData[] = selectedSeats.map((seatId) => {
       const seat = seats.find((s) => s.id === seatId);
@@ -1309,6 +1318,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
     boarding={selectedBoarding?.name}
     departure={selectedBoarding?.departure_time?.slice(0, 5)}
     seatLabels={selectedSeats.map(id => seats.find(seat => seat.id === id)?.label).filter((label): label is string => Boolean(label))}
+    amount={step === 3 && activeTab !== 'bloqueio' && adminCheckoutSummary ? formatCurrencyBRL(adminCheckoutSummary.subtotalAfterBenefits) : undefined}
     onEdit={() => setStep(1)}
   />;
   return (
@@ -1675,9 +1685,13 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
                 {/* STEP 2 — Seat map */}
                 {step === 2 && (
-                  <div>
-                    {contextSummary}
+                  <div className="new-sale-seat-workspace">
+                    <aside className="new-sale-seat-workspace__summary">{contextSummary}</aside>
                     <div className="new-sale-seat-map">
+                    <div className="new-sale-seat-map__heading hidden lg:flex">
+                      <div><h4>Mapa de poltronas</h4><p>{selectedVehicle ? `${vehicleTypeLabels[selectedVehicle.type] ?? selectedVehicle.type} ${selectedVehicle.plate}` : 'Transporte selecionado'}</p></div>
+                      <span>Selecione os lugares disponíveis</span>
+                    </div>
                     {loadingSeats ? (
                       <div className="flex items-center justify-center py-12">
                         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -1709,6 +1723,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                         seatsLeftSide={selectedVehicle?.seats_left_side ?? 2}
                         seatsRightSide={selectedVehicle?.seats_right_side ?? 2}
                         showSelectionQuantityLabel
+                        desktopHorizontal
                       />
                     )}
                     </div>

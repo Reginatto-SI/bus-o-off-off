@@ -53,13 +53,14 @@ export function NewSaleWizardTransport({choices, value, onChange, hasEvent}: {ch
 }
 
 /** Accepts formatted, already selected facts; never calculates price or availability. */
-export function NewSaleWizardSummary({event, date, transport, boarding, departure, seatLabels, onEdit}: {
-  event?: string; date?: string; transport?: string; boarding?: string; departure?: string | null; seatLabels: string[]; onEdit?: () => void;
+export function NewSaleWizardSummary({event, date, transport, boarding, departure, seatLabels, onEdit, amount}: {
+  event?: string; date?: string; transport?: string; boarding?: string; departure?: string | null; seatLabels: string[]; onEdit?: () => void; amount?: string;
 }) {
   if (!event) return null;
   return <section className="new-sale-summary hidden lg:block" aria-label="Resumo da operação">
     <div className="new-sale-summary__heading"><span><Ticket size={16} aria-hidden="true"/> Sua viagem</span>{onEdit && <Button type="button" variant="ghost" size="sm" onClick={onEdit}>Rever viagem <ArrowRight size={13} aria-hidden="true"/></Button>}</div>
     <div className="new-sale-summary__facts"><div><strong>{event}</strong>{date && <span><CalendarDays size={13} aria-hidden="true"/>{date}</span>}</div>{transport && <div><span className="new-sale-summary__label">Transporte</span><strong>{transport}</strong></div>}{boarding && <div><span className="new-sale-summary__label">Embarque{departure ? ` · ${departure}` : ''}</span><strong><MapPin size={13} aria-hidden="true"/>{boarding}</strong></div>}</div>
+    <div className="new-sale-summary__quantity"><span>Passagens selecionadas</span><strong>{seatLabels.length}</strong>{amount && <><span>Subtotal calculado</span><strong>{amount}</strong></>}</div>
     {seatLabels.length > 0 && <div className="new-sale-summary__seats"><span>{seatLabels.length} {seatLabels.length === 1 ? 'poltrona selecionada' : 'poltronas selecionadas'}</span><div>{seatLabels.map((label, i) => <span key={`${label}-${i}`}>{label}</span>)}</div></div>}
   </section>;
 }

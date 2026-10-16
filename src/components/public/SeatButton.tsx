@@ -9,6 +9,7 @@ interface SeatButtonProps {
   state: SeatState;
   category?: SeatCategory;
   onClick: () => void;
+  desktopStatusLabel?: boolean;
 }
 
 const stateStyles: Record<SeatState, string> = {
@@ -30,7 +31,7 @@ const categoryStyles: Record<string, string> = {
   leito_cama: 'border-yellow-500',
 };
 
-export function SeatButton({ label, state, category, onClick }: SeatButtonProps) {
+export function SeatButton({ label, state, category, onClick, desktopStatusLabel = false }: SeatButtonProps) {
   const isInteractive = state === 'available' || state === 'selected';
   // Categoria é informação secundária: controla apenas a borda em todos os status.
   const categoryClass = categoryStyles[category || 'convencional'] || categoryStyles.convencional;
@@ -48,6 +49,7 @@ export function SeatButton({ label, state, category, onClick }: SeatButtonProps)
         categoryClass,
       )}
     >
+      {desktopStatusLabel && (state === 'occupied' || state === 'blocked') && <span className="seat-map__status-label hidden">{label}</span>}
       {state === 'selected' ? (
         <div className="flex flex-col items-center gap-0">
           <span className="text-[10px] leading-none">{label}</span>

@@ -47,4 +47,10 @@ describe('desktop wizard presentation', () => {
     fireEvent.click(screen.getByRole('button', {name:/Rever viagem/}));
     expect(edit).toHaveBeenCalledOnce();
   });
+  it('displays a subtotal only when an existing formatted calculation is supplied', () => {
+    render(<NewSaleWizardSummary event="Evento" seatLabels={['07']} amount="R$ 150,00"/>);
+    expect(screen.getByText('Passagens selecionadas')).toBeInTheDocument();
+    expect(screen.getByText('Subtotal calculado')).toBeInTheDocument();
+    expect(screen.getByText('R$ 150,00')).toBeInTheDocument();
+  });
 });

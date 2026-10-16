@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, type CSSProperties } from 'react';
 import { Seat, SeatCategory } from '@/types/database';
 import { SeatButton, SeatState } from './SeatButton';
 import { SeatLegend } from './SeatLegend';
@@ -19,6 +19,8 @@ interface SeatMapProps {
   loadingStatus?: boolean;
   interactionDisabled?: boolean;
   showSelectionQuantityLabel?: boolean;
+  /** Opt-in presentation only; below lg the original vertical map is retained. */
+  desktopHorizontal?: boolean;
 }
 
 const getSeatFloor = (seat: Seat) => {
@@ -53,6 +55,7 @@ export function SeatMap({
   loadingStatus = false,
   interactionDisabled = false,
   showSelectionQuantityLabel = false,
+  desktopHorizontal = false,
 }: SeatMapProps) {
   const [activeFloor, setActiveFloor] = useState(1);
   const [showSynced, setShowSynced] = useState(false);
@@ -119,6 +122,9 @@ export function SeatMap({
     rows.set(s.row_number, existing);
   });
 
+  const firstRow = Math.min(...Array.from(rows.keys()), 1);
+  const rowCount = Math.max(...Array.from(rows.keys()), 1) - firstRow + 1;
+
   const getSeatState = (seat: Seat): SeatState => {
     // Mantém coerência com o status real: bloqueios operacionais têm prioridade visual.
     // Isso evita que uma poltrona bloqueada seja exibida como ocupada no mapa público.
@@ -147,10 +153,10 @@ export function SeatMap({
   const rightSideColumnCount = Math.max(1, seatsRightSide);
 
   return (
-    <div className="space-y-4">
+    <div className={`space-y-4${desktopHorizontal ? ' seat-map--desktop-horizontal' : ''}`}>
       {/* Floor selector */}
       {normalizedFloors > 1 && (
-        <Tabs value={String(activeFloor)} onValueChange={(v) => setActiveFloor(Number(v))}>
+        <Tabs className="seat-map__floors" value={String(activeFloor)} onValueChange={(v) => setActiveFloor(Number(v))}>
           <TabsList className="w-full h-auto gap-1 p-1">
             {availableSeatsByFloor.map(({ floor, availableCount }) => (
               <TabsTrigger
@@ -172,7 +178,7 @@ export function SeatMap({
 
       {/* Contexto dinâmico para reforçar o piso ativo sem exigir leitura dos botões. */}
       {normalizedFloors > 1 && (
-        <div className="text-center text-xs text-muted-foreground">
+        <div className="seat-map__floor-context text-center text-xs text-muted-foreground">
           Escolha seu assento no{' '}
           <span className="font-semibold text-foreground">
             {activeFloor === 1 ? 'Piso inferior' : activeFloor === 2 ? 'Piso superior' : `Piso ${activeFloor}`}
@@ -180,14 +186,20 @@ export function SeatMap({
         </div>
       )}
 
+      {desktopHorizontal && normalizedFloors === 1 && (
+        <div className="seat-map__availability hidden lg:block text-xs text-muted-foreground self-center">
+          {availableSeatsByFloor[0].availableCount} vagas disponíveis neste piso
+        </div>
+      )}
+
       {/* Selection counter */}
-      <div className="text-center text-sm font-medium text-foreground">
+      <div className="seat-map__selection-count text-center text-sm font-medium text-foreground">
         Selecionados: <span className="text-primary font-bold">{selectedSeats.length}</span> de {maxSelection}
       </div>
 
       {/* Rótulo opcional para reforçar quantidade no fluxo administrativo sem alterar checkout público. */}
       {showSelectionQuantityLabel && (
-        <div className="text-center text-xs text-muted-foreground">
+        <div className="seat-map__quantity text-center text-xs text-muted-foreground">
           {selectedSeats.length} passagem{selectedSeats.length === 1 ? '' : 'ens'} selecionada{selectedSeats.length === 1 ? '' : 's'}
         </div>
       )}
@@ -201,7 +213,10 @@ export function SeatMap({
       )}
 
       {/* Vehicle body */}
-      <div className="relative max-w-[320px] mx-auto">
+      <div className="seat-map__viewport relative max-w-[320px] mx-auto"
+        tabIndex={desktopHorizontal ? 0 : undefined}
+        role={desktopHorizontal ? "region" : undefined}
+        aria-label={desktopHorizontal ? "Mapa de poltronas — navegue para ver todas as fileiras" : undefined}>
         {/* Loading overlay */}
         {isBlocked && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm rounded-2xl">
@@ -212,9 +227,9 @@ export function SeatMap({
         )}
 
         {/* Windshield shape */}
-        <div className="bg-muted/30 border-2 border-border rounded-t-[2.5rem] rounded-b-2xl overflow-hidden">
+        <div className="seat-map__vehicle bg-muted/30 border-2 border-border rounded-t-[2.5rem] rounded-b-2xl overflow-hidden">
           {/* Driver row */}
-          <div className="flex items-center px-4 py-3 border-b border-border/50 bg-muted/40">
+          <div className="seat-map__front flex items-center px-4 py-3 border-b border-border/50 bg-muted/40">
             <div className="flex items-center gap-2 text-muted-foreground">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
                 <circle cx="12" cy="12" r="9" />
@@ -228,15 +243,19 @@ export function SeatMap({
           </div>
 
           {/* Seat grid */}
-          <div className="px-3 py-3 space-y-1.5">
+          <div className="seat-map__grid px-3 py-3 space-y-1.5" style={desktopHorizontal ? {
+            '--seat-map-rows': rowCount,
+          } as CSSProperties : undefined}>
             {Array.from(rows.entries()).map(([rowNum, rowSeats]) => {
               const leftSeats = rowSeats.filter(s => s.column_number <= corridorAfterCol);
               const rightSeats = rowSeats.filter(s => s.column_number > corridorAfterCol);
 
               return (
-                <div key={rowNum} className="flex items-center justify-center gap-1">
+                <div key={rowNum} className="seat-map__row flex items-center justify-center gap-1"
+                  data-row={rowNum}
+                  style={desktopHorizontal ? { gridColumn: rowNum - firstRow + 1 } : undefined}>
                   {/* Left side */}
-                  <div className="flex gap-1" style={{ minWidth: `${corridorAfterCol * 48}px` }}>
+                  <div className="seat-map__side flex gap-1" style={{ minWidth: `${corridorAfterCol * 48}px` }}>
                     {Array.from({ length: corridorAfterCol }, (_, i) => {
                       const colNum = i + 1;
                       const seat = leftSeats.find(s => s.column_number === colNum);
@@ -245,23 +264,24 @@ export function SeatMap({
                           <SeatButton
                             key={seat.id}
                             label={seat.label}
+                            desktopStatusLabel={desktopHorizontal}
                             state={getSeatState(seat)}
                             category={seat.category as SeatCategory | undefined}
                             onClick={() => handleSeatClick(seat.id)}
                           />
                         );
                       }
-                      return <div key={`empty-l-${rowNum}-${colNum}`} className="w-11 h-11" />;
+                      return <div key={`empty-l-${rowNum}-${colNum}`} className="seat-map__empty w-11 h-11" />;
                     })}
                   </div>
 
                   {/* Corridor */}
-                  <div className="w-6 flex items-center justify-center">
+                  <div className="seat-map__corridor w-6 flex items-center justify-center">
                     <div className="w-px h-8 bg-border/30" />
                   </div>
 
                   {/* Right side */}
-                  <div className="flex gap-1" style={{ minWidth: `${Math.max(Math.max(totalCols - corridorAfterCol, rightSideColumnCount), 1) * 48}px` }}>
+                  <div className="seat-map__side flex gap-1" style={{ minWidth: `${Math.max(Math.max(totalCols - corridorAfterCol, rightSideColumnCount), 1) * 48}px` }}>
                     {Array.from({ length: Math.max(Math.max(totalCols - corridorAfterCol, rightSideColumnCount), 1) }, (_, i) => {
                       const colNum = corridorAfterCol + 1 + i;
                       const seat = rightSeats.find(s => s.column_number === colNum);
@@ -270,13 +290,14 @@ export function SeatMap({
                           <SeatButton
                             key={seat.id}
                             label={seat.label}
+                            desktopStatusLabel={desktopHorizontal}
                             state={getSeatState(seat)}
                             category={seat.category as SeatCategory | undefined}
                             onClick={() => handleSeatClick(seat.id)}
                           />
                         );
                       }
-                      return <div key={`empty-r-${rowNum}-${colNum}`} className="w-11 h-11" />;
+                      return <div key={`empty-r-${rowNum}-${colNum}`} className="seat-map__empty w-11 h-11" />;
                     })}
                   </div>
                 </div>
@@ -285,6 +306,10 @@ export function SeatMap({
           </div>
         </div>
       </div>
+
+      {desktopHorizontal && <p className="hidden lg:block text-center text-xs text-muted-foreground">
+        Frente à esquerda · role o mapa horizontalmente para ver as demais fileiras.
+      </p>}
 
       {/* Legend */}
       <SeatLegend categories={seatCategories} />
