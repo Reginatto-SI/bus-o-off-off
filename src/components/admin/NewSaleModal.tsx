@@ -44,10 +44,8 @@ import {
   Route,
   CalendarClock,
   Circle,
-  CircleCheck,
   CheckCircle2,
   Users,
-  CreditCard,
   ChevronsUpDown,
   Check,
   ShieldBan,
@@ -75,6 +73,10 @@ import {
 
 import { NewSaleWizardProgress, NewSaleWizardStageTitle, NewSaleWizardTransport, NewSaleWizardSummary } from './NewSaleWizardVisuals';
 import './NewSaleModal.css';
+import './NewSaleMobile.css';
+import { useIsBelowBreakpoint } from '@/hooks/use-mobile';
+import { NewSaleMobileProgress, NewSaleMobileTravel, NewSalePassengerCard } from './NewSaleMobile';
+import { useMobileSaleViewport } from './useMobileSaleViewport';
 
 // ── Types ──
 type SaleTab = 'manual' | 'reserva' | 'bloqueio';
@@ -217,6 +219,7 @@ type CreatedSaleSummary = {
 
 export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSaleModalProps) {
   const { activeCompanyId, activeCompany, user, isGerente } = useAuth();
+  const mobileWizard = useIsBelowBreakpoint(1024);
 
   // Tab state
   const [activeTab, setActiveTab] = useState<SaleTab>('manual');
@@ -653,10 +656,8 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
   // ── Initialize passengers when moving to step 3 ──
   const initPassengers = () => {
     const draftContext = `${selectedTripId}:${activeTab}`;
-    // Desktop back/forward navigation must not reseed an unchanged passenger form.
-    // Keep the mobile workflow and initialization for new selections unchanged.
-    if (window.matchMedia('(min-width: 1024px)').matches
-      && passengerDraftContextRef.current === draftContext
+    // Preserve the form when navigating back/forward with an unchanged selection.
+    if (passengerDraftContextRef.current === draftContext
       && passengers.length === selectedSeats.length
       && passengers.every((passenger, index) => passenger.seatId === selectedSeats[index])) return;
     passengerDraftContextRef.current = draftContext;
@@ -1281,11 +1282,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
   };
 
   const availableCapacity = selectedVehicle ? selectedVehicle.capacity - occupiedSeatIds.length : 999;
-  const stepMeta = [
-    { value: 1, label: 'Evento', Icon: Bus },
-    { value: 2, label: 'Assentos', Icon: Users },
-    { value: 3, label: 'Pagamento', Icon: CreditCard },
-  ];
+
 
   const handleClose = () => {
     if (confirmationData) {
@@ -1299,9 +1296,11 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
   // ── Render ──
   const isConfirmationStep = step === 4 && !!confirmationData;
   const wizardScrollRef = useRef<HTMLDivElement>(null);
+  const [wizardDialogElement, setWizardDialogElement] = useState<HTMLDivElement | null>(null);
+  useMobileSaleViewport(wizardDialogElement, open && !isConfirmationStep);
   useEffect(() => {
     const viewport = wizardScrollRef.current?.querySelector<HTMLDivElement>('[data-radix-scroll-area-viewport]');
-    if (viewport && window.matchMedia('(min-width: 1024px)').matches) viewport.scrollTop = 0;
+    if (viewport) viewport.scrollTop = 0;
   }, [step]);
   // Display models use the existing selections and availability values only.
   const transportChoices = (groupedTransportPolicy ? trips.filter((trip) => trip.trip_type === 'ida') : trips).map((trip) => ({
@@ -1312,6 +1311,8 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
     capacity: trip.vehicle?.capacity,
     remaining: trip.vehicle ? Math.max(trip.vehicle.capacity - (tripSoldSeats[trip.id] ?? 0), 0) : undefined,
   }));
+  const selectedSeatLabels = selectedSeats.map(id => seats.find(seat => seat.id === id)?.label).filter((label): label is string => Boolean(label));
+  const mobileTravel = <NewSaleMobileTravel event={selectedEvent?.name} date={selectedEvent?.date ? formatDateOnlyBR(selectedEvent.date) : undefined} transport={selectedVehicle ? `${vehicleTypeLabels[selectedVehicle.type] ?? selectedVehicle.type} ${selectedVehicle.plate}` : undefined} boarding={selectedBoarding?.name} departure={selectedBoarding?.departure_time?.slice(0, 5)} seatLabels={selectedSeatLabels}/>;
   const contextSummary = <NewSaleWizardSummary
     detailed={step === 3}
     event={selectedEvent?.name}
@@ -1319,13 +1320,14 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
     transport={selectedVehicle ? `${vehicleTypeLabels[selectedVehicle.type] ?? selectedVehicle.type} ${selectedVehicle.plate}` : undefined}
     boarding={selectedBoarding?.name}
     departure={selectedBoarding?.departure_time?.slice(0, 5)}
-    seatLabels={selectedSeats.map(id => seats.find(seat => seat.id === id)?.label).filter((label): label is string => Boolean(label))}
+    seatLabels={selectedSeatLabels}
     amount={step === 3 && activeTab !== 'bloqueio' && adminCheckoutSummary ? formatCurrencyBRL(adminCheckoutSummary.subtotalAfterBenefits) : undefined}
     onEdit={() => setStep(1)}
   />;
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
       <DialogContent
+        ref={setWizardDialogElement}
         data-wizard-step={isConfirmationStep ? undefined : step}
         className={
           isConfirmationStep
@@ -1448,43 +1450,8 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
             </TabsList>
 
             <NewSaleWizardProgress step={step} mode={activeTab} onBack={setStep}/>
+            <NewSaleMobileProgress step={step} mode={activeTab}/>
             <ScrollArea ref={wizardScrollRef} className="new-sale-wizard__scroll flex-1 px-6 py-3">
-              {/* Step indicators */}
-              <div className="mb-4 rounded-xl border bg-muted/20 px-4 py-3 lg:hidden">
-                <div className="flex items-center gap-2">
-                  {stepMeta.map((item, index) => {
-                    const isCompleted = item.value < step;
-                    const isActive = item.value === step;
-                    return (
-                      <div key={item.value} className="flex min-w-0 flex-1 items-center gap-2">
-                        <div
-                          className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 ${
-                            isActive
-                              ? 'text-primary'
-                              : isCompleted
-                              ? 'text-primary'
-                              : 'text-muted-foreground'
-                          }`}
-                        >
-                          {/* Stepper visual com progresso explícito (número, check e estado), sem trocar regras de step. */}
-                          <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${
-                            isActive
-                              ? 'border-primary bg-primary text-primary-foreground shadow-sm'
-                              : isCompleted
-                              ? 'border-primary/50 bg-primary/15 text-primary'
-                              : 'border-border bg-background text-muted-foreground'
-                          }`}>
-                            {isCompleted ? <CircleCheck className="h-3.5 w-3.5" /> : item.value}
-                          </div>
-                          <span className="truncate text-xs font-medium">{item.label}</span>
-                        </div>
-                        {index < stepMeta.length - 1 && <div className="h-[2px] w-7 rounded-full bg-border/80" />}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
               <NewSaleWizardStageTitle step={step} mode={activeTab}/>
 
               {/* All tabs share the same wizard */}
@@ -1603,7 +1570,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                         <p className="text-xs text-muted-foreground">Vagas controladas por trecho.</p>
                       )}
                       {!!selectedTrip && (
-                        <div className="space-y-2 rounded-lg border bg-background/80 p-3 text-xs text-muted-foreground">
+                        <div className="new-sale-transport-detail space-y-2 rounded-lg border bg-background/80 p-3 text-xs text-muted-foreground">
                           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Resumo do transporte</p>
                           {groupedTransportPolicy && (
                             <div className="flex items-center justify-between rounded-md border bg-muted/40 px-2 py-1">
@@ -1689,7 +1656,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                 {/* STEP 2 — Seat map */}
                 {step === 2 && (
                   <div className="new-sale-seat-workspace">
-                    <aside className="new-sale-seat-workspace__summary">{contextSummary}</aside>
+                    <aside className="new-sale-seat-workspace__summary">{contextSummary}{mobileTravel}</aside>
                     <div className="new-sale-seat-map">
                     <div className="new-sale-seat-map__heading hidden lg:flex">
                       <div><h4>Mapa de poltronas</h4><p>{selectedVehicle ? `${vehicleTypeLabels[selectedVehicle.type] ?? selectedVehicle.type} ${selectedVehicle.plate}` : 'Transporte selecionado'}</p></div>
@@ -1876,9 +1843,10 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                         {passengers.map((p, i) => {
                           const passengerSnapshot = passengerBenefitSnapshots[i];
                           return (
-                          <div key={p.seatId} className="new-sale-passenger-card space-y-3 rounded-xl border bg-card p-4 shadow-sm">
-                            <div className="flex items-center gap-2">
-                              <Badge variant="outline" className="new-sale-passenger-seat font-mono"><span className="hidden lg:inline">Poltrona&nbsp;</span>{p.seatLabel}</Badge>
+                          <NewSalePassengerCard key={p.seatId} mobile={mobileWizard} index={i} count={passengers.length} seatLabel={p.seatLabel}
+                            hasError={p.cpf.length >= 14 && !isValidCpf(p.cpf)} filled={Boolean(p.name.trim() && p.cpf.length >= 14 && isValidCpf(p.cpf))}
+                            header={<>                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="new-sale-passenger-seat font-mono"><span className="new-sale-passenger-seat-label hidden lg:inline">Poltrona&nbsp;</span>{p.seatLabel}</Badge>
                               <span className="text-sm font-medium text-foreground">Passageiro {i + 1}</span>
                               {eventTicketTypes.length > 0 && p.ticketTypeName && (
                                 <Badge variant="secondary" className="text-[10px] ml-auto">
@@ -1886,6 +1854,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                                 </Badge>
                               )}
                             </div>
+</>}>
                             {eventTicketTypes.length > 0 && (
                               <div className="space-y-1">
                                 <Label className="text-xs font-medium">Tipo de passagem *</Label>
@@ -1924,6 +1893,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                               <div className="space-y-1">
                                 <Label className="text-xs">Nome *</Label>
                                 <Input
+                                  aria-label={`Nome do passageiro ${i + 1}`}
                                   value={p.name}
                                   onChange={(e) => updatePassenger(i, 'name', e.target.value)}
                                   placeholder="Nome completo"
@@ -1932,6 +1902,8 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                               <div className="space-y-1">
                                 <Label className="text-xs">CPF *</Label>
                                 <Input
+                                  inputMode="numeric"
+                                  aria-label={`CPF do passageiro ${i + 1}`}
                                   value={p.cpf}
                                   onChange={(e) => updatePassenger(i, 'cpf', e.target.value)}
                                   placeholder="000.000.000-00"
@@ -1954,6 +1926,9 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                               <div className="space-y-1">
                                 <Label className="text-xs">Telefone</Label>
                                 <Input
+                                  type="tel"
+                                  inputMode="tel"
+                                  aria-label={`Telefone do passageiro ${i + 1}`}
                                   value={p.phone}
                                   onChange={(e) => updatePassenger(i, 'phone', e.target.value)}
                                   placeholder="(65) 99999-9999"
@@ -1981,7 +1956,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                                 </div>
                               </div>
                             )}
-                          </div>
+                          </NewSalePassengerCard>
                         )})}
                       </div>
                     )}
@@ -2002,6 +1977,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
                     <div className="new-sale-passenger-review contents space-y-6">
                     {contextSummary}
+                    {mobileTravel}
 
                     <div className="new-sale-financial-panel contents space-y-6 [&>*]:mt-6">
                     {/* Valores e simulação existentes agrupados apenas para apresentação desktop. */}
@@ -2143,13 +2119,13 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                   onClick={step === 2 ? handleGoToPaymentStep : () => setStep((s) => s + 1)}
                   disabled={step === 1 ? !canGoStep2 : !canGoStep3}
                 >
-                  <span className="lg:hidden">{step === 1 ? 'Escolher assentos' : 'Ir para pagamento'}</span><span className="hidden lg:inline">{step === 1 ? 'Escolher poltronas' : activeTab === 'bloqueio' ? 'Revisar bloqueio' : 'Dados e recebimento'}</span> <ChevronRight className="h-4 w-4 ml-1" />
+                  <span className="lg:hidden">{step === 1 ? 'Escolher poltronas' : activeTab === 'bloqueio' ? 'Revisar bloqueio' : 'Dados dos passageiros'}</span><span className="hidden lg:inline">{step === 1 ? 'Escolher poltronas' : activeTab === 'bloqueio' ? 'Revisar bloqueio' : 'Dados e recebimento'}</span> <ChevronRight className="h-4 w-4 ml-1" />
                 </Button>
               )}
               {step === 3 && (
                 <Button onClick={handleConfirm} disabled={!canConfirm}>
                   {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                  <span className="lg:hidden">Confirmar venda</span><span className="hidden lg:inline">{activeTab === 'bloqueio' ? 'Confirmar bloqueio' : activeTab === 'reserva' ? 'Confirmar reserva' : 'Registrar venda'}</span>
+                  <span className="lg:hidden">{activeTab === 'bloqueio' ? 'Bloquear poltronas' : activeTab === 'reserva' ? 'Confirmar reserva' : 'Registrar venda'}</span><span className="hidden lg:inline">{activeTab === 'bloqueio' ? 'Confirmar bloqueio' : activeTab === 'reserva' ? 'Confirmar reserva' : 'Registrar venda'}</span>
                 </Button>
               )}
             </div>

@@ -1,0 +1,111 @@
+/* Administrative mobile only. Shared/public maps and the approved desktop are untouched. */
+@media (max-width: 1023px) {
+  [role=dialog].new-sale-wizard {
+    left: 0; top: var(--mobile-sale-top, 0px); transform: none;
+    width: 100%; max-width: none; height: var(--mobile-sale-height, 100dvh); max-height: var(--mobile-sale-height, 100dvh);
+    border: 0; border-radius: 0; overflow: hidden; animation: none;
+    --background: 0 0% 100%; --foreground: 222 47% 11%; --card: 0 0% 100%; --card-foreground: 222 47% 11%;
+    --muted: 210 30% 96%; --muted-foreground: 215 16% 43%; --border: 214 25% 89%; --input: 214 25% 85%;
+    --primary: 25 95% 53%; --primary-foreground: 0 0% 100%; --accent: 25 100% 96%; --accent-foreground: 222 47% 11%;
+    background: #f8fafc; color: #0f172a;
+  }
+  .new-sale-wizard > .admin-modal__header { flex-shrink: 0; padding: calc(14px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 12px max(16px, env(safe-area-inset-left)); background: white; text-align: left; }
+  .new-sale-wizard .new-sale-wizard__identity h2 { font-size: 18px; font-weight: 750; padding-right: 40px; }
+  .new-sale-wizard .admin-modal__header p { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .new-sale-wizard > button:last-child { right: max(8px, env(safe-area-inset-right)); top: calc(3px + env(safe-area-inset-top)); min-width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 12px; }
+  .new-sale-wizard > [dir] { min-height: 0; }
+  .new-sale-wizard .admin-modal__tabs { flex-shrink: 0; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 0 12px 10px; gap: 6px; background: white; border-bottom: 1px solid #e2e8f0; }
+  .new-sale-wizard .admin-modal__tabs > [role=tab] { padding: 8px 4px; min-height: 48px; border-radius: 10px; align-items: center; justify-content: center; color: #475569; }
+  .new-sale-wizard .admin-modal__tabs > [role=tab] > div { gap: 4px; justify-content: center; align-items: center; }
+  .new-sale-wizard .admin-modal__tabs > [role=tab] > div > svg { display: none; }
+  .new-sale-wizard .admin-modal__tabs > [role=tab] p:first-child { font-size: 12px; line-height: 16px; text-align: center; white-space: normal; }
+  .new-sale-wizard .admin-modal__tabs > [role=tab] p:not(:first-child) { display: none; }
+  .new-sale-wizard .admin-modal__tabs > [role=tab][data-state=active] { background: #fff7ed; border-color: #f97316; color: #9a3412; box-shadow: 0 0 0 1px #fed7aa; }
+  .new-sale-wizard .admin-modal__tabs > [role=tab]:disabled { opacity: .4; }
+  .new-sale-mobile-progress { flex-shrink: 0; padding: 10px 16px; background: white; border-bottom: 1px solid #e2e8f0; }
+  .new-sale-mobile-progress > div:first-child { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; }
+  .new-sale-mobile-progress span { color: #64748b; }
+  .new-sale-mobile-progress strong { font-weight: 650; }
+  .new-sale-mobile-progress [role=progressbar] { display: flex; gap: 4px; margin-top: 8px; }
+  .new-sale-mobile-progress [role=progressbar] span { height: 3px; flex: 1; border-radius: 3px; background: #e2e8f0; }
+  .new-sale-mobile-progress [data-complete=true] { background: #f97316 !important; }
+  .new-sale-wizard .new-sale-wizard__scroll { padding: 12px max(12px, env(safe-area-inset-right)) 16px max(12px, env(safe-area-inset-left)); min-height: 0; overscroll-behavior: contain; }
+  .new-sale-wizard__scroll > [data-radix-scroll-area-viewport] > div { display: block !important; min-width: 0 !important; }
+  .new-sale-wizard [role=combobox], .new-sale-wizard input, .new-sale-wizard textarea { min-height: 44px; border-radius: 10px; background: white; font-size: 16px; }
+  .new-sale-wizard input, .new-sale-wizard textarea { scroll-margin-block: 16px; }
+  .new-sale-wizard [role=tabpanel]:focus-visible { outline: none; box-shadow: none; }
+  .new-sale-wizard[data-wizard-step="1"] .new-sale-wizard__footer > div:last-child > button:last-child { max-width: none; }
+  .new-sale-wizard label { font-size: 12px; font-weight: 650; }
+  .new-sale-context { display: flex; flex-direction: column; gap: 10px; }
+  .new-sale-context > * { margin: 0 !important; min-width: 0; width: 100%; }
+  .new-sale-context > div { padding: 12px; border-radius: 14px; background: white; border-color: #e2e8f0; }
+  .new-sale-context > div:has([role=combobox][aria-expanded=true]) { border-color: #f97316; }
+  .new-sale-context .new-sale-event-detail, .new-sale-context .new-sale-boarding-detail { background: #f1f5f9; padding: 10px 12px; font-size: 12px; }
+  .new-sale-event-detail > p, .new-sale-boarding-detail > p { display: none; }
+  .new-sale-wizard .new-sale-event-detail > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; font-size: 12px; }
+  .new-sale-event-detail > div > div:first-child { grid-column: 1 / -1; }
+  .new-sale-event-detail > div > div:first-child > p:first-child { display: none; }
+  .new-sale-transport-section > .new-sale-transport-detail { padding: 10px; border-radius: 10px; background: #f1f5f9; }
+  .new-sale-availability > div:first-child { flex-wrap: wrap; gap: 6px; }
+  .new-sale-availability > div:last-child { gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .new-sale-availability > div:last-child p { font-size: 12px; }
+  .new-sale-availability > div:last-child .font-medium, .new-sale-availability > div:last-child .font-semibold { font-size: 16px; }
+
+  .new-sale-mobile-travel { border: 1px solid #dbe3ec; border-radius: 12px; background: #eef2f6; color: #334155; margin-bottom: 10px; }
+  .new-sale-mobile-travel > summary { display: flex; align-items: center; gap: 8px; padding: 10px 12px; min-height: 48px; cursor: pointer; list-style: none; }
+  .new-sale-mobile-travel > summary::-webkit-details-marker { display: none; }
+  .new-sale-mobile-travel > summary > span { flex: 1; min-width: 0; }
+  .new-sale-mobile-travel strong { display: block; font-size: 12px; line-height: 17px; }
+  .new-sale-mobile-travel small { font-size: 11px; color: #64748b; }
+  .new-sale-mobile-travel > div { padding: 0 12px 12px; font-size: 12px; overflow-wrap: anywhere; }
+  .new-sale-mobile-travel p { display: flex; align-items: center; gap: 6px; }
+  .new-sale-mobile-travel p + p { margin-top: 6px; }
+  .new-sale-seat-map { padding: 12px 6px; background: white; border: 1px solid #e2e8f0; border-radius: 14px; }
+  .new-sale-seat-map .seat-map__viewport { max-width: 100%; overflow-x: auto; padding: 0 2px 6px; }
+  .new-sale-seat-map .seat-map__vehicle { width: max-content; min-width: 100%; }
+  .new-sale-seat-map button[aria-label^=Assento] { min-width: 44px; min-height: 44px; }
+  .new-sale-seat-map .seat-map__floors [role=tab] { min-height: 52px; font-size: 12px; }
+  .new-sale-seat-map .seat-map__floor-context { font-size: 12px; }
+  .new-sale-seat-map .seat-map__selection-count { position: sticky; top: 0; z-index: 5; padding: 8px; border-radius: 10px; background: #fff7ed; color: #9a3412; }
+  .new-sale-seat-map .seat-map__quantity { display: none; }
+
+  .new-sale-passengers { display: flex; flex-direction: column; gap: 12px; }
+  .new-sale-passengers > * { margin-top: 0 !important; min-width: 0; }
+  .new-sale-passengers .new-sale-operation-fields { padding: 12px; border-radius: 14px; background: white; }
+  .new-sale-operation-fields > [role=alert] { padding: 10px 12px 10px 38px; border-radius: 10px; font-size: 12px; text-align: left; }
+  .new-sale-operation-fields > [role=alert] > div { padding-left: 0; }
+  .new-sale-operation-grid p { font-size: 11px; line-height: 15px; }
+  .new-sale-wizard .new-sale-operation-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .new-sale-operation-grid > * { min-width: 0; }
+  .new-sale-operation-grid > div:last-child { grid-column: 1 / -1; }
+  .new-sale-operation-notes textarea { min-height: 64px; }
+  .new-sale-passenger-list > h3 { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; }
+  .new-sale-passenger-list .new-sale-passenger-card { margin-top: 10px; padding: 12px; border-radius: 14px; box-shadow: none; }
+  .new-sale-passengers .new-sale-passenger-seat { background: #fff7ed; border-color: #fed7aa; color: #9a3412; padding: 5px 8px; }
+  .new-sale-wizard .new-sale-passenger-seat-label { display: inline; }
+  .new-sale-passenger-toggle { width: 100%; text-align: left; border-radius: 8px; }
+  .new-sale-passenger-toggle:focus-visible, .new-sale-mobile-travel > summary:focus-visible { outline: 2px solid #f97316; outline-offset: 3px; }
+  .new-sale-passenger-toggle > div { flex-wrap: wrap; gap: 6px; }
+  .new-sale-passenger-toggle__status { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; color: #64748b; font-size: 11px; }
+  .new-sale-passenger-toggle__status[data-error=true] { color: #b91c1c; font-weight: 650; }
+  .new-sale-passenger-card[data-expanded=true] .new-sale-passenger-toggle__status > svg { transform: rotate(180deg); }
+  .new-sale-passenger-fields-body { border-top: 1px solid #e2e8f0; padding-top: 12px; }
+  .new-sale-wizard .new-sale-passenger-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .new-sale-passenger-fields > div { min-width: 0; }
+  .new-sale-passenger-fields > div:first-child { grid-column: 1 / -1; }
+  .new-sale-passenger-review .new-sale-financial-panel { display: block; padding: 12px; border: 1px solid #dbe3ec; border-radius: 14px; background: #eef2f6; }
+  .new-sale-financial-panel > * { margin: 0 !important; }
+  .new-sale-passenger-review .new-sale-financial, .new-sale-passenger-review .new-sale-financial-wrapper > div { border: 0; border-radius: 0; background: transparent; padding: 0; box-shadow: none; }
+  .new-sale-financial-panel .new-sale-financial-benefits > p { padding-bottom: 10px; margin-bottom: 8px; border-bottom: 1px solid #cbd5e1; }
+  .new-sale-financial-panel:has(.new-sale-financial-benefits) .sale-calculation__heading,
+  .new-sale-financial-panel:has(.new-sale-financial-benefits) .sale-calculation__subtotal,
+  .new-sale-financial-panel .sale-calculation__unit, .new-sale-financial-panel .sale-calculation__quantity { display: none; }
+  .new-sale-financial-panel .new-sale-financial-wrapper, .new-sale-financial-panel .new-sale-financial-simulation { margin-top: 10px !important; padding-top: 10px; border-top: 1px solid #cbd5e1; }
+  .new-sale-financial-panel .sale-calculation__total { font-weight: 750; padding: 10px 0; font-size: 16px; color: #0f172a; }
+  .new-sale-financial-panel:not(:has(> div)) { display: none; }
+  .new-sale-wizard .new-sale-wizard__footer { display: flex; flex-shrink: 0; flex-direction: row; align-items: center; gap: 8px; padding: 10px max(12px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); background: white; border-color: #e2e8f0; }
+  .new-sale-wizard__footer > div:last-child { flex: 1; justify-content: end; min-width: 0; }
+  .new-sale-wizard__footer button { min-height: 44px; padding: 8px 10px; font-size: 12px; border-radius: 10px; white-space: normal; line-height: 16px; }
+  .new-sale-wizard__footer > div:last-child > button:last-child { flex: 1; max-width: 240px; }
+  .new-sale-wizard__footer > div:last-child > button:first-child:not(:last-child) { display: none; }
+}

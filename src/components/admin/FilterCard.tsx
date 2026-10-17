@@ -1,4 +1,4 @@
-import { useState, ReactNode } from 'react';
+import { useEffect, useState, ReactNode } from 'react';
 import { ChevronDown, ChevronUp, X, Search, LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -53,6 +53,8 @@ interface FilterCardProps {
   className?: string;
   mainGridClassName?: string;
   compact?: boolean;
+  hideSearch?: boolean;
+  advancedFiltersActive?: boolean;
 }
 
 export function FilterCard({
@@ -71,8 +73,11 @@ export function FilterCard({
   className,
   mainGridClassName,
   compact = false,
+  hideSearch = false,
+  advancedFiltersActive = false,
 }: FilterCardProps) {
-  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(advancedFiltersActive);
+  useEffect(() => { if (advancedFiltersActive) setIsAdvancedOpen(true); }, [advancedFiltersActive]);
 
   return (
     <div className={cn('filter-card', className)}>
@@ -96,7 +101,7 @@ export function FilterCard({
 
         {/* Filtros Simples */}
         <div className={cn('grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4', mainGridClassName)}>
-          <div className="space-y-1.5">
+          {!hideSearch && <div className="space-y-1.5">
             <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
               <SearchIcon className="h-4 w-4" />
               {searchLabel}
@@ -110,7 +115,7 @@ export function FilterCard({
                 className="h-9 pl-9 sm:h-10"
               />
             </div>
-          </div>
+          </div>}
 
           {leadingFilters}
 

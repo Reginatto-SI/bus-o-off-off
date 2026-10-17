@@ -1,0 +1,31 @@
+@media (max-width: 1023px) {
+  .sales-mobile { background: #f8fafc; }
+  .sales-mobile main { max-width: 640px; padding-top: 12px; padding-bottom: 16px; }
+  .sales-mobile main > * + * { margin-top: 14px; }
+  .sales-mobile main > section:first-child > p { font-size: 12px; }
+  .sales-mobile header button { min-width: 44px; min-height: 44px; }
+  .sales-mobile-metrics > div:first-child p { display: none; }
+  .sales-mobile-metrics > div:last-child { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+  .sales-mobile-metrics .stats-card { grid-column: span 2; padding: 10px; min-width: 0; border-radius: 12px; box-shadow: none; }
+  .sales-mobile-metrics .stats-card:nth-child(-n+2) { grid-column: span 3; }
+  .sales-mobile-metrics .stats-card > div > div:last-child { display: none; }
+  .sales-mobile-metrics .stats-card__label { font-size: 11px; line-height: 15px; min-height: 30px; }
+  .sales-mobile-metrics .stats-card__value { font-size: 23px; margin-top: 2px; line-height: 28px; }
+  .sales-mobile main > [role=alert] { padding-top: 10px; padding-bottom: 10px; font-size: 12px; }
+  .sales-mobile main > [role=alert] div { font-size: 12px; }
+  .sales-mobile-filters { background: white; padding: 12px; border: 1px solid #e2e8f0; border-radius: 14px; }
+  .sales-mobile-filters > label { display: block; margin-bottom: 8px; font-size: 14px; font-weight: 700; color: #0f172a; }
+  .sales-mobile-search { position: relative; }
+  .sales-mobile-search > svg { position: absolute; left: 12px; top: 14px; color: #64748b; }
+  .sales-mobile-search input { min-height: 46px; padding-left: 38px; font-size: 16px; border-radius: 10px; }
+  .sales-mobile-filters > details > summary { display: flex; gap: 8px; min-height: 44px; align-items: center; font-size: 12px; color: #475569; cursor: pointer; list-style: none; }
+  .sales-mobile-filters > details > summary:focus-visible { outline: 2px solid #f97316; outline-offset: 2px; }
+  .sales-mobile-filters > details > summary::-webkit-details-marker { display: none; }
+  .sales-mobile-filters > details > summary > span { flex: 1; }
+  .sales-mobile-filters .filter-card { padding: 0; margin: 0; border: 0; box-shadow: none; }
+  .sales-mobile-filters .filter-card [role=combobox], .sales-mobile-filters .filter-card input { min-height: 44px; font-size: 16px; }
+  .sales-mobile article { padding: 14px; }
+  .sales-mobile article dl { margin-top: 12px; gap: 10px; }
+  .sales-mobile article [aria-haspopup=menu] { min-width: 44px; min-height: 44px; }
+  .sales-mobile article > div:last-child { border-left: 2px solid #fed7aa; }
+}

@@ -97,6 +97,8 @@ import { cn, formatBoardingLocationLabel } from '@/lib/utils';
 import { formatPhoneBR, normalizePhoneForStorage } from '@/lib/phone';
 import { useAuth } from '@/contexts/AuthContext';
 import { NewSaleModal } from '@/components/admin/NewSaleModal';
+import { MobileSalesFilters } from '@/components/admin/MobileSalesFilters';
+import './SalesMobile.css';
 import { AdminMobileBottomNav } from '@/components/layout/AdminMobileBottomNav';
 import { AdminMobileHeader } from '@/components/layout/AdminMobileHeader';
 import { AdminMobileMoreMenu } from '@/components/layout/AdminMobileMoreMenu';
@@ -1893,12 +1895,16 @@ export default function Sales() {
   return (
     <AdminLayout>
       <ManualFeePixDialog onConfirmed={fetchSales}/>
-      <div className="min-h-screen bg-[#fbfaf8] pb-[calc(5.35rem+env(safe-area-inset-bottom))] lg:hidden">
+      <div className="sales-mobile min-h-screen bg-[#fbfaf8] pb-[calc(5.35rem+env(safe-area-inset-bottom))] lg:hidden">
           <AdminMobileHeader
             title="Vendas"
             subtitle="SmartBus"
             showMenuButton={false}
-            rightAction={<Button size="icon" variant="ghost" className="h-11 w-11 rounded-xl" onClick={() => { setLoading(true); fetchSales(); }} aria-label="Atualizar vendas"><RefreshCw className="h-5 w-5" /></Button>}
+            rightAction={<ActionsDropdown actions={[
+              { label: 'Exportar Excel', icon: FileSpreadsheet, onClick: () => setExportModalOpen(true) },
+              { label: 'Exportar PDF', icon: FileText, onClick: () => setPdfModalOpen(true) },
+              { label: 'Atualizar vendas', icon: RefreshCw, onClick: () => { setLoading(true); fetchSales(); } },
+            ]}/>}
           />
 
           <main className="mx-auto w-full max-w-md space-y-5 px-4 py-5">
@@ -1906,19 +1912,18 @@ export default function Sales() {
               <p className="text-sm text-slate-600">Gerenciamento de vendas e suporte ao cliente</p>
               <div className="grid grid-cols-3 gap-2">
                 <Button className="col-span-3 h-11 justify-center rounded-xl" onClick={() => setNewSaleModalOpen(true)}>+ Nova venda</Button>
-                <Button variant="outline" size="sm" className="h-10 rounded-xl bg-white" onClick={() => setExportModalOpen(true)}><FileSpreadsheet className="mr-1.5 h-4 w-4" />Excel</Button>
-                <Button variant="outline" size="sm" className="h-10 rounded-xl bg-white" onClick={() => setPdfModalOpen(true)}><FileText className="mr-1.5 h-4 w-4" />PDF</Button>
-                <Button variant="outline" size="sm" className="h-10 rounded-xl bg-white" onClick={() => { setLoading(true); fetchSales(); }}><RefreshCw className="mr-1.5 h-4 w-4" />Atualizar</Button>
               </div>
             </section>
 
-            <section className="space-y-3"><div><h2 className="text-sm font-bold text-slate-950">Operação</h2><p className="mt-1 text-sm text-slate-600">Leitura rápida do pipeline comercial e do status atual das vendas.</p></div><div className="grid grid-cols-2 gap-3"><StatsCard className="rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]" label="Vendas registradas" value={stats.total} icon={ShoppingCart} /><StatsCard className="rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]" label="Pagas" value={stats.pagas} icon={CheckCircle} variant="success" /><StatsCard className="rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]" label="Pendentes de pagamento" value={stats.pendentesPagamento} icon={Clock} variant="warning" /><StatsCard className="rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]" label="Reservas em aberto" value={stats.reservasEmAberto} icon={AlertCircle} /><StatsCard className="rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]" label="Canceladas" value={stats.canceladas} icon={XCircle} variant="destructive" /></div></section>
+            <section className="sales-mobile-metrics space-y-3"><div><h2 className="text-sm font-bold text-slate-950">Operação</h2><p className="mt-1 text-sm text-slate-600">Leitura rápida do pipeline comercial e do status atual das vendas.</p></div><div className="grid grid-cols-2 gap-3"><StatsCard className="rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]" label="Vendas registradas" value={stats.total} icon={ShoppingCart} /><StatsCard className="rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]" label="Pagas" value={stats.pagas} icon={CheckCircle} variant="success" /><StatsCard className="rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]" label="Pendentes de pagamento" value={stats.pendentesPagamento} icon={Clock} variant="warning" /><StatsCard className="rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]" label="Reservas em aberto" value={stats.reservasEmAberto} icon={AlertCircle} /><StatsCard className="rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]" label="Canceladas" value={stats.canceladas} icon={XCircle} variant="destructive" /></div></section>
 
           <Alert className="rounded-2xl border-slate-200/70 bg-white text-slate-700 shadow-[0_5px_14px_rgba(15,23,42,0.045)]"><AlertCircle className="h-4 w-4" /><AlertDescription>Monitoramento global de reservas: <strong>{globalReservationRiskSummary.nearExpiry}</strong> próxima(s) do vencimento e <strong>{globalReservationRiskSummary.expired}</strong> vencida(s). <span className="text-xs text-muted-foreground">{cleanupHealthLabel}</span></AlertDescription></Alert>
 
-            <div className="mb-0">
+            <MobileSalesFilters search={searchInput} onSearchChange={setSearchInput} active={filters.status !== 'all' || filters.reservationRisk !== 'all' || filters.eventId !== 'all' || filters.sellerId !== 'all' || Boolean(filters.dateFrom || filters.dateTo)}>
               {/* Comentário: os mesmos filtros da tela desktop são reutilizados no mobile para preservar a lógica de busca. */}
               <FilterCard
+                hideSearch
+                advancedFiltersActive={Boolean(filters.dateFrom || filters.dateTo)}
                 searchValue={searchInput}
                 onSearchChange={setSearchInput}
                 searchPlaceholder="Buscar venda..."
@@ -1929,7 +1934,7 @@ export default function Sales() {
                 onClearFilters={() => { setFilters(initialFilters); setSearchInput(initialFilters.search); }}
                 hasActiveFilters={hasActiveFilters}
               />
-            </div>
+            </MobileSalesFilters>
 
             {loading ? <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div> : sales.length === 0 ? <EmptyState icon={<ShoppingCart className="h-8 w-8 text-muted-foreground" />} title="Nenhuma venda encontrada" description={hasActiveFilters ? 'Tente ajustar os filtros' : 'As vendas aparecerão aqui quando forem realizadas'} /> : <>{mobileSalesList}<div className="flex flex-col gap-3 rounded-2xl border border-slate-200/70 bg-white px-4 py-3 text-sm text-slate-600 shadow-[0_5px_14px_rgba(15,23,42,0.045)]"><span>Exibindo {rangeStart}–{rangeEnd} de {totalSalesCount} resultados</span><div className="flex items-center justify-between gap-2"><Button variant="outline" size="sm" onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} disabled={currentPage === 1 || loading}>Anterior</Button><span>Página {currentPage} de {totalPages}</span><Button variant="outline" size="sm" onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))} disabled={currentPage >= totalPages || loading}>Próxima</Button></div></div></>}
           </main>
