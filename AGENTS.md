@@ -57,3 +57,16 @@ Reutilize a arquitetura e os componentes existentes. Não crie fluxos paralelos 
 - Reverter código não desfaz pagamentos, webhooks, split ou efeitos externos já executados; por isso alterações financeiras devem permanecer previsíveis, auditáveis e graduais.
 
 - PagBank cartão: criptografar no navegador com o SDK oficial e enviar só o cartão criptografado ao `create-pagbank-payment`; uma única cobrança PagBank por venda (índice único em `payment_attempts`). Why: evita escopo PCI e segunda cobrança ao trocar de meio.
+
+
+## Mercado Pago — ponto de retomada obrigatório (2026-10-19)
+
+Antes de qualquer pesquisa, prompt, análise ou implementação relacionada ao Mercado Pago:
+
+1. Ler `docs/PRD/MercadoPago/README.md` e `docs/PRD/MercadoPago/01-checkpoint-e-avancos.md`.
+2. Consultar `docs/PRD/MercadoPago/02-evidencias-e-consultas.md` antes de repetir pesquisas; indicar a lacuna, a mudança de versão ou a contradição que justifica nova consulta.
+3. Usar os PRDs por fase, backlog, dúvidas, riscos e ADRs **já existentes** em `docs/PRDs/MercadoPago/`; não criar outro roteiro ou segunda regra financeira.
+4. Consultar os PRDs oficiais de taxa, divisão e múltiplos gateways em `docs/PRD/`. Nenhum gateway redefine o cálculo da taxa, a elegibilidade do sócio global e do representante ou o isolamento por empresa e ambiente.
+5. Não confundir Split 1:1 com 1:N. A documentação pública do 1:N descreve Checkout Transparente via Orders API; Checkout Pro 1:1 não comprova compatibilidade com o 1:N. Habilitação comercial efetiva é requisito distinto da documentação pública.
+6. Cada sessão deve registrar **somente avanços reais** no checkpoint, com links de evidência, tarefas pendentes, fase/gate, testes e ponto de parada. `pesquisado` não significa `testado`, e PRD aprovado não autoriza desenvolvimento ou produção.
+7. Preservar integralmente integrações Asaas e PagBank; não iniciar alterações no código, banco, RLS, secrets ou produção com base apenas em estudo ou documentação.
