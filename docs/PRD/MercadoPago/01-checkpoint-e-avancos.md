@@ -59,7 +59,7 @@ Adicionar uma entrada por sessão que tenha avanço **real**, do mais recente pa
 - **Evidências:** E-001 a E-006 em [registro de evidências](./02-evidencias-e-consultas.md); auditoria histórica já existente.
 - **Pendência:** resposta comercial e decisão de checkout; ajuste da posição histórica que assume Asaas como único gateway estrutural, sem alterar normas.
 - **Retomar por:** D1 (validar a organização), depois D3 (comercial) e Gate A (se o responsável autorizar).
-- **Entrega de documentação:** branch `docs/mercadopago-governanca-20261019`, sujeita a revisão e merge.
+- **Entrega de documentação:** [Draft PR #794](https://github.com/Reginatto-SI/bus-o-off-off/pull/794), branch `docs/mercadopago-governanca-20261019`; **aguardando revisão e merge**, sem autorização de código ou deploy.
 
 ## 5. Modelo obrigatório de atualização
 
