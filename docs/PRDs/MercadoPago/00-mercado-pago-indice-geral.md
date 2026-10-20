@@ -1,4 +1,7 @@
-# Mercado Pago no SmartBus BR — Índice oficial
+# Mercado Pago no SmartBus BR — Índice oficial histórico
+
+> **Entrada canônica de acompanhamento (2026-10-19):** [central do Mercado Pago](../../PRD/MercadoPago/README.md) · [checkpoint de execução](../../PRD/MercadoPago/01-checkpoint-e-avancos.md) · [evidências](../../PRD/MercadoPago/02-evidencias-e-consultas.md). Este conjunto de 17 PRDs existentes permanece no local legado para preservar os links. Não abrir outra documentação paralela nem considerar os status datados abaixo como homologação atual.
+
 
 **Última revisão:** 2026-08-04
 **Situação:** planejamento documental; implementação não autorizada

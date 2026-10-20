@@ -27,6 +27,7 @@ Arquivos em `docs/Analises/` registram investigação, implementação e histór
 - `docs/PRD/` — PRDs oficiais e documentação de produto
   - `Asaas/` — integração Asaas
   - `Financeiro/` — comissões, repasses, ledger e gateways
+  - `MercadoPago/` — central de acompanhamento, evidências e checkpoint da avaliação Mercado Pago (sem duplicar os PRDs legados)
   - `Marketing/` — materiais de loja, marca e comunicação
   - `Padroes/` — padrões transversais
   - `SEO/` — estratégia e páginas SEO
@@ -37,6 +38,7 @@ Arquivos em `docs/Analises/` registram investigação, implementação e histór
 - `docs/manual-operacional-smartbus-br/` — manual operacional e diretrizes
 - `docs/pagbank/` — estudos e documentação da integração PagBank
 - `docs/PRDs/` — nomenclatura legada; não é fonte normativa por si só
+  - Exceção histórica em transição: os 17 documentos da integração Mercado Pago permanecem em `docs/PRDs/MercadoPago/`, sem cópias, com entrada canônica em [`docs/PRD/MercadoPago/README.md`](./PRD/MercadoPago/README.md). A migração física e revisão de links serão tratadas separadamente.
 
 ## Regra financeira vigente
 
