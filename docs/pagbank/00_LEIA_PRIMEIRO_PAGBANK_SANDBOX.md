@@ -1620,3 +1620,119 @@ logs quando uma confirmação documental/operacional é a etapa correta.
 **Mudança nesta atualização:** somente documentação. Nenhum código, banco,
 migração, flag, credencial, pagamento, webhook, cron ou deploy foi alterado.
 PagBank em Produção continua bloqueado.
+
+## 34. Resposta PagBank e diagnóstico dirigido de permissões Connect (2026-10-23)
+
+**Origem da atualização:** resposta textual do suporte Integrações PagBank
+(Alan Alves), apresentada pelo responsável, seguida de relatório **somente leitura**
+do Lovable Cloud; conferência das páginas oficiais públicas e do código atual.
+Não houve nova execução financeira. **Produção permanece bloqueada.**
+
+### Confirmações explícitas do PagBank
+
+1. Para os webhooks de **Orders/Connect** deste projeto, o método indicado
+   pelo suporte é **`x-authenticity-token` com SHA-256**, conforme
+   [Confirmar autenticidade da notificação](https://developer.pagbank.com.br/reference/confirmar-autenticidade-da-notificacao).
+   **Não migrar para `x-payload-signature`/ECDSA** com base somente na existência
+   de uma documentação de outro modelo. O suporte ainda não identificou qual
+   segredo efetivamente assina os eventos da conta vinculada.
+2. Para consultar o Split no **Connect**, usar o **Access Token obtido ao final
+   da autorização**. O provedor informa que as consultas de transações
+   permitem conferir beneficiários, valores e estados, incluindo `HELD` e
+   valores liberados/liquidados. Isso **não comprova** que o token atual tem
+   autorização para `GET /splits/{id}`.
+3. Homologação é solicitada por
+   [formulário Pipefy](https://app.pipefy.com/public/form/2e56YZLK),
+   com **requests e responses** de todas as APIs integradas. O processo é
+   obrigatório segundo [Solicitar homologação](https://developer.pagbank.com.br/docs/solicitar-homologacao).
+   Organizar pacote sanitizado e submetê-lo com os pendentes explicitados;
+   não afirmar homologação formal concedida.
+
+### Diagnóstico dirigido — webhook 401
+
+- Relatório Lovable: notificações chegam ao endpoint com
+  `x-authenticity-token`; `x-payload-signature` não aparece.
+  O backend usa `req.text()` antes de JSON.parse, e o cálculo
+  SHA-256 é compatível com o método confirmado pelo PagBank.
+- Para venda pública vinculada a uma conexão, o código valida usando
+  `webhook_token_enc` da **conexão**, não automaticamente o access token Connect.
+  O diagnóstico Sandbox anterior testou cinco classes de credenciais
+  (incluindo token Connect, token da conexão, token da plataforma,
+  segredo da aplicação e token direto do vendedor), **sem correspondência**.
+- **Comprovado:** assinatura divergente / HTTP 401. **Não comprovado:**
+  origem exata do segredo usado pelo PagBank para assinar notificações de
+  Orders da conta conectada, nem transformação do corpo no emissor.
+  **Não** desabilitar validação nem reexecutar comparações já descartadas.
+- Próxima dúvida objetiva ao suporte: **qual token/segredo exato** entra na
+  fórmula `SHA256(token + "-" + rawBody)` em Orders com Connect; quem o
+  provisiona (conta do vendedor/marketplace/aplicação) e como validá-lo no
+  Sandbox sem expor credenciais? Solicitar investigação das Orders já
+  informadas caso a chave indicada continue divergente.
+
+### Diagnóstico dirigido — Split 403
+
+- Relatório Lovable: a conexão vendedora está no modo **`connect_sms`**,
+  com escopos **registrados localmente** como `["payments.create"]`;
+  `payments.split.read` e `payments.read` **não constam**.
+  A criação da Order e `GET /splits/{id}` usam, segundo o relatório,
+  o Access Token Connect da mesma conexão, correspondente ao recebedor
+  primário. O erro histórico é **HTTP 403 / `pagbank_forbidden`**.
+- [Connect Authorization](https://developer.pagbank.com.br/reference/solicitar-autorizacao-via-connect-authorization)
+  documenta expressamente `payments.split.read` como permissão de leitura
+  do Split. O guia [Connect](https://developer.pagbank.com.br/docs/connect)
+  descreve o fluxo via SMS com permissões mais limitadas que Authorization,
+  **sem estabelecer claramente se SMS pode conceder esse escopo**.
+- **Hipótese prioritária, não causa definitiva comprovada:** o token
+  `connect_sms` não tem permissão de leitura de Split. O registro local
+  de escopos e o HTTP 403 sustentam a hipótese; não há confirmação
+  do provedor de que o 403 específico decorre exclusivamente disso,
+  nem prova da lista de permissões efetivas embutidas no token.
+- Perguntar ao PagBank: o método SMS concede `payments.split.read`?
+  Se não, a integração marketplace deve migrar a autorização dos vendedores
+  para **Connect Authorization** (com consentimento dos escopos)?
+  O HTTP 403 pode exigir habilitação comercial adicional?
+  **Não reautorizar, sobrescrever nem revogar a conexão atual por tentativa
+  e erro:** preservar vendas e credenciais ligadas às operações existentes.
+- Sem HTTP 200 e extratos/retornos por beneficiário, o split segue
+  **`accepted_unverified`**, sem liquidação comprovada.
+
+### Evidências disponíveis para dossiê de homologação (relato Lovable)
+
+- PIX público: `ORDE_FBF87AA9-DA77-4E84-B319-DA725212E8B4`,
+  `CHAR_05F7E209-41D1-42F8-B07E-C89A8D09F78E`,
+  `SPLI_510624A3-176B-4BDD-9C17-D984544FB1E5`;
+  criação HTTP 201 e consulta com `PAID`.
+- Cartão aprovado: `ORDE_169FFAE3-A7C2-4411-B865-19AA92CB452F`,
+  `CHAR_1EB5F350-310F-4C82-82C4-A6DA24112CA2`,
+  `SPLI_F3D03D83-962E-4977-8D5A-8512E6906FB8`;
+  criação HTTP 201 e consulta `PAID`.
+- Recusa de cartão, recuperação periódica de Order e falhas de
+  autenticação de webhook registrados no diagnóstico. **A redação dos
+  relatos de cartão recusado diverge sobre o status local
+  (`cancelado` versus `pendente`); não normalizar essa divergência
+  como fato sem nova leitura da venda.**
+- Confirmar **integridade e suficiência dos logs originais** de cada API
+  antes do envio do formulário. Logs sanitizados de observabilidade
+  podem não conter todos os campos que o PagBank solicita. Não exportar
+  números de cartão, CPF/CNPJ, dados pessoais, tokens, assinatura completa
+  ou segredos para GitHub, chat ou anexo público.
+
+### Próxima sequência — sem reabrir o fluxo de pagamentos nominal
+
+1. Enviar **um retorno objetivo ao suporte** sobre segredo de assinatura
+   Orders/Connect e alcance do escopo `payments.split.read` no Connect SMS,
+   informando o 403 sem afirmar causalidade fechada.
+2. Em paralelo, preparar **dossiê sanitizado de request/response**
+   para homologação Pipefy; registrar lacunas, sem criar transações ou
+   editar código para produzir logs artificiais.
+3. Após resposta formal, decidir se uma autorização **Connect Authorization**
+   é necessária, com plano de migração seguro, ou se bastará concessão de
+   permissão/habilitação do provedor; corrigir código apenas se houver
+   comportamento concretamente incompatível.
+4. Manter webhook inválido rejeitado, recuperação backend ativa, novas
+   cobranças protegidas por idempotência e **Produção bloqueada**.
+5. Registrar neste arquivo a resposta do PagBank com data, escopo e
+   evidência que fecha cada pendência, preservando histórico.
+
+**Sem alteração de código, banco, migração, credencial, segredo,
+conexão, execução financeira, cron ou deploy nesta atualização.**
